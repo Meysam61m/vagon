@@ -26,7 +26,7 @@
                 <div>
                     <h6 class="mb-1">ثبت عملیات بارگیری</h6>
                     <div class="text-muted small">
-                        برای هر واگن تعرفه و وزن بارگیری‌شده را وارد کنید. وزن خالی یعنی آن واگن هنوز بارگیری نشده است.
+                        برای هر واگن شرح کالا، تعرفه و وزن بارگیری‌شده را وارد کنید. وزن خالی یعنی آن واگن هنوز بارگیری نشده است.
                     </div>
                 </div>
                 <div style="min-width: 200px;">
@@ -43,6 +43,7 @@
                     <tr>
                         <th>#</th>
                         <th>شماره واگن</th>
+                        <th style="min-width: 190px;">شرح کالا</th>
                         <th style="min-width: 240px;">تعرفه</th>
                         <th style="min-width: 130px;">وزن (تن)</th>
                         <th>وضعیت</th>
@@ -58,6 +59,20 @@
                         <tr>
                             <td>{{ $loop->iteration }}</td>
                             <td>{{ $wagon->wagon_number }}</td>
+                            <td>
+                                @if($wagon->is_settled)
+                                    {{ $wagon->cargo_description ?: '—' }}
+                                @else
+                                    <input type="text"
+                                           name="loading[{{ $wagon->id }}][description]"
+                                           value="{{ old('loading.'.$wagon->id.'.description', $wagon->cargo_description) }}"
+                                           class="form-control form-control-sm @error('loading.'.$wagon->id.'.description') is-invalid @enderror"
+                                           placeholder="مثلاً گندم">
+                                    @error('loading.'.$wagon->id.'.description')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                @endif
+                            </td>
                             <td>
                                 @if($wagon->is_settled)
                                     {{ $wagon->tariff?->title ?? '—' }}

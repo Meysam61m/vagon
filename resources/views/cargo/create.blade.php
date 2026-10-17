@@ -5,7 +5,13 @@
     <h4 class="mb-3">ثبت درخواست بارگیری جدید</h4>
 
     @php
-        $oldWagons = old('wagon_numbers', ['']);
+        $oldWagons = old('wagons');
+
+        if (! is_array($oldWagons) || $oldWagons === []) {
+            $oldWagons = [['number' => '', 'description' => '']];
+        }
+
+        $oldWagons = array_values($oldWagons);
     @endphp
 
     <form method="POST" action="{{ route('cargo.store') }}" class="card p-4">
@@ -47,19 +53,37 @@
                 @error('request_date_shamsi')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-12">
-                <label class="form-label">شماره واگن‌ها</label>
+                <label class="form-label">واگن‌ها و شرح کالا</label>
+                <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
+                    <div class="col-md-4">شماره واگن</div>
+                    <div class="col-md-6">شرح کالا</div>
+                    <div class="col-md-2"></div>
+                </div>
                 <div id="wagon-list">
-                    @foreach($oldWagons as $wagonNumber)
-                        <div class="input-group mb-2">
-                            <input type="text" name="wagon_numbers[]" class="form-control"
-                                   value="{{ $wagonNumber }}" placeholder="مثلاً ۵۶۳۱۲۴" required>
-                            <button type="button" class="btn btn-outline-danger remove-wagon">حذف</button>
+                    @foreach($oldWagons as $index => $wagon)
+                        <div class="row g-2 mb-2 wagon-row">
+                            <div class="col-md-4">
+                                <input type="text" name="wagons[{{ $index }}][number]"
+                                       class="form-control @error('wagons.'.$index.'.number') is-invalid @enderror"
+                                       value="{{ $wagon['number'] ?? '' }}" placeholder="مثلاً ۵۶۳۱۲۴">
+                                @error('wagons.'.$index.'.number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-6">
+                                <input type="text" name="wagons[{{ $index }}][description]"
+                                       class="form-control @error('wagons.'.$index.'.description') is-invalid @enderror"
+                                       value="{{ $wagon['description'] ?? '' }}" placeholder="مثلاً گندم">
+                                @error('wagons.'.$index.'.description')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-outline-danger w-100 remove-wagon">حذف</button>
+                            </div>
                         </div>
                     @endforeach
                 </div>
                 <button type="button" id="add-wagon" class="btn btn-sm btn-outline-secondary">افزودن واگن</button>
-                @error('wagon_numbers')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                @error('wagon_numbers.*')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                @error('wagons')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                @error('wagons.*.number')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+                @error('wagons.*.description')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
             </div>
             <div class="col-12">
                 <label class="form-label" for="notes">توضیحات</label>
@@ -77,13 +101,52 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const wagonList = document.getElementById('wagon-list');
+            let wagonIndex = {{ count($oldWagons) }};
+
+            function createWagonRow(index) {
+                const row = document.createElement('div');
+                row.className = 'row g-2 mb-2 wagon-row';
+
+                const numberColumn = document.createElement('div');
+                numberColumn.className = 'col-md-4';
+
+                const numberInput = document.createElement('input');
+                numberInput.type = 'text';
+                numberInput.name = 'wagons[' + index + '][number]';
+                numberInput.className = 'form-control';
+                numberInput.placeholder = 'مثلاً ۵۶۳۱۲۴';
+                numberColumn.appendChild(numberInput);
+
+                const descriptionColumn = document.createElement('div');
+                descriptionColumn.className = 'col-md-6';
+
+                const descriptionInput = document.createElement('input');
+                descriptionInput.type = 'text';
+                descriptionInput.name = 'wagons[' + index + '][description]';
+                descriptionInput.className = 'form-control';
+                descriptionInput.placeholder = 'مثلاً گندم';
+                descriptionColumn.appendChild(descriptionInput);
+
+                const actionsColumn = document.createElement('div');
+                actionsColumn.className = 'col-md-2';
+
+                const removeButton = document.createElement('button');
+                removeButton.type = 'button';
+                removeButton.className = 'btn btn-outline-danger w-100 remove-wagon';
+                removeButton.textContent = 'حذف';
+                actionsColumn.appendChild(removeButton);
+
+                row.appendChild(numberColumn);
+                row.appendChild(descriptionColumn);
+                row.appendChild(actionsColumn);
+
+                return { row: row, input: numberInput };
+            }
 
             document.getElementById('add-wagon').addEventListener('click', function () {
-                const row = document.createElement('div');
-                row.className = 'input-group mb-2';
-                row.innerHTML = '<input type="text" name="wagon_numbers[]" class="form-control" placeholder="مثلاً ۵۶۳۱۲۴" required>' +
-                    '<button type="button" class="btn btn-outline-danger remove-wagon">حذف</button>';
-                wagonList.appendChild(row);
+                const created = createWagonRow(wagonIndex++);
+                wagonList.appendChild(created.row);
+                created.input.focus();
             });
 
             wagonList.addEventListener('click', function (event) {
@@ -91,8 +154,8 @@
                     return;
                 }
 
-                if (wagonList.querySelectorAll('.input-group').length > 1) {
-                    event.target.closest('.input-group').remove();
+                if (wagonList.querySelectorAll('.wagon-row').length > 1) {
+                    event.target.closest('.wagon-row').remove();
                 }
             });
 

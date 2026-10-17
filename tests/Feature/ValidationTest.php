@@ -43,7 +43,7 @@ class ValidationTest extends TestCase
                 'owner_id' => $this->owner->id,
                 'representative_id' => $this->representative->id,
                 'request_date_shamsi' => '1404/13/40',
-                'wagon_numbers' => ['123456'],
+                'wagons' => [['number' => '123456', 'description' => 'گندم']],
             ])
             ->assertSessionHasErrors('request_date_shamsi');
 
@@ -57,7 +57,7 @@ class ValidationTest extends TestCase
                 'owner_id' => $this->owner->id,
                 'representative_id' => $this->representative->id,
                 'request_date_shamsi' => '۱۴۰۴/۰۷/۲۵',
-                'wagon_numbers' => ['123456'],
+                'wagons' => [['number' => '123456', 'description' => 'گندم']],
             ])
             ->assertRedirect()
             ->assertSessionHasNoErrors();
@@ -113,6 +113,63 @@ class ValidationTest extends TestCase
         $this->assertNull($wagon->fresh()->loaded_weight);
     }
 
+    public function test_cargo_description_is_saved_per_wagon_and_is_optional(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('cargo.store'), [
+                'owner_id' => $this->owner->id,
+                'representative_id' => $this->representative->id,
+                'request_date_shamsi' => '1404/07/25',
+                'wagons' => [
+                    ['number' => '111111', 'description' => 'گندم'],
+                    ['number' => '222222', 'description' => ''],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $cargo = CargoRequest::firstOrFail();
+
+        $this->assertSame(
+            'گندم',
+            $cargo->wagons()->where('wagon_number', '111111')->value('cargo_description')
+        );
+        $this->assertNull(
+            $cargo->wagons()->where('wagon_number', '222222')->value('cargo_description')
+        );
+    }
+
+    public function test_cargo_description_can_be_set_later_in_loading_form(): void
+    {
+        $cargo = CargoRequest::create([
+            'request_number' => 'CR-000000-0002',
+            'owner_id' => $this->owner->id,
+            'representative_id' => $this->representative->id,
+            'request_date' => now()->toDateString(),
+            'request_date_shamsi' => '1404/07/25',
+            'status' => CargoRequest::STATUS_PENDING,
+        ]);
+
+        $wagon = Wagon::create([
+            'cargo_request_id' => $cargo->id,
+            'wagon_number' => '333333',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('cargo.load', $cargo), [
+                'loading_date_shamsi' => '1404/07/25',
+                'loading' => [
+                    $wagon->id => ['description' => 'کاشی', 'weight' => ''],
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('کاشی', $wagon->fresh()->cargo_description);
+        $this->assertNull($wagon->fresh()->loaded_weight);
+        $this->assertSame(CargoRequest::STATUS_PENDING, $cargo->fresh()->status);
+    }
+
     public function test_duplicate_wagon_numbers_are_rejected(): void
     {
         $this->actingAs($this->admin)
@@ -120,7 +177,10 @@ class ValidationTest extends TestCase
                 'owner_id' => $this->owner->id,
                 'representative_id' => $this->representative->id,
                 'request_date_shamsi' => '1404/07/25',
-                'wagon_numbers' => ['123456', '123456'],
+                'wagons' => [
+                    ['number' => '123456', 'description' => 'گندم'],
+                    ['number' => '123456', 'description' => 'سیمان'],
+                ],
             ])
             ->assertSessionHasErrors();
     }
@@ -134,7 +194,7 @@ class ValidationTest extends TestCase
                 'owner_id' => $this->owner->id,
                 'representative_id' => $otherRepresentative->id,
                 'request_date_shamsi' => '1404/07/25',
-                'wagon_numbers' => ['123456'],
+                'wagons' => [['number' => '123456', 'description' => 'گندم']],
             ])
             ->assertSessionHasErrors('representative_id');
 

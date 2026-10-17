@@ -78,6 +78,7 @@
                         <tr>
                             <th style="width: 40px;"></th>
                             <th>شماره واگن</th>
+                            <th>شرح کالا</th>
                             <th>شماره درخواست</th>
                             <th>نماینده</th>
                             <th style="min-width: 220px;">تعرفه</th>
@@ -102,6 +103,7 @@
                                            data-row="{{ $index }}" @disabled(! $checked)>
                                 </td>
                                 <td>{{ $wagon->wagon_number }}</td>
+                                <td>{{ $wagon->cargo_description ?: '—' }}</td>
                                 <td>{{ $wagon->cargoRequest->request_number }}</td>
                                 <td>{{ $wagon->cargoRequest->representative?->name ?? '-' }}</td>
                                 <td>
@@ -132,15 +134,15 @@
                         </tbody>
                         <tfoot>
                         <tr>
-                            <th colspan="6" class="text-end">جمع هزینه پایه</th>
+                            <th colspan="7" class="text-end">جمع هزینه پایه</th>
                             <th class="money" id="totalBase">۰</th>
                         </tr>
                         <tr>
-                            <th colspan="6" class="text-end">مالیات ({{ $taxPercentage }}٪)</th>
+                            <th colspan="7" class="text-end">مالیات ({{ $taxPercentage }}٪)</th>
                             <th class="money" id="totalTax">۰</th>
                         </tr>
                         <tr>
-                            <th colspan="6" class="text-end">مبلغ نهایی</th>
+                            <th colspan="7" class="text-end">مبلغ نهایی</th>
                             <th class="money" id="totalFinal">۰</th>
                         </tr>
                         </tfoot>

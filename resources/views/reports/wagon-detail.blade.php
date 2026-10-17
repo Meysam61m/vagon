@@ -37,6 +37,7 @@
             <thead>
             <tr>
                 <th>شماره واگن</th>
+                <th>شرح کالا</th>
                 <th>صاحب کالا</th>
                 <th>فاکتور</th>
                 <th>تعرفه</th>
@@ -50,6 +51,7 @@
             @forelse($items as $item)
                 <tr>
                     <td>{{ $item->wagon?->wagon_number ?? '—' }}</td>
+                    <td>{{ $item->wagon?->cargo_description ?: '—' }}</td>
                     <td>{{ $item->billing?->ownerName() ?? '—' }}</td>
                     <td>
                         @if($item->billing)
@@ -65,7 +67,7 @@
                     <td class="money">{{ number_format($item->total_amount) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="8" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
+                <tr><td colspan="9" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
             @endforelse
             </tbody>
         </table>

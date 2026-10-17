@@ -209,13 +209,14 @@
 <table class="items">
     <thead>
     <tr>
-        <th style="width: 6%;">ردیف</th>
-        <th style="width: 18%;">شماره واگن</th>
-        <th>تعرفه</th>
-        <th style="width: 10%;">ظرفیت (تن)</th>
-        <th style="width: 10%;">وزن (تن)</th>
-        <th style="width: 13%;">هزینه پایه (ریال)</th>
-        <th style="width: 11%;">مالیات (ریال)</th>
+        <th style="width: 5%;">ردیف</th>
+        <th style="width: 13%;">شماره واگن</th>
+        <th style="width: 15%;">شرح کالا</th>
+        <th style="width: 18%;">تعرفه</th>
+        <th style="width: 8%;">ظرفیت (تن)</th>
+        <th style="width: 8%;">وزن (تن)</th>
+        <th style="width: 11%;">هزینه پایه (ریال)</th>
+        <th style="width: 9%;">مالیات (ریال)</th>
         <th style="width: 13%;">جمع ردیف (ریال)</th>
     </tr>
     </thead>
@@ -224,6 +225,7 @@
         <tr>
             <td>{{ $loop->iteration }}</td>
             <td>{{ $item->wagon?->wagon_number ?? '-' }}</td>
+            <td>{{ $item->wagon?->cargo_description ?: '-' }}</td>
             <td>{{ $item->tariff_title }}</td>
             <td>{{ $item->tariff_capacity }}</td>
             <td>{{ $item->loaded_weight }}</td>
@@ -233,7 +235,7 @@
         </tr>
     @empty
         <tr>
-            <td colspan="8">این صورتحساب لغو شده و ردیفی ندارد.</td>
+            <td colspan="9">این صورتحساب لغو شده و ردیفی ندارد.</td>
         </tr>
     @endforelse
     </tbody>

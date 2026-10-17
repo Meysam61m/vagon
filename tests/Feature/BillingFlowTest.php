@@ -60,7 +60,10 @@ class BillingFlowTest extends TestCase
             'owner_id' => $this->owner->id,
             'representative_id' => $this->representative->id,
             'request_date_shamsi' => '1404/07/25',
-            'wagon_numbers' => ['123456', '123457'],
+            'wagons' => [
+                ['number' => '123456', 'description' => 'گندم'],
+                ['number' => '123457', 'description' => 'سیمان فله'],
+            ],
         ])->assertRedirect();
 
         $cargo = CargoRequest::firstOrFail();
@@ -71,6 +74,10 @@ class BillingFlowTest extends TestCase
 
         /** @var Wagon $firstWagon */
         $firstWagon = $cargo->wagons()->orderBy('id')->first();
+
+        // شرح کالا برای هر واگن جداگانه ذخیره می‌شود
+        $this->assertSame('گندم', $firstWagon->cargo_description);
+        $this->assertSame('سیمان فله', $cargo->wagons()->orderByDesc('id')->first()->cargo_description);
 
         // ثبت بارگیری فقط برای واگن اول
         $this->post(route('cargo.load', $cargo), [

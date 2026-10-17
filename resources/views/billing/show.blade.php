@@ -44,6 +44,7 @@
             <tr>
                 <th>#</th>
                 <th>شماره واگن</th>
+                <th>شرح کالا</th>
                 <th>تعرفه</th>
                 <th>ظرفیت (تن)</th>
                 <th>وزن (تن)</th>
@@ -57,6 +58,7 @@
                 <tr>
                     <td>{{ $loop->iteration }}</td>
                     <td>{{ $item->wagon?->wagon_number ?? '—' }}</td>
+                    <td>{{ $item->wagon?->cargo_description ?: '—' }}</td>
                     <td>{{ $item->tariff_title }}</td>
                     <td>{{ $item->tariff_capacity }}</td>
                     <td>{{ $item->loaded_weight }}</td>
@@ -66,7 +68,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-3">
+                    <td colspan="9" class="text-center text-muted py-3">
                         ردیفی برای این صورتحساب ثبت نشده است (صورتحساب لغو شده).
                     </td>
                 </tr>

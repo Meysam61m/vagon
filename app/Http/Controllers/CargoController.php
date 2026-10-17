@@ -26,7 +26,9 @@ class CargoController extends Controller
                 $q->where(function ($inner) use ($term) {
                     $inner->where('request_number', 'like', $term)
                         ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', $term))
-                        ->orWhereHas('wagons', fn ($wagon) => $wagon->where('wagon_number', 'like', $term));
+                        ->orWhereHas('wagons', fn ($wagon) => $wagon
+                            ->where('wagon_number', 'like', $term)
+                            ->orWhere('cargo_description', 'like', $term));
                 });
             })
             ->latest('request_date')
@@ -59,14 +61,17 @@ class CargoController extends Controller
             'owner_id' => ['required', 'integer', 'exists:owners,id'],
             'representative_id' => ['required', 'integer', 'exists:representatives,id'],
             'request_date_shamsi' => ['required', 'string'],
-            'wagon_numbers' => ['required', 'array', 'min:1'],
-            'wagon_numbers.*' => ['required', 'string', 'max:50', 'distinct'],
+            'wagons' => ['required', 'array', 'min:1'],
+            'wagons.*.number' => ['nullable', 'string', 'max:50'],
+            'wagons.*.description' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ], [], [
             'owner_id' => 'صاحب کالا',
             'representative_id' => 'نماینده',
             'request_date_shamsi' => 'تاریخ درخواست',
-            'wagon_numbers' => 'شماره واگن‌ها',
+            'wagons' => 'واگن‌ها',
+            'wagons.*.number' => 'شماره واگن',
+            'wagons.*.description' => 'شرح کالا',
         ]);
 
         // نماینده باید به همین صاحب کالا تخصیص داده شده باشد
@@ -84,19 +89,30 @@ class CargoController extends Controller
         $requestDate = JalaliDate::parse($data['request_date_shamsi'], 'request_date_shamsi');
         $normalizedDate = JalaliDate::normalize($data['request_date_shamsi']);
 
-        $wagonNumbers = collect($data['wagon_numbers'])
-            ->map(fn ($number) => trim((string) $number))
-            ->filter()
-            ->unique()
+        // فقط ردیف‌هایی که شماره واگن دارند ثبت می‌شوند؛ شرح کالا اختیاری است
+        $wagonRows = collect($data['wagons'])
+            ->map(fn ($row) => [
+                'number' => trim((string) ($row['number'] ?? '')),
+                'description' => trim((string) ($row['description'] ?? '')),
+            ])
+            ->filter(fn ($row) => $row['number'] !== '')
             ->values();
 
-        if ($wagonNumbers->isEmpty()) {
+        if ($wagonRows->isEmpty()) {
             throw ValidationException::withMessages([
-                'wagon_numbers' => 'حداقل یک شماره واگن معتبر وارد کنید.',
+                'wagons' => 'حداقل یک شماره واگن معتبر وارد کنید.',
             ]);
         }
 
-        $cargoRequest = DocumentNumber::withRetry(function () use ($data, $requestDate, $normalizedDate, $wagonNumbers) {
+        $duplicateNumber = $wagonRows->duplicates('number')->first();
+
+        if ($duplicateNumber !== null) {
+            throw ValidationException::withMessages([
+                'wagons' => "شماره واگن «{$duplicateNumber}» تکراری است.",
+            ]);
+        }
+
+        $cargoRequest = DocumentNumber::withRetry(function () use ($data, $requestDate, $normalizedDate, $wagonRows) {
             $cargoRequest = CargoRequest::create([
                 'request_number' => CargoRequest::generateRequestNumber(),
                 'owner_id' => $data['owner_id'],
@@ -108,10 +124,11 @@ class CargoController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
 
-            foreach ($wagonNumbers as $wagonNumber) {
+            foreach ($wagonRows as $wagonRow) {
                 Wagon::create([
                     'cargo_request_id' => $cargoRequest->id,
-                    'wagon_number' => $wagonNumber,
+                    'wagon_number' => $wagonRow['number'],
+                    'cargo_description' => $wagonRow['description'] !== '' ? $wagonRow['description'] : null,
                 ]);
             }
 
@@ -153,9 +170,11 @@ class CargoController extends Controller
             'loading' => ['required', 'array'],
             'loading.*.tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
             'loading.*.weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
+            'loading.*.description' => ['nullable', 'string', 'max:255'],
         ], [], [
             'loading_date_shamsi' => 'تاریخ بارگیری',
             'loading' => 'ردیف‌های بارگیری',
+            'loading.*.description' => 'شرح کالا',
         ]);
 
         $loadingDate = JalaliDate::parse($data['loading_date_shamsi'], 'loading_date_shamsi');
@@ -180,7 +199,19 @@ class CargoController extends Controller
                 $weight = isset($row['weight']) && $row['weight'] !== '' ? (float) $row['weight'] : null;
                 $tariffId = $row['tariff_id'] ?? null;
 
+                // شرح کالا از همین فرم هم قابل ویرایش است؛ اگر کلید ارسال نشده باشد
+                // مقدار قبلی حفظ می‌شود (سازگاری با فرم‌های قدیمی).
+                $description = array_key_exists('description', $row)
+                    ? trim((string) $row['description'])
+                    : (string) $wagon->cargo_description;
+
                 if ($weight === null) {
+                    if ($description !== (string) $wagon->cargo_description) {
+                        $wagon->update([
+                            'cargo_description' => $description !== '' ? $description : null,
+                        ]);
+                    }
+
                     continue;
                 }
 
@@ -203,6 +234,7 @@ class CargoController extends Controller
                     'tariff_id' => $tariff->id,
                     'loaded_weight' => $weight,
                     'loaded_on' => $loadingDate->toDateString(),
+                    'cargo_description' => $description !== '' ? $description : null,
                 ]);
             }
 

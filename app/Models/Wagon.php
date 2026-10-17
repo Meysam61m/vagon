@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Wagon extends Model
 {
     protected $fillable = [
-        'cargo_request_id', 'wagon_number', 'tariff_id', 'loaded_weight', 'loaded_on', 'is_settled',
+        'cargo_request_id', 'wagon_number', 'cargo_description', 'tariff_id', 'loaded_weight', 'loaded_on', 'is_settled',
     ];
 
     protected function casts(): array
