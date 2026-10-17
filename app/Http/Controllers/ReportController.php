@@ -76,7 +76,7 @@ class ReportController extends Controller
         }
 
         $billings = (clone $baseQuery)
-            ->with('owner', 'representative', 'operator')
+            ->with(['owner', 'representative', 'operator', 'items.wagon'])
             ->orderBy('billing_date')
             ->orderBy('id')
             ->paginate(20)

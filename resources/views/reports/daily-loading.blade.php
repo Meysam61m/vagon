@@ -34,6 +34,7 @@
                 <th>تاریخ</th>
                 <th>صاحب کالا</th>
                 <th>نماینده</th>
+                <th>شرح کالا</th>
                 <th>تعداد واگن</th>
                 <th>وضعیت</th>
             </tr>
@@ -45,11 +46,21 @@
                     <td>{{ $request->request_date_shamsi }}</td>
                     <td>{{ $request->owner?->name ?? '—' }}</td>
                     <td>{{ $request->representative?->name ?? '—' }}</td>
+                    <td>
+                        @php
+                            $cargoNames = $request->wagons
+                                ->pluck('cargo_description')
+                                ->filter()
+                                ->unique()
+                                ->values();
+                        @endphp
+                        {{ $cargoNames->isEmpty() ? '—' : $cargoNames->implode('، ') }}
+                    </td>
                     <td>{{ $request->wagons->count() }}</td>
                     <td>{{ $request->statusLabel() }}</td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="text-center text-muted py-4">در این بازه درخواستی ثبت نشده است.</td></tr>
+                <tr><td colspan="7" class="text-center text-muted py-4">در این بازه درخواستی ثبت نشده است.</td></tr>
             @endforelse
             </tbody>
         </table>

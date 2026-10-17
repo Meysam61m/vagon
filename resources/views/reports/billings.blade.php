@@ -45,6 +45,7 @@
                 <th>شماره</th>
                 <th>صاحب کالا</th>
                 <th>نماینده</th>
+                <th>شرح کالا</th>
                 <th>اپراتور</th>
                 <th>تاریخ</th>
                 <th>مبلغ نهایی</th>
@@ -57,6 +58,16 @@
                     <td><a href="{{ route('billing.show', $billing) }}">{{ $billing->billing_number }}</a></td>
                     <td>{{ $billing->ownerName() }}</td>
                     <td>{{ $billing->representativeName() ?? '-' }}</td>
+                    <td>
+                        @php
+                            $cargoNames = $billing->items
+                                ->map(fn ($item) => $item->wagon?->cargo_description)
+                                ->filter()
+                                ->unique()
+                                ->values();
+                        @endphp
+                        {{ $cargoNames->isEmpty() ? '—' : $cargoNames->implode('، ') }}
+                    </td>
                     <td>{{ $billing->operator?->name ?? '—' }}</td>
                     <td>{{ $billing->billing_date_shamsi }}</td>
                     <td class="money">{{ number_format($billing->total_amount) }}</td>
@@ -67,7 +78,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="text-center text-muted py-4">صورتحسابی در این بازه نیست.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">صورتحسابی در این بازه نیست.</td></tr>
             @endforelse
             </tbody>
         </table>
