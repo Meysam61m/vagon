@@ -149,9 +149,36 @@
             color: #b00020;
             font-weight: bold;
         }
+
+        .notice {
+            border: 1px solid #f59e0b;
+            background: #fffbeb;
+            color: #92400e;
+            padding: 10px 14px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 12px;
+            line-height: 1.9;
+        }
+
+        @media print {
+            .notice {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
+
+@if($pdfUnavailable ?? false)
+    <div class="notice">
+        تولید فایل PDF روی این سرور ممکن نیست، چون افزونه PHP «dom» فعال نیست.
+        این نسخه قابل چاپ است؛ با Ctrl+P (یا Cmd+P) می‌توانید آن را به PDF ذخیره کنید.
+    </div>
+    <script>
+        window.addEventListener('load', function () { window.print(); });
+    </script>
+@endif
 
 <div class="header">
     <h1>صورتحساب بارگیری واگن</h1>

@@ -257,6 +257,14 @@ class BillingController extends Controller
     {
         $billing->load(['items.wagon', 'representative']);
 
+        // اگر افزونه dom روی سرور فعال نباشد، Dompdf نمی‌تواند HTML را پارس کند.
+        // به‌جای خطای ۵۰۰، همان فاکتور را به‌صورت HTML قابل چاپ (Ctrl+P → Save as PDF) نشان می‌دهیم.
+        if (! extension_loaded('dom')) {
+            return response()
+                ->view('billing.print', ['billing' => $billing, 'pdfUnavailable' => true])
+                ->header('Content-Type', 'text/html; charset=UTF-8');
+        }
+
         $pdf = Pdf::loadView('billing.print', ['billing' => $billing])
             ->setPaper('a4')
             ->setOptions([
