@@ -18,28 +18,73 @@ function h($value)
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * خواندن .env با همان قواعد Laravel (کوتیشن، کامنت، export).
+ * مقدارهای چندخطی پشتیبانی نمی‌شوند؛ برای رمز دیتابیس هم لازم نیستند.
+ */
 function read_env_file($path)
 {
     if (! is_file($path) || ! is_readable($path)) {
         return [];
     }
 
-    $values = [];
-    $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $contents = @file_get_contents($path);
 
-    foreach ($lines as $line) {
+    if (! is_string($contents) || $contents === '') {
+        return [];
+    }
+
+    $values = [];
+
+    foreach (preg_split('/\r\n|\r|\n/', $contents) as $line) {
         $line = trim($line);
 
-        if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
+        if ($line === '' || $line[0] === '#' || $line[0] === ';') {
             continue;
         }
 
-        list($key, $value) = explode('=', $line, 2);
-        $key = trim($key);
-        $value = trim($value);
+        if (stripos($line, 'export ') === 0) {
+            $line = trim(substr($line, 7));
+        }
 
-        if (strlen($value) > 1 && ($value[0] === '"' || $value[0] === "'") && substr($value, -1) === $value[0]) {
-            $value = substr($value, 1, -1);
+        $position = strpos($line, '=');
+
+        if ($position === false) {
+            continue;
+        }
+
+        $key = trim(substr($line, 0, $position));
+
+        if (! preg_match('/^[A-Za-z_][A-Za-z0-9_.]*$/', $key)) {
+            continue;
+        }
+
+        $raw = ltrim(substr($line, $position + 1));
+
+        if ($raw !== '' && ($raw[0] === '"' || $raw[0] === "'")) {
+            $quote = $raw[0];
+            $length = strlen($raw);
+            $value = '';
+
+            for ($i = 1; $i < $length; $i++) {
+                $character = $raw[$i];
+
+                if ($character === '\\' && $quote === '"' && $i + 1 < $length) {
+                    $next = $raw[++$i];
+                    $escapes = ['n' => "\n", 'r' => "\r", 't' => "\t", '"' => '"', '\\' => '\\'];
+                    $value .= isset($escapes[$next]) ? $escapes[$next] : '\\'.$next;
+                    continue;
+                }
+
+                if ($character === $quote) {
+                    break;
+                }
+
+                $value .= $character;
+            }
+        } else {
+            $raw = preg_replace('/\s+#.*$/', '', $raw);
+            $value = trim($raw);
         }
 
         $values[$key] = $value;
@@ -215,43 +260,108 @@ if (in_array($dbDriver, ['mysql', 'mariadb'], true)) {
     $dbPass = isset($env['DB_PASSWORD']) ? $env['DB_PASSWORD'] : '';
     $dbSocket = isset($env['DB_SOCKET']) ? $env['DB_SOCKET'] : '';
 
-    $dsn = $dbSocket !== ''
-        ? 'mysql:unix_socket='.$dbSocket.';dbname='.$dbName.';charset=utf8mb4'
-        : 'mysql:host='.$dbHost.';port='.$dbPort.';dbname='.$dbName.';charset=utf8mb4';
+    $targets = [];
+
+    if ($dbSocket !== '') {
+        $targets[] = [
+            'label' => 'socket '.$dbSocket,
+            'dsn' => 'mysql:unix_socket='.$dbSocket.';dbname='.$dbName.';charset=utf8mb4',
+        ];
+    } else {
+        $targets[] = [
+            'label' => $dbHost.':'.$dbPort,
+            'dsn' => 'mysql:host='.$dbHost.';port='.$dbPort.';dbname='.$dbName.';charset=utf8mb4',
+        ];
+
+        if (in_array(strtolower($dbHost), ['127.0.0.1', 'localhost'], true)) {
+            $altHost = strtolower($dbHost) === 'localhost' ? '127.0.0.1' : 'localhost';
+            $targets[] = [
+                'label' => $altHost.':'.$dbPort,
+                'dsn' => 'mysql:host='.$altHost.';port='.$dbPort.';dbname='.$dbName.';charset=utf8mb4',
+            ];
+        }
+    }
 
     $pdo = null;
     $connectError = '';
     $errorCode = 0;
+    $workingLabel = '';
+    $triedLabels = [];
+    $lastLabel = $targets[0]['label'];
 
     if (! extension_loaded('pdo_mysql')) {
         $connectError = 'افزونه pdo_mysql بارگذاری نشده است.';
     } else {
-        try {
-            $pdo = new PDO($dsn, $dbUser, $dbPass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_TIMEOUT => 5,
-            ]);
-        } catch (Throwable $e) {
-            $connectError = $e->getMessage();
-            $errorCode = (int) ($e instanceof PDOException ? ($e->errorInfo[1] ?? 0) : 0);
+        foreach ($targets as $target) {
+            $triedLabels[] = $target['label'];
+            $lastLabel = $target['label'];
+
+            try {
+                $pdo = new PDO($target['dsn'], $dbUser, $dbPass, [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_TIMEOUT => 3,
+                ]);
+                $workingLabel = $target['label'];
+
+                break;
+            } catch (Throwable $e) {
+                $pdo = null;
+                $connectError = $e->getMessage();
+                $errorCode = (int) ($e instanceof PDOException ? ($e->errorInfo[1] ?? 0) : 0);
+            }
         }
     }
+
+    $triedText = implode(' و ', $triedLabels !== [] ? $triedLabels : [$lastLabel]);
+    $passInfo = $dbPass === '' ? 'خالی' : strlen($dbPass).' کاراکتر';
+
+    check(
+        $checks,
+        'مشخصات اتصال MySQL',
+        'info',
+        'کاربر '.$dbUser.' — مسیر '.$triedText.' — دیتابیس '.$dbName.' — رمز: '.$passInfo,
+        'رمز نمایش داده نمی‌شود. اگر مقدار رمز در .env داخل کوتیشن نباشد و شامل # باشد، بخش بعد از # کامنت می‌شود؛ آن را به شکل <code>DB_PASSWORD="..."</code> بنویسید.'
+    );
 
     check(
         $checks,
         'اتصال به MySQL',
         $pdo ? 'ok' : 'fail',
         $pdo
-            ? 'اتصال برقرار شد ('.($dbSocket !== '' ? 'socket' : $dbHost.':'.$dbPort).' دیتابیس '.$dbName.')'
+            ? 'اتصال برقرار شد ('.$workingLabel.' — دیتابیس '.$dbName.')'
             : 'اتصال برقرار نشد',
         $pdo ? '' : match (true) {
             $errorCode === 1049 => 'دیتابیس <code>'.$dbName.'</code> وجود ندارد. فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
-            $errorCode === 1045 => 'نام کاربری یا رمز اشتباه است. DB_USERNAME/DB_PASSWORD را بررسی کنید.',
+            $errorCode === 1044 => 'کاربر <code>'.$dbUser.'</code> به دیتابیس <code>'.$dbName.'</code> دسترسی ندارد. در cPanel کاربر را با Add User To Database و ALL PRIVILEGES به دیتابیس اضافه کنید.',
+            $errorCode === 1045 => 'نام کاربری یا رمز پذیرفته نشد (Access denied). '
+                .'کاربر <code>'.$dbUser.'</code> را با مقدار کامل cPanel (مثل <code>user_wagon</code>) مقایسه کنید، رمز را داخل کوتیشن بگذارید و مطمئن شوید کاربر به دیتابیس اضافه شده است. '.
+                'هر دو مسیر localhost و 127.0.0.1 امتحان شد.',
             $errorCode === 2002, $errorCode === 2003 => 'سرور MySQL در دسترس نیست؛ DB_HOST/DB_PORT و اجرا بودن سرویس را بررسی کنید.',
             strpos($connectError, 'pdo_mysql') !== false => 'افزونه <code>pdo_mysql</code> را در php.ini یا cPanel فعال کنید.',
-            default => 'جزئیات: '.h($connectError),
+            default => 'جزئیات (از '.$lastLabel.'): '.h($connectError),
         }
     );
+
+    if ($pdo && count($triedLabels) > 1 && $workingLabel !== $triedLabels[0]) {
+        check(
+            $checks,
+            'آدرس اتصال جایگزین',
+            'warn',
+            'اتصال از '.$workingLabel.' برقرار شد، نه از '.$triedLabels[0],
+            'مقدار <code>DB_HOST</code> را در <code>.env</code> به <code>'.h($workingLabel).'</code> تغییر دهید و سپس <code>php artisan config:clear</code> را اجرا کنید.'
+        );
+    }
+
+    if (is_file($base.'/bootstrap/cache/config.php')) {
+        check(
+            $checks,
+            'کش تنظیمات (config cache)',
+            'warn',
+            'فایل bootstrap/cache/config.php وجود دارد',
+            'لاراول به‌جای .env از این فایل کش‌شده می‌خواند؛ اگر DB_* را عوض کردید و اثر نکرد، <code>php artisan config:clear</code> را اجرا کنید (یا فایل را حذف کنید).'
+        );
+    }
+
 
     if ($pdo) {
         $serverVersion = '';

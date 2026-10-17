@@ -45,6 +45,83 @@ $wagonFatal = function ($title, $hints) {
     exit;
 };
 
+/**
+ * خواندن ساده و امن فایل .env (بدون نیاز به Composer).
+ *
+ * قواعد مهم:
+ *  - مقدارهای داخل "..." و '...' به‌صورت کامل خوانده می‌شوند؛
+ *  - # فقط وقتی کامنت است که قبلش فاصله باشد (مثل رفتار Laravel)؛
+ *  - پیشوند export و فاصله‌های دور = هم پشتیبانی می‌شوند.
+ */
+if (! function_exists('wagonEnvParse')) {
+    function wagonEnvParse($contents)
+    {
+        $values = [];
+
+        if (! is_string($contents) || $contents === '') {
+            return $values;
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', $contents);
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '' || $line[0] === '#' || $line[0] === ';') {
+                continue;
+            }
+
+            if (stripos($line, 'export ') === 0) {
+                $line = trim(substr($line, 7));
+            }
+
+            $position = strpos($line, '=');
+
+            if ($position === false) {
+                continue;
+            }
+
+            $key = trim(substr($line, 0, $position));
+
+            if (! preg_match('/^[A-Za-z_][A-Za-z0-9_.]*$/', $key)) {
+                continue;
+            }
+
+            $raw = ltrim(substr($line, $position + 1));
+
+            if ($raw !== '' && ($raw[0] === '"' || $raw[0] === "'")) {
+                $quote = $raw[0];
+                $length = strlen($raw);
+                $value = '';
+
+                for ($i = 1; $i < $length; $i++) {
+                    $character = $raw[$i];
+
+                    if ($character === '\\' && $quote === '"' && $i + 1 < $length) {
+                        $next = $raw[++$i];
+                        $escapes = ['n' => "\n", 'r' => "\r", 't' => "\t", '"' => '"', '\\' => '\\'];
+                        $value .= isset($escapes[$next]) ? $escapes[$next] : '\\'.$next;
+                        continue;
+                    }
+
+                    if ($character === $quote) {
+                        break;
+                    }
+
+                    $value .= $character;
+                }
+            } else {
+                $raw = preg_replace('/\s+#.*$/', '', $raw);
+                $value = trim($raw);
+            }
+
+            $values[$key] = $value;
+        }
+
+        return $values;
+    }
+}
+
 if (PHP_VERSION_ID < 80200) {
     $wagonFatal('نسخه PHP قدیمی است (نسخه فعلی: '.PHP_VERSION.')', [
         'این برنامه به <strong>PHP 8.2 یا بالاتر</strong> نیاز دارد.',
@@ -66,10 +143,11 @@ if (! is_file($wagonAutoload)) {
 
 $wagonEnvPath = $wagonBase.'/.env';
 $wagonEnv = is_file($wagonEnvPath) ? @file_get_contents($wagonEnvPath) : null;
+$wagonEnvValues = wagonEnvParse($wagonEnv);
 $wagonAppKey = getenv('APP_KEY');
 
-if ($wagonAppKey === false && is_string($wagonEnv) && preg_match('/^\s*APP_KEY\s*=\s*(.*)$/m', $wagonEnv, $wagonMatch)) {
-    $wagonAppKey = trim($wagonMatch[1], " \t\"'");
+if ($wagonAppKey === false && isset($wagonEnvValues['APP_KEY']) && $wagonEnvValues['APP_KEY'] !== '') {
+    $wagonAppKey = $wagonEnvValues['APP_KEY'];
 }
 
 if (! is_file($wagonEnvPath) && ($wagonAppKey === false || $wagonAppKey === '')) {
@@ -132,11 +210,9 @@ if ($wagonNotWritable) {
 // ---------------------------------------------------------------------------
 // بررسی دیتابیس (پیش‌فرض: MySQL / MariaDB)
 // ---------------------------------------------------------------------------
-$wagonEnvValue = function (string $key, ?string $default = null) use ($wagonEnv) {
-    if (is_string($wagonEnv) && preg_match('/^\s*'.preg_quote($key, '/').'\s*=\s*(.*)$/m', $wagonEnv, $m)) {
-        $value = trim($m[1], " \t\"'");
-
-        return $value === '' ? $default : $value;
+$wagonEnvValue = function (string $key, $default = null) use ($wagonEnvValues) {
+    if (array_key_exists($key, $wagonEnvValues) && $wagonEnvValues[$key] !== '') {
+        return $wagonEnvValues[$key];
     }
 
     $env = getenv($key);
@@ -163,49 +239,118 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
     $wagonDbPass = (string) $wagonEnvValue('DB_PASSWORD', '');
     $wagonDbSocket = (string) $wagonEnvValue('DB_SOCKET', '');
 
-    $wagonDsn = $wagonDbSocket !== ''
-        ? 'mysql:unix_socket='.$wagonDbSocket.';dbname='.$wagonDbName.';charset=utf8mb4'
-        : 'mysql:host='.$wagonDbHost.';port='.$wagonDbPort.';dbname='.$wagonDbName.';charset=utf8mb4';
+    /*
+     * روی بعضی هاست‌ها اتصال با localhost (سوکت) جواب می‌دهد و روی بعضی با
+     * 127.0.0.1 (TCP)؛ چون کاربر MySQL ممکن است فقط برای یکی از این دو تعریف
+     * شده باشد، هر دو حالت امتحان می‌شود تا خطای «Access denied» بی‌دلیل
+     * نمایش داده نشود.
+     */
+    $wagonDbTargets = [];
 
-    try {
-        $wagonPdo = new PDO($wagonDsn, $wagonDbUser, $wagonDbPass, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_TIMEOUT => 5,
-        ]);
+    if ($wagonDbSocket !== '') {
+        $wagonDbTargets[] = [
+            'label' => 'socket '.$wagonDbSocket,
+            'dsn' => 'mysql:unix_socket='.$wagonDbSocket.';dbname='.$wagonDbName.';charset=utf8mb4',
+        ];
+    } else {
+        $wagonDbTargets[] = [
+            'label' => $wagonDbHost.':'.$wagonDbPort,
+            'dsn' => 'mysql:host='.$wagonDbHost.';port='.$wagonDbPort.';dbname='.$wagonDbName.';charset=utf8mb4',
+        ];
 
-        $wagonTableCount = (int) $wagonPdo->query(
-            'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
-        )->fetchColumn();
+        if (in_array(strtolower($wagonDbHost), ['127.0.0.1', 'localhost'], true)) {
+            $wagonAltHost = strtolower($wagonDbHost) === 'localhost' ? '127.0.0.1' : 'localhost';
 
-        if ($wagonTableCount === 0) {
-            $wagonFatal('اتصال به MySQL برقرار شد، اما دیتابیس خالی است', [
-                'دیتابیس <code>'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'</code> ساخته شده اما هیچ جدولی ندارد.',
-                'دستور <code>php artisan migrate --seed</code> را در پوشه پروژه اجرا کنید.',
-            ]);
+            $wagonDbTargets[] = [
+                'label' => $wagonAltHost.':'.$wagonDbPort,
+                'dsn' => 'mysql:host='.$wagonAltHost.';port='.$wagonDbPort.';dbname='.$wagonDbName.';charset=utf8mb4',
+            ];
         }
-    } catch (PDOException $wagonDbException) {
-        $wagonCode = (int) ($wagonDbException->errorInfo[1] ?? 0);
-        $wagonMessage = $wagonDbException->getMessage();
+    }
+
+    $wagonPdo = null;
+    $wagonLastCode = 0;
+    $wagonLastMessage = '';
+    $wagonLastLabel = $wagonDbTargets[0]['label'];
+    $wagonLastClass = 'PDOException';
+    $wagonWorkingLabel = '';
+    $wagonTriedLabels = [];
+
+    foreach ($wagonDbTargets as $wagonTarget) {
+        $wagonTriedLabels[] = $wagonTarget['label'];
+
+        try {
+            $wagonPdo = new PDO($wagonTarget['dsn'], $wagonDbUser, $wagonDbPass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => 3,
+            ]);
+            $wagonWorkingLabel = $wagonTarget['label'];
+
+            break;
+        } catch (PDOException $wagonDbException) {
+            $wagonPdo = null;
+            $wagonLastCode = (int) ($wagonDbException->errorInfo[1] ?? 0);
+            $wagonLastMessage = $wagonDbException->getMessage();
+            $wagonLastLabel = $wagonTarget['label'];
+            $wagonLastClass = get_class($wagonDbException);
+        }
+    }
+
+    $wagonTriedText = htmlspecialchars(implode(' و ', $wagonTriedLabels), ENT_QUOTES, 'UTF-8');
+    $wagonSafeUser = htmlspecialchars($wagonDbUser, ENT_QUOTES, 'UTF-8');
+    $wagonSafeName = htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8');
+    $wagonPassHint = $wagonDbPass === ''
+        ? 'رمز خوانده‌شده از <code>.env</code> <strong>خالی</strong> است.'
+        : 'رمزی که از <code>.env</code> خوانده شد '.strlen($wagonDbPass).' کاراکتر است (محتوای رمز نمایش داده نمی‌شود).';
+
+    if (! $wagonPdo) {
+        $wagonCode = $wagonLastCode;
+        $wagonMessage = $wagonLastMessage;
 
         if ($wagonCode === 1049 || strpos($wagonMessage, 'Unknown database') !== false) {
             $wagonFatal('دیتابیس «'.$wagonDbName.'» وجود ندارد', [
+                'اتصال به MySQL برقرار شد ولی دیتابیس <code>'.$wagonSafeName.'</code> ساخته نشده است.',
                 'در phpMyAdmin یا MySQL دستور زیر را اجرا کنید:',
-                '<code>CREATE DATABASE `'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;</code>',
+                '<code>CREATE DATABASE `'.$wagonSafeName.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;</code>',
                 'یا فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
                 'سپس <code>php artisan migrate --seed</code> را اجرا کنید.',
             ]);
         }
 
-        if ($wagonCode === 1045 || strpos($wagonMessage, 'Access denied') !== false) {
-            $wagonFatal('نام کاربری یا رمز MySQL درست نیست (Access denied)', [
-                'مقادیر <code>DB_USERNAME</code> و <code>DB_PASSWORD</code> را در <code>.env</code> بررسی کنید.',
-                'در cPanel معمولاً نام کاربری با پیشوند حساب هاست شروع می‌شود (مثلاً <code>user_wagon</code>).',
-                'مطمئن شوید کاربر دیتابیس به دیتابیس <code>'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'</code> دسترسی (Privileges) دارد.',
+        if ($wagonCode === 1044) {
+            $wagonFatal('کاربر MySQL به دیتابیس «'.$wagonDbName.'» دسترسی ندارد', [
+                'کاربر <code>'.$wagonSafeUser.'</code> به MySQL وصل شد، اما اجازه استفاده از دیتابیس <code>'.$wagonSafeName.'</code> را ندارد.',
+                'در cPanel → <strong>MySQL Databases</strong> → بخش <strong>Add User To Database</strong> کاربر را به این دیتابیس اضافه کنید.',
+                'هنگام اضافه‌کردن، گزینه <strong>ALL PRIVILEGES</strong> را انتخاب کنید.',
+                'در هاست‌های دیگر: <code>GRANT ALL PRIVILEGES ON `'.$wagonSafeName.'`.* TO \''.$wagonSafeUser.'\'@\'localhost\';</code>',
+                'سپس صفحه را رفرش کنید.',
             ]);
+        }
+
+        if ($wagonCode === 1045 || strpos($wagonMessage, 'Access denied') !== false) {
+            $wagonHints = [
+                'مشخصات اتصال: کاربر <code>'.$wagonSafeUser.'</code>، مسیر <code>'.$wagonTriedText.'</code>، دیتابیس <code>'.$wagonSafeName.'</code>.',
+                $wagonPassHint,
+                'در cPanel نام کاربری دیتابیس معمولاً پیشوند حساب هاست را دارد؛ مثلاً <code>myuser_wagon</code> نه فقط <code>wagon</code>. مقدار کامل را در <code>DB_USERNAME</code> بگذارید.',
+                'در cPanel → <strong>MySQL Databases</strong> مطمئن شوید کاربر ساخته شده و با <strong>Add User To Database</strong> به دیتابیس اضافه شده است.',
+                'اگر رمز شامل <code>#</code>، فاصله یا کاراکترهای خاص است، آن را داخل دابل‌کوتیشن بگذارید: <code>DB_PASSWORD="p@ss#123"</code> (بدون کوتیشن، بخش بعد از # کامنت حساب می‌شود).',
+                'هر دو حالت <code>localhost</code> و <code>127.0.0.1</code> امتحان شد؛ رد شدن هر دو یعنی کاربر/رمز روی سرور پذیرفته نمی‌شود، نه اینکه آدرس اشتباه باشد.',
+                'روی XAMPP / Laragon رمز پیش‌فرض کاربر <code>root</code> معمولاً خالی است؛ اگر برای root رمز گذاشته‌اید همان را در <code>DB_PASSWORD</code> بگذارید.',
+                'در هاست اشتراکی کاربر <code>root</code> معمولاً غیرفعال است؛ باید کاربر دیتابیس مخصوص خودتان (با پیشوند حساب) را بسازید و در <code>DB_USERNAME</code> بگذارید.',
+            ];
+
+            if (is_file($wagonBase.'/bootstrap/cache/config.php')) {
+                $wagonHints[] = 'فایل <code>bootstrap/cache/config.php</code> وجود دارد و مقادیر قدیمی کش شده‌اند؛ یک بار <code>php artisan config:clear</code> را اجرا کنید (یا این فایل را حذف کنید).';
+            }
+
+            $wagonHints[] = 'برای تست دقیق همین اتصال، فایل <code>diagnose.php</code> را باز کنید.';
+
+            $wagonFatal('نام کاربری یا رمز MySQL درست نیست (Access denied)', $wagonHints);
         }
 
         if (in_array($wagonCode, [2002, 2003], true) || strpos($wagonMessage, 'Connection refused') !== false) {
             $wagonFatal('اتصال به سرور MySQL برقرار نشد', [
+                'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code>.',
                 'مقدار <code>DB_HOST</code> و <code>DB_PORT</code> را بررسی کنید (پیش‌فرض: <code>127.0.0.1:3306</code>).',
                 'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
                 'در بعضی هاست‌ها به‌جای <code>localhost</code> باید از <code>127.0.0.1</code> استفاده شود (یا برعکس).',
@@ -214,10 +359,30 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
         }
 
         $wagonFatal('خطا در اتصال به دیتابیس MySQL', [
-            '<code>'.htmlspecialchars(get_class($wagonDbException), ENT_QUOTES, 'UTF-8').'</code>: '
-                .htmlspecialchars($wagonMessage, ENT_QUOTES, 'UTF-8'),
+            'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code> — آخرین خطا از <code>'.$wagonLastLabel.'</code>:',
+            '<code>'.$wagonLastClass.'</code>: '.htmlspecialchars($wagonMessage, ENT_QUOTES, 'UTF-8'),
             'مقادیر DB_* را در فایل <code>.env</code> بررسی کنید.',
             'برای تست سریع اتصال، فایل <code>diagnose.php</code> را در مرورگر باز کنید.',
+        ]);
+    }
+
+    try {
+        $wagonTableCount = (int) $wagonPdo->query(
+            'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
+        )->fetchColumn();
+    } catch (PDOException $wagonSchemaException) {
+        $wagonFatal('اتصال به MySQL برقرار شد، اما خواندن اطلاعات دیتابیس ممکن نشد', [
+            'کاربر <code>'.$wagonSafeUser.'</code> به دیتابیس <code>'.$wagonSafeName.'</code> وصل شد ولی دسترسی خواندن <code>information_schema</code> را ندارد.',
+            'در cPanel → MySQL Databases → Add User To Database گزینه <strong>ALL PRIVILEGES</strong> را بدهید.',
+            'جزئیات خطا: <code>'.htmlspecialchars($wagonSchemaException->getMessage(), ENT_QUOTES, 'UTF-8').'</code>',
+        ]);
+    }
+
+    if ($wagonTableCount === 0) {
+        $wagonFatal('اتصال به MySQL برقرار شد، اما دیتابیس خالی است', [
+            'دیتابیس <code>'.$wagonSafeName.'</code> ساخته شده اما هیچ جدولی ندارد.',
+            'دستور <code>php artisan migrate --seed</code> را در پوشه پروژه اجرا کنید.',
+            'اگر از cPanel اجرا می‌کنید، در بخش «Terminal» یا از طریق SSH این دستور را بزنید.',
         ]);
     }
 } else {

@@ -54,7 +54,7 @@ PHP در محیط بررسی نصب نبود، بنابراین پروژه اج�
 | ۴.۱۹ پول با float | ⚠️ پذیرفته شد | محاسبه با `round` و ذخیره integer ریالی؛ برای اعشار پولی باید ×۱۰۰ شود (مستند شد) |
 | ۴.۲۰ اسکریپت در همه صفحات | ⚠️ پذیرفته شد | دارایی‌ها محلی و کوچک‌اند؛ بارگذاری شرطی لازم نیست |
 
-**دیتابیس:** دیتابیس اصلی از SQLite به **MySQL/MariaDB** تغییر کرد (`utf8mb4_unicode_ci`). فایل `database/create_database.sql` برای ساخت دیتابیس، `diagnose.php` برای بررسی اتصال و جدول‌ها، و `public/index.php` برای پیام‌های دقیق خطاهای MySQL (دیتابیس ناموجود، Access denied، Connection refused، نبود `pdo_mysql`) اضافه شد. SQLite فقط برای تست‌های خودکار (in-memory) باقی ماند.
+**دیتابیس:** دیتابیس اصلی از SQLite به **MySQL/MariaDB** تغییر کرد (`utf8mb4_unicode_ci`). فایل `database/create_database.sql` برای ساخت دیتابیس، `diagnose.php` برای بررسی اتصال و جدول‌ها، و `public/index.php` برای پیام‌های دقیق خطاهای MySQL (دیتابیس ناموجود، Access denied، Connection refused، نبود `pdo_mysql`) اضافه شد. SQLite فقط برای تست‌های خودکار (in-memory) باقی ماند. در نسخه بعد، تشخیص خطای `Access denied` کامل‌تر شد: هر دو مسیر `localhost` و `127.0.0.1` خودکار امتحان می‌شود، نام کاربری/مسیر/طول رمز خوانده‌شده نمایش داده می‌شود، خطای ۱۰۴۴ (نبود Privileges) جداگانه توضیح داده می‌شود و اگر `bootstrap/cache/config.php` وجود داشته باشد هشدار `config:clear` داده می‌شود. خواندن `.env` هم با قواعد کوتیشن/کامنت/`export` هم‌راستا با Laravel شد.
 
 **نکته درباره تست:** فایل‌های PHPUnit نوشته شده‌اند اما در این محیط Composer و PHPUnit نصب نیست و افزونه `dom` برای PHPUnit وجود ندارد؛ بنابراین `php artisan test` اینجا اجرا نشد. رفتار معادل با اجرای واقعی HTTP در runtime PHP 8.4 بررسی شد. روی سرور با `composer install` و PHP کامل، `php artisan test` باید اجرا شود.
 
