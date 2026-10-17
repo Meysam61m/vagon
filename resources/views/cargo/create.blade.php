@@ -8,10 +8,11 @@
         $oldWagons = old('wagons');
 
         if (! is_array($oldWagons) || $oldWagons === []) {
-            $oldWagons = [['number' => '', 'description' => '']];
+            $oldWagons = [0 => ['number' => '', 'description' => '']];
         }
 
-        $oldWagons = array_values($oldWagons);
+        // کلیدها دست نمی‌خورند تا پیام خطای هر ردیف به همان ردیف بچسبد
+        $nextWagonIndex = count($oldWagons) > 0 ? max(array_map('intval', array_keys($oldWagons))) + 1 : 1;
     @endphp
 
     <form method="POST" action="{{ route('cargo.store') }}" class="card p-4">
@@ -53,7 +54,11 @@
                 @error('request_date_shamsi')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-12">
-                <label class="form-label">واگن‌ها و شرح کالا</label>
+                <label class="form-label">واگن‌ها و شرح کالا <span class="text-danger">*</span></label>
+                <div class="text-muted small mb-2">
+                    شرح کالا برای هر واگن الزامی است. اگر چند واگن همان کالا را دارند، شرح کالای ردیف بعدی به‌صورت خودکار
+                    از ردیف قبل پر می‌شود و در صورت نیاز می‌توانید تغییرش دهید.
+                </div>
                 <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
                     <div class="col-md-4">شماره واگن</div>
                     <div class="col-md-6">شرح کالا</div>
@@ -64,14 +69,18 @@
                         <div class="row g-2 mb-2 wagon-row">
                             <div class="col-md-4">
                                 <input type="text" name="wagons[{{ $index }}][number]"
+                                       data-wagon-number
                                        class="form-control @error('wagons.'.$index.'.number') is-invalid @enderror"
-                                       value="{{ $wagon['number'] ?? '' }}" placeholder="مثلاً ۵۶۳۱۲۴">
+                                       value="{{ $wagon['number'] ?? '' }}" placeholder="مثلاً ۵۶۳۱۲۴"
+                                       autocomplete="off">
                                 @error('wagons.'.$index.'.number')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
                             <div class="col-md-6">
                                 <input type="text" name="wagons[{{ $index }}][description]"
+                                       data-wagon-description
                                        class="form-control @error('wagons.'.$index.'.description') is-invalid @enderror"
-                                       value="{{ $wagon['description'] ?? '' }}" placeholder="مثلاً گندم">
+                                       value="{{ $wagon['description'] ?? '' }}" placeholder="مثلاً گندم"
+                                       autocomplete="off">
                                 @error('wagons.'.$index.'.description')<div class="invalid-feedback">{{ $message }}</div>@enderror
                             </div>
                             <div class="col-md-2">
@@ -101,9 +110,55 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const wagonList = document.getElementById('wagon-list');
-            let wagonIndex = {{ count($oldWagons) }};
+            let wagonIndex = {{ $nextWagonIndex }};
 
-            function createWagonRow(index) {
+            function rows() {
+                return Array.from(wagonList.querySelectorAll('.wagon-row'));
+            }
+
+            /**
+             * شرح کالای نزدیک‌ترین ردیف قبل که مقدار دارد.
+             */
+            function previousDescription(row) {
+                let cursor = row.previousElementSibling;
+
+                while (cursor) {
+                    const input = cursor.querySelector('[data-wagon-description]');
+
+                    if (input && input.value.trim() !== '') {
+                        return input.value;
+                    }
+
+                    cursor = cursor.previousElementSibling;
+                }
+
+                return '';
+            }
+
+            /**
+             * شرح کالا فقط برای ردیفی اجباری است که شماره واگن دارد؛
+             * ردیف‌های خالی اضافی جلوی ارسال فرم را نمی‌گیرند.
+             * پیام اعتبارسنجی هم فارسی و اختصاصی همین فیلد است.
+             */
+            function refreshRow(row) {
+                const number = row.querySelector('[data-wagon-number]');
+                const description = row.querySelector('[data-wagon-description]');
+
+                if (! number || ! description) {
+                    return;
+                }
+
+                const needed = number.value.trim() !== '';
+                const empty = description.value.trim() === '';
+
+                description.required = needed;
+                description.placeholder = needed ? 'مثلاً گندم (الزامی)' : 'مثلاً گندم';
+                description.setCustomValidity(
+                    needed && empty ? 'شرح کالا برای این واگن الزامی است.' : ''
+                );
+            }
+
+            function buildRow(index) {
                 const row = document.createElement('div');
                 row.className = 'row g-2 mb-2 wagon-row';
 
@@ -115,6 +170,8 @@
                 numberInput.name = 'wagons[' + index + '][number]';
                 numberInput.className = 'form-control';
                 numberInput.placeholder = 'مثلاً ۵۶۳۱۲۴';
+                numberInput.autocomplete = 'off';
+                numberInput.setAttribute('data-wagon-number', '');
                 numberColumn.appendChild(numberInput);
 
                 const descriptionColumn = document.createElement('div');
@@ -125,6 +182,8 @@
                 descriptionInput.name = 'wagons[' + index + '][description]';
                 descriptionInput.className = 'form-control';
                 descriptionInput.placeholder = 'مثلاً گندم';
+                descriptionInput.autocomplete = 'off';
+                descriptionInput.setAttribute('data-wagon-description', '');
                 descriptionColumn.appendChild(descriptionInput);
 
                 const actionsColumn = document.createElement('div');
@@ -140,13 +199,29 @@
                 row.appendChild(descriptionColumn);
                 row.appendChild(actionsColumn);
 
-                return { row: row, input: numberInput };
+                return { row: row, number: numberInput, description: descriptionInput };
             }
 
             document.getElementById('add-wagon').addEventListener('click', function () {
-                const created = createWagonRow(wagonIndex++);
+                const existing = rows();
+                const lastRow = existing.length > 0 ? existing[existing.length - 1] : null;
+                const lastDescription = lastRow ? lastRow.querySelector('[data-wagon-description]') : null;
+
+                // پیشنهاد شرح کالا: اول از ردیف آخر، بعد از نزدیک‌ترین ردیف قبلی که مقدار دارد
+                const suggested = lastDescription && lastDescription.value.trim() !== ''
+                    ? lastDescription.value
+                    : (lastRow ? previousDescription(lastRow) : '');
+
+                const created = buildRow(wagonIndex++);
+
+                if (suggested !== '') {
+                    created.description.value = suggested;
+                    created.description.dataset.autoFilled = '1';
+                }
+
                 wagonList.appendChild(created.row);
-                created.input.focus();
+                refreshRow(created.row);
+                created.number.focus();
             });
 
             wagonList.addEventListener('click', function (event) {
@@ -154,41 +229,58 @@
                     return;
                 }
 
-                if (wagonList.querySelectorAll('.wagon-row').length > 1) {
+                if (rows().length > 1) {
                     event.target.closest('.wagon-row').remove();
                 }
             });
 
-            // فیلتر نمایندگان بر اساس صاحب کالای انتخاب‌شده
-            const ownerSelect = document.getElementById('owner_id_input');
-            const representativeSelect = document.getElementById('representative_id');
-            const allOptions = Array.from(representativeSelect.querySelectorAll('option[data-owners]'));
-            const selected = representativeSelect.value;
+            // با پر شدن شماره واگن، شرح کالای همان ردیف اجباری می‌شود
+            wagonList.addEventListener('input', function (event) {
+                const row = event.target.closest('.wagon-row');
 
-            function filterRepresentatives() {
-                const ownerId = ownerSelect.value;
-                const current = representativeSelect.value || selected;
+                if (!row) {
+                    return;
+                }
 
-                representativeSelect.innerHTML = '<option value="">انتخاب کنید…</option>';
+                if (event.target.matches('[data-wagon-number]')) {
+                    refreshRow(row);
+                    return;
+                }
 
-                allOptions.forEach(function (option) {
-                    const owners = (option.dataset.owners || '').split(',').filter(Boolean);
+                if (!event.target.matches('[data-wagon-description]')) {
+                    return;
+                }
 
-                    if (!ownerId || owners.includes(ownerId)) {
-                        const clone = option.cloneNode(true);
-                        if (clone.value === current) {
-                            clone.selected = true;
-                        }
-                        representativeSelect.appendChild(clone);
+                // این ردیف را دستی ویرایش کرده‌اند؛ دیگر خودکار بازنویسی نشود
+                delete event.target.dataset.autoFilled;
+                refreshRow(row);
+
+                let next = row.nextElementSibling;
+
+                while (next) {
+                    const nextInput = next.querySelector('[data-wagon-description]');
+
+                    if (!nextInput) {
+                        break;
                     }
-                });
-            }
 
-            ownerSelect.addEventListener('change', filterRepresentatives);
+                    // اولین ردیفی که کاربر خودش شرحش را نوشته، مرز گروه است
+                    if (!nextInput.dataset.autoFilled && nextInput.value.trim() !== '') {
+                        break;
+                    }
 
-            if (ownerSelect.value) {
-                filterRepresentatives();
-            }
+                    if (nextInput.value.trim() === '' || nextInput.dataset.autoFilled) {
+                        nextInput.value = event.target.value;
+                        nextInput.dataset.autoFilled = '1';
+                        refreshRow(next);
+                    }
+
+                    next = next.nextElementSibling;
+                }
+            });
+
+            // وضعیت اولیه ردیف‌ها (بعد از خطای اعتبارسنجی یا مقدارهای قبلی)
+            rows().forEach(refreshRow);
         });
     </script>
 @endpush

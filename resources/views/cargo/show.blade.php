@@ -27,6 +27,7 @@
                     <h6 class="mb-1">ثبت عملیات بارگیری</h6>
                     <div class="text-muted small">
                         برای هر واگن شرح کالا، تعرفه و وزن بارگیری‌شده را وارد کنید. وزن خالی یعنی آن واگن هنوز بارگیری نشده است.
+                        برای واگنی که تازه بارگیری می‌شود، شرح کالا الزامی است و با ورود شماره واگن‌های هم‌کالا، شرح ردیف بعدی پیشنهاد می‌شود.
                     </div>
                 </div>
                 <div style="min-width: 200px;">
@@ -43,7 +44,7 @@
                     <tr>
                         <th>#</th>
                         <th>شماره واگن</th>
-                        <th style="min-width: 190px;">شرح کالا</th>
+                        <th style="min-width: 190px;">شرح کالا <span class="text-danger">*</span></th>
                         <th style="min-width: 240px;">تعرفه</th>
                         <th style="min-width: 130px;">وزن (تن)</th>
                         <th>وضعیت</th>
@@ -67,6 +68,7 @@
                                            name="loading[{{ $wagon->id }}][description]"
                                            value="{{ old('loading.'.$wagon->id.'.description', $wagon->cargo_description) }}"
                                            class="form-control form-control-sm @error('loading.'.$wagon->id.'.description') is-invalid @enderror"
+                                           data-loading-description
                                            placeholder="مثلاً گندم">
                                     @error('loading.'.$wagon->id.'.description')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -131,3 +133,54 @@
 
     <a href="{{ route('cargo.index') }}" class="btn btn-secondary">بازگشت</a>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // شرح کالا فقط برای واگنی که هنوز بارگیری نشده اجباری می‌شود
+            document.querySelectorAll('input[data-loading-description]').forEach(function (input) {
+                const row = input.closest('tr');
+                const weight = row ? row.querySelector('input[name^="loading["][name$="[weight]"]') : null;
+
+                if (! weight) {
+                    return;
+                }
+
+                function refresh() {
+                    const mustFill = weight.value.trim() !== '' && input.value.trim() === '';
+
+                    input.required = mustFill;
+                    input.setCustomValidity(mustFill ? 'شرح کالا برای این واگن الزامی است.' : '');
+                }
+
+                weight.addEventListener('input', refresh);
+                input.addEventListener('input', refresh);
+                refresh();
+            });
+
+            // با نوشتن شرح یک واگن، ردیف‌های بعدیِ خالی همان شرح را پیشنهاد می‌گیرند
+            document.querySelectorAll('input[data-loading-description]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    let nextRow = input.closest('tr') ? input.closest('tr').nextElementSibling : null;
+
+                    while (nextRow) {
+                        const nextInput = nextRow.querySelector('input[data-loading-description]');
+
+                        if (! nextInput) {
+                            break;
+                        }
+
+                        if (nextInput.value.trim() === '') {
+                            nextInput.value = input.value;
+                            nextInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        } else {
+                            break;
+                        }
+
+                        nextRow = nextRow.nextElementSibling;
+                    }
+                });
+            });
+        });
+    </script>
+@endpush

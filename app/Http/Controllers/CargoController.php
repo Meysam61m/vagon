@@ -89,9 +89,10 @@ class CargoController extends Controller
         $requestDate = JalaliDate::parse($data['request_date_shamsi'], 'request_date_shamsi');
         $normalizedDate = JalaliDate::normalize($data['request_date_shamsi']);
 
-        // فقط ردیف‌هایی که شماره واگن دارند ثبت می‌شوند؛ شرح کالا اختیاری است
+        // فقط ردیف‌هایی که شماره واگن دارند ثبت می‌شوند؛ شرح کالا برای هر واگن اجباری است
         $wagonRows = collect($data['wagons'])
-            ->map(fn ($row) => [
+            ->map(fn ($row, $index) => [
+                'index' => $index,
                 'number' => trim((string) ($row['number'] ?? '')),
                 'description' => trim((string) ($row['description'] ?? '')),
             ])
@@ -101,6 +102,14 @@ class CargoController extends Controller
         if ($wagonRows->isEmpty()) {
             throw ValidationException::withMessages([
                 'wagons' => 'حداقل یک شماره واگن معتبر وارد کنید.',
+            ]);
+        }
+
+        $missingDescription = $wagonRows->first(fn ($row) => $row['description'] === '');
+
+        if ($missingDescription !== null) {
+            throw ValidationException::withMessages([
+                'wagons.'.$missingDescription['index'].'.description' => 'شرح کالا برای واگن «'.$missingDescription['number'].'» الزامی است.',
             ]);
         }
 
@@ -128,7 +137,7 @@ class CargoController extends Controller
                 Wagon::create([
                     'cargo_request_id' => $cargoRequest->id,
                     'wagon_number' => $wagonRow['number'],
-                    'cargo_description' => $wagonRow['description'] !== '' ? $wagonRow['description'] : null,
+                    'cargo_description' => $wagonRow['description'],
                 ]);
             }
 
@@ -213,6 +222,13 @@ class CargoController extends Controller
                     }
 
                     continue;
+                }
+
+                // برای واگنی که تازه بارگیری می‌شود، شرح کالا اجباری است
+                if ($wagon->loaded_weight === null && $description === '') {
+                    throw ValidationException::withMessages([
+                        'loading.'.$wagon->id.'.description' => "شرح کالا برای واگن {$wagon->wagon_number} الزامی است.",
+                    ]);
                 }
 
                 if (! $tariffId || ! $tariffs->has((int) $tariffId)) {
