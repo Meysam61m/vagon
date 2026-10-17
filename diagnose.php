@@ -249,6 +249,39 @@ check(
     $dirProblems ? 'روی لینوکس: <code>chmod -R 775 storage bootstrap/cache</code> و مالکیت را به کاربر وب‌سرور بدهید.' : ''
 );
 
+// ---------- فایل‌های ظاهری (CSS / JS) ----------
+$assetFiles = [
+    'public/vendor/bootstrap-rtl/bootstrap.rtl.min.css' => 'استایل بوت‌استرپ RTL',
+    'public/vendor/bootstrap-rtl/bootstrap.bundle.min.js' => 'اسکریپت بوت‌استرپ',
+    'public/vendor/jquery/jquery.min.js' => 'jQuery',
+    'public/vendor/fonts/vazirmatn.css' => 'فونت وزیرمتن',
+    'public/vendor/fonts/Vazirmatn-Regular.woff2' => 'فایل فونت وزیرمتن',
+    'public/vendor/persian-datepicker/persian-datepicker.min.css' => 'استایل تاریخ‌شمار',
+    'public/vendor/persian-datepicker/persian-datepicker.min.js' => 'اسکریپت تاریخ‌شمار',
+    'public/vendor/chartjs/chart.umd.min.js' => 'نمودار Chart.js',
+    'public/css/app.css' => 'استایل اختصاصی برنامه',
+];
+
+$missingAssets = [];
+
+foreach ($assetFiles as $assetPath => $assetTitle) {
+    if (! is_file($base.'/'.$assetPath)) {
+        $missingAssets[] = $assetTitle.' (<code>'.$assetPath.'</code>)';
+    }
+}
+
+check(
+    $checks,
+    'فایل‌های ظاهری (CSS/JS)',
+    $missingAssets ? 'fail' : 'ok',
+    $missingAssets ? 'کم است: '.count($missingAssets).' فایل' : 'همه فایل‌های ظاهری موجودند',
+    $missingAssets
+        ? 'این فایل‌ها آپلود نشده‌اند؛ در نتیجه صفحه بدون استایل (شبیه یک لیست ساده) دیده می‌شود. '
+            .'پوشه <code>public/vendor</code> و <code>public/css/app.css</code> را از بسته کامل دوباره آپلود کنید.<br>'
+            .'موارد کم: '.implode('، ', array_slice($missingAssets, 0, 5))
+        : ''
+);
+
 // ---------- دیتابیس ----------
 $dbDriver = isset($env['DB_CONNECTION']) && $env['DB_CONNECTION'] !== '' ? strtolower($env['DB_CONNECTION']) : 'mysql';
 $dbName = isset($env['DB_DATABASE']) && $env['DB_DATABASE'] !== '' ? $env['DB_DATABASE'] : 'wagon_system';
