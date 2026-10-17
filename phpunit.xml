@@ -17,6 +17,11 @@
             <directory>app</directory>
         </include>
     </source>
+    <!--
+        تست‌ها عمداً روی SQLite حافظه‌ای اجرا می‌شوند تا به سرور MySQL نیاز نباشد.
+        دیتابیس اصلی برنامه MySQL است (نگاه کنید به .env.example).
+        برای اجرای تست‌ها روی MySQL، DB_CONNECTION و DB_DATABASE را اینجا عوض کنید.
+    -->
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>

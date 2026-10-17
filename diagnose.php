@@ -86,7 +86,7 @@ check(
 $extensions = [
     'mbstring' => true,
     'openssl' => true,
-    'pdo_sqlite' => true,
+    'pdo_mysql' => true,
     'tokenizer' => true,
     'ctype' => true,
     'json' => true,
@@ -95,6 +95,7 @@ $extensions = [
     'session' => true,
     'filter' => true,
     'hash' => true,
+    'pdo_sqlite' => false,  // فقط برای تست‌ها و حالت جایگزین
 ];
 
 $missing = [];
@@ -204,21 +205,115 @@ check(
 );
 
 // ---------- دیتابیس ----------
-$dbDriver = isset($env['DB_CONNECTION']) && $env['DB_CONNECTION'] !== '' ? $env['DB_CONNECTION'] : 'sqlite';
-$dbPath = $base.'/database/database.sqlite';
+$dbDriver = isset($env['DB_CONNECTION']) && $env['DB_CONNECTION'] !== '' ? strtolower($env['DB_CONNECTION']) : 'mysql';
+$dbName = isset($env['DB_DATABASE']) && $env['DB_DATABASE'] !== '' ? $env['DB_DATABASE'] : 'wagon_system';
 
-if (isset($env['DB_DATABASE']) && $env['DB_DATABASE'] !== '') {
-    $dbPath = (substr($env['DB_DATABASE'], 0, 1) === '/')
-        ? $env['DB_DATABASE']
-        : $base.'/'.$env['DB_DATABASE'];
-}
+if (in_array($dbDriver, ['mysql', 'mariadb'], true)) {
+    $dbHost = isset($env['DB_HOST']) && $env['DB_HOST'] !== '' ? $env['DB_HOST'] : '127.0.0.1';
+    $dbPort = isset($env['DB_PORT']) && $env['DB_PORT'] !== '' ? $env['DB_PORT'] : '3306';
+    $dbUser = isset($env['DB_USERNAME']) ? $env['DB_USERNAME'] : 'root';
+    $dbPass = isset($env['DB_PASSWORD']) ? $env['DB_PASSWORD'] : '';
+    $dbSocket = isset($env['DB_SOCKET']) ? $env['DB_SOCKET'] : '';
 
-if ($dbDriver === 'sqlite') {
+    $dsn = $dbSocket !== ''
+        ? 'mysql:unix_socket='.$dbSocket.';dbname='.$dbName.';charset=utf8mb4'
+        : 'mysql:host='.$dbHost.';port='.$dbPort.';dbname='.$dbName.';charset=utf8mb4';
+
+    $pdo = null;
+    $connectError = '';
+    $errorCode = 0;
+
+    if (! extension_loaded('pdo_mysql')) {
+        $connectError = 'افزونه pdo_mysql بارگذاری نشده است.';
+    } else {
+        try {
+            $pdo = new PDO($dsn, $dbUser, $dbPass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT => 5,
+            ]);
+        } catch (Throwable $e) {
+            $connectError = $e->getMessage();
+            $errorCode = (int) ($e instanceof PDOException ? ($e->errorInfo[1] ?? 0) : 0);
+        }
+    }
+
+    check(
+        $checks,
+        'اتصال به MySQL',
+        $pdo ? 'ok' : 'fail',
+        $pdo
+            ? 'اتصال برقرار شد ('.($dbSocket !== '' ? 'socket' : $dbHost.':'.$dbPort).' دیتابیس '.$dbName.')'
+            : 'اتصال برقرار نشد',
+        $pdo ? '' : match (true) {
+            $errorCode === 1049 => 'دیتابیس <code>'.$dbName.'</code> وجود ندارد. فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
+            $errorCode === 1045 => 'نام کاربری یا رمز اشتباه است. DB_USERNAME/DB_PASSWORD را بررسی کنید.',
+            $errorCode === 2002, $errorCode === 2003 => 'سرور MySQL در دسترس نیست؛ DB_HOST/DB_PORT و اجرا بودن سرویس را بررسی کنید.',
+            strpos($connectError, 'pdo_mysql') !== false => 'افزونه <code>pdo_mysql</code> را در php.ini یا cPanel فعال کنید.',
+            default => 'جزئیات: '.h($connectError),
+        }
+    );
+
+    if ($pdo) {
+        $serverVersion = '';
+
+        try {
+            $serverVersion = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
+        } catch (Throwable $e) {
+            $serverVersion = 'نامشخص';
+        }
+
+        check($checks, 'نسخه سرور MySQL', 'info', $serverVersion);
+
+        $tableCount = null;
+        $userCount = null;
+        $dbError = '';
+
+        try {
+            $tableCount = (int) $pdo->query(
+                'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
+            )->fetchColumn();
+
+            $hasUsers = (int) $pdo->query(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'users'"
+            )->fetchColumn();
+
+            if ($hasUsers > 0) {
+                $userCount = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+            }
+        } catch (Throwable $e) {
+            $dbError = $e->getMessage();
+        }
+
+        check(
+            $checks,
+            'جداول دیتابیس',
+            $tableCount === null ? 'fail' : ($tableCount > 5 ? 'ok' : 'fail'),
+            $tableCount === null ? 'خطا: '.$dbError : $tableCount.' جدول در دیتابیس '.$dbName,
+            ($tableCount !== null && $tableCount > 5) ? '' : 'دستور <code>php artisan migrate --seed</code> را اجرا کنید.'
+        );
+
+        check(
+            $checks,
+            'کاربران سیستم',
+            $userCount === null ? 'warn' : ($userCount > 0 ? 'ok' : 'fail'),
+            $userCount === null ? 'جدول users وجود ندارد' : $userCount.' کاربر',
+            ($userCount !== null && $userCount > 0) ? '' : 'seeder اجرا نشده است؛ <code>php artisan db:seed --force</code> یا <code>php artisan admin:reset-password</code>.'
+        );
+    }
+} else {
+    $dbPath = $base.'/database/database.sqlite';
+
+    if (isset($env['DB_DATABASE']) && $env['DB_DATABASE'] !== '') {
+        $dbPath = (substr($env['DB_DATABASE'], 0, 1) === '/')
+            ? $env['DB_DATABASE']
+            : $base.'/'.$env['DB_DATABASE'];
+    }
+
     $dbExists = is_file($dbPath);
 
     check(
         $checks,
-        'فایل دیتابیس SQLite',
+        'فایل دیتابیس SQLite (حالت جایگزین)',
         $dbExists ? 'ok' : 'fail',
         $dbExists ? 'موجود در database/database.sqlite' : 'وجود ندارد',
         $dbExists ? '' : 'فایل خالی بسازید و <code>php artisan migrate --seed</code> را اجرا کنید.'
@@ -256,11 +351,9 @@ if ($dbDriver === 'sqlite') {
             'کاربران سیستم',
             $userCount === null ? 'warn' : ($userCount > 0 ? 'ok' : 'fail'),
             $userCount === null ? 'قابل خواندن نیست' : $userCount.' کاربر',
-            ($userCount !== null && $userCount > 0) ? '' : 'seeder اجرا نشده است؛ <code>php artisan db:seed --force</code> یا <code>php artisan admin:reset-password</code>.'
+            ($userCount !== null && $userCount > 0) ? '' : 'seeder اجرا نشده است؛ <code>php artisan db:seed --force</code>.'
         );
     }
-} else {
-    check($checks, 'دیتابیس', 'info', 'درایور: '.$dbDriver, 'اتصال MySQL از این ابزار بررسی نمی‌شود؛ صحت DB_HOST/DB_DATABASE/DB_USERNAME را در .env کنترل کنید.');
 }
 
 // ---------- دارایی‌های آفلاین ----------
@@ -456,7 +549,9 @@ $summaryText = $fails > 0
             <li>پوشه <code>vendor</code> وجود ندارد → <code>composer install</code></li>
             <li><code>APP_KEY</code> خالی است → <code>php artisan key:generate</code></li>
             <li>پوشه‌های <code>storage</code> و <code>bootstrap/cache</code> قابل نوشتن نیستند → <code>chmod -R 775 storage bootstrap/cache</code></li>
+            <li>خطای MySQL (<code>Unknown database</code> / <code>Access denied</code>) → دیتابیس را بسازید و DB_* را در <code>.env</code> اصلاح کنید</li>
             <li>جداول ساخته نشده‌اند → <code>php artisan migrate --seed</code></li>
+            <li>افزونه <code>pdo_mysql</code> فعال نیست → در php.ini یا cPanel آن را فعال کنید</li>
             <li>نسخه PHP کمتر از 8.2 است → نسخه PHP را ارتقا دهید</li>
             <li>ریشه سایت <code>public</code> نیست → document root را روی <code>public</code> بگذارید یا <code>.htaccess</code> ریشه را فعال نگه دارید</li>
         </ol>

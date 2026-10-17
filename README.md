@@ -3,9 +3,11 @@
 سامانه‌ای فارسی و راست‌به‌چپ (RTL) برای ثبت درخواست‌های بارگیری واگن، ثبت وزن/تعرفه بارگیری، صدور صورتحساب با مالیات، لغو صورتحساب و گزارش‌های مالی و عملیاتی. رابط کاربری کاملاً آفلاین است و هیچ CDN یا سرویس خارجی لازم ندارد.
 
 - **نسخه Laravel:** ۱۲
-- **دیتابیس پیش‌فرض:** SQLite (تک‌فایلی و بدون نصب سرور دیتابیس)
+- **دیتابیس:** **MySQL 8 / MariaDB 10.6+** (زبان و collation: `utf8mb4_unicode_ci`)
 - **تاریخ:** ذخیره‌سازی هم‌زمان میلادی (برای محاسبات) و شمسی (برای نمایش)
 - **زبان:** فارسی، منطقه زمانی `Asia/Tehran`
+
+> نسخه قبلی روی SQLite بود. اکنون دیتابیس اصلی **MySQL** است. برای سازگاری، پشتیبانی از SQLite هم باقی مانده ولی فقط برای تست‌های خودکار و اجرای سبک محلی استفاده می‌شود.
 
 ---
 
@@ -26,15 +28,59 @@
 ## پیش‌نیازها
 
 - **PHP 8.2 یا بالاتر** با افزونه‌های:
-  `mbstring`، `openssl`، `pdo_sqlite`، `tokenizer`، `ctype`، `filter`، `session`، و **`dom`** (برای PDF؛ استاندارد در اکثر نصب‌های PHP).
+  `mbstring`، `openssl`، **`pdo_mysql`**، `tokenizer`، `ctype`، `filter`، `session`، و **`dom`** (برای PDF؛ استاندارد در اکثر نصب‌های PHP).
+- **MySQL 8.0+** یا **MariaDB 10.6+**
 - **Composer 2**
 - Node.js فقط در صورت تمایل به بازتولید فایل‌های آفلاین؛ برای اجرا **لازم نیست** (دارایی‌ها از قبل در `public/vendor/` قرار دارند).
 
-> ویندوز: `extension=dom` و `extension=mbstring` را در `php.ini` فعال کنید. در XAMPP معمولاً هر دو فعال‌اند.
+> ویندوز: در `php.ini` این خطوط را از حالت comment خارج کنید:
+> ```ini
+> extension=pdo_mysql
+> extension=mbstring
+> extension=dom
+> ```
+> در XAMPP معمولاً `pdo_mysql` و `mbstring` فعال‌اند و فقط `dom` را باید بررسی کنید.
 
 ---
 
 ## نصب سریع
+
+### ۱) ساخت دیتابیس
+
+در phpMyAdmin (تب SQL) یا با دستور mysql یکی از این دو کار را انجام دهید:
+
+```sql
+CREATE DATABASE `wagon_system`
+    CHARACTER SET utf8mb4
+    COLLATE utf8mb4_unicode_ci;
+```
+
+یا فایل آماده را اجرا کنید:
+
+```bash
+mysql -u root -p < database/create_database.sql
+```
+
+> اگر می‌خواهید کاربر اختصاصی بسازید، نمونه دستورها داخل همان فایل `database/create_database.sql` نوشته شده است (با رمز دلخواه خودتان).
+
+### ۲) تنظیم `.env`
+
+```bash
+cp .env.example .env
+```
+
+سپس مقادیر دیتابیس را در `.env` بگذارید:
+
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=wagon_system
+DB_USERNAME=wagon_user
+DB_PASSWORD=رمز-دیتابیس-شما
+```
+
+### ۳) نصب و راه‌اندازی
 
 ```bash
 composer install
@@ -48,9 +94,10 @@ php artisan serve
 
 1. ساخت `.env` از `.env.example` (اگر وجود نداشته باشد)
 2. تولید `APP_KEY`
-3. ساخت فایل `database/database.sqlite`
-4. اجرای migrationها
-5. اجرای seederها
+3. اجرای migrationها (ساخت جدول‌ها در MySQL)
+4. اجرای seederها
+
+> دیتابیس باید **از قبل ساخته شده باشد**؛ migration جدول‌ها را می‌سازد، نه خود دیتابیس را. اگر دیتابیس نباشد، پیام «Unknown database» می‌گیرید.
 
 ### رمز کاربر ادمین
 
@@ -81,13 +128,13 @@ php artisan admin:reset-password admin@wagon.local --password="MyStrongPass-1404
 
 ## رفع خطای 500 (Server Error)
 
-اگر بعد از آپلود پروژه صفحه «500 Server Error» می‌بینید، در ۹۹٪ موارد یکی از این دلایل است. فایل `diagnose.php` را در مرورگر باز کنید:
+اگر بعد از آپلود پروژه صفحه «500 Server Error» می‌بینید، فایل `diagnose.php` را در مرورگر باز کنید:
 
 ```
 https://دامنه-شما/diagnose.php
 ```
 
-این صفحه همه پیش‌نیازها را چک می‌کند و دقیقاً می‌گوید کدام مورد مشکل دارد (بعد از رفع خطا، فایل را حذف کنید).
+این صفحه اتصال MySQL، نسخه سرور، جدول‌ها، تعداد کاربران، افزونه‌های PHP، دسترسی پوشه‌ها و `APP_KEY` را بررسی می‌کند و دقیقاً می‌گوید کدام مورد مشکل دارد (بعد از رفع خطا، فایل را حذف کنید).
 
 ### ۱) پوشه `vendor` وجود ندارد (شایع‌ترین دلیل)
 فایل zip فقط شامل کد پروژه است و پوشه `vendor` داخل آن نیست. روی سرور (یا سیستم خودتان) اجرا کنید:
@@ -98,13 +145,10 @@ composer install
 
 اگر Composer روی هاست نیست، از پشتیبانی بخواهید نصب/فعال کند. بدون `vendor`، Laravel حتی یک خطا هم در لاگ ثبت نمی‌کند و فقط صفحه ۵۰۰ می‌دهد.
 
-> از نسخه فعلی، `public/index.php` اگر `vendor` را نبیند پیام فارسی با راه‌حل نشان می‌دهد (نه صفحه ۵۰۰ خالی).
-
 ### ۲) `APP_KEY` خالی است
 ```bash
 php artisan key:generate
 ```
-اگر فایل `.env` وجود ندارد، ابتدا از `.env.example` کپی بگیرید.
 
 ### ۳) دسترسی نوشتن به `storage` و `bootstrap/cache`
 ```bash
@@ -112,20 +156,30 @@ chmod -R 775 storage bootstrap/cache
 ```
 و مالکیت را به کاربر وب‌سرور بدهید (مثلاً `www-data` یا در cPanel کاربر هاست). روی ویندوز پوشه پروژه نباید Read-only باشد.
 
-### ۴) جدول‌های دیتابیس ساخته نشده‌اند
+### ۴) خطاهای رایج MySQL
+
+| پیام خطا | علت | راه‌حل |
+|---|---|---|
+| `Unknown database 'wagon_system'` | دیتابیس ساخته نشده | `CREATE DATABASE` را اجرا کنید یا `database/create_database.sql` |
+| `Access denied for user` | نام کاربری/رمز یا دسترسی اشتباه | `DB_USERNAME` و `DB_PASSWORD` را در `.env` اصلاح کنید؛ در cPanel به کاربر دیتابیس Privileges بدهید |
+| `Connection refused` | MySQL اجرا نیست یا host/port اشتباه است | سرویس MySQL را روشن کنید؛ `DB_HOST=127.0.0.1` و `DB_PORT=3306` را بررسی کنید |
+| `could not find driver` | افزونه `pdo_mysql` فعال نیست | در php.ini یا cPanel → PHP Extensions آن را فعال کنید |
+| `SQLSTATE[42000] ... Specified key was too long` | MySQL قدیمی (5.6) یا charset اشتباه | از MySQL 8 / MariaDB 10.6 استفاده کنید و `DB_CHARSET=utf8mb4` بگذارید |
+| `Too many connections` | محدودیت اتصال هاست | `DB_HOST=localhost` را امتحان کنید یا با پشتیبانی هاست هماهنگ کنید |
+
+### ۵) جدول‌های دیتابیس ساخته نشده‌اند
 ```bash
-touch database/database.sqlite
 php artisan migrate --seed
 ```
 
-### ۵) نسخه PHP کمتر از 8.2 است
-در cPanel → «Select PHP Version» نسخه 8.2 یا 8.3 را فعال کنید. افزونه‌های `mbstring`، `openssl`، `pdo_sqlite` و برای PDF `dom` هم باید فعال باشند.
+### ۶) نسخه PHP کمتر از 8.2 است
+در cPanel → «Select PHP Version» نسخه 8.2 یا 8.3 را فعال کنید. افزونه‌های `mbstring`، `openssl`، `pdo_mysql` و برای PDF `dom` هم باید فعال باشند.
 
-### ۶) ریشه سایت روی `public` نیست
+### ۷) ریشه سایت روی `public` نیست
 بهترین حالت: Document Root را روی پوشه `public` بگذارید.
 اگر امکان تغییر نیست، فایل `.htaccess` ریشه (که همراه پروژه هست) درخواست‌ها را به `public` هدایت می‌کند؛ فقط باید `mod_rewrite` و `AllowOverride` فعال باشد.
 
-### ۷) دیدن خطای واقعی
+### ۸) دیدن خطای واقعی
 در فایل `.env` موقتاً بگذارید:
 
 ```dotenv
@@ -134,11 +188,12 @@ APP_DEBUG=true
 
 بعد صفحه را رفرش کنید یا فایل `storage/logs/laravel.log` را ببینید. بعد از پیدا کردن مشکل حتماً `APP_DEBUG=false` کنید.
 
-### ۸) تست مسیر بدون مرورگر
+### ۹) تست مسیر بدون مرورگر
 ```bash
 php -v
+php -m | grep pdo_mysql
 php artisan --version
-php artisan migrate --seed
+php artisan migrate:status
 ```
 اگر `php artisan` اجرا نشد، مشکل در PHP/Composer است، نه در کد برنامه.
 
@@ -149,13 +204,11 @@ php artisan migrate --seed
 ```bash
 composer install
 cp .env.example .env
+# مقادیر DB_* را در .env ویرایش کنید
 php artisan key:generate
-touch database/database.sqlite
 php artisan migrate
 php artisan db:seed
 ```
-
-در ویندوز می‌توانید فایل `database/database.sqlite` را دستی بسازید.
 
 برای اجرا روی Apache/Nginx، **document root** را روی پوشه `public` تنظیم کنید؛ فایل `public/.htaccess` برای Apache آماده است.
 
@@ -167,11 +220,16 @@ php artisan db:seed
 |---|---|---|
 | `APP_TIMEZONE` | `Asia/Tehran` | مبنای «امروز»، نمودارها و شماره‌گذاری اسناد |
 | `APP_LOCALE` | `fa` | پیام‌های اعتبارسنجی و خطاها فارسی |
-| `DB_CONNECTION` | `sqlite` | برای SQLite نیازی به `DB_DATABASE` نیست؛ مسیر پیش‌فرض `database/database.sqlite` است |
+| `DB_CONNECTION` | `mysql` | نوع دیتابیس |
+| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | مشخصات سرور دیتابیس |
+| `DB_DATABASE` | `wagon_system` | نام دیتابیس (باید از قبل ساخته شود) |
+| `DB_USERNAME` / `DB_PASSWORD` | `root` / خالی | کاربر دیتابیس |
+| `DB_SOCKET` | خالی | اگر MySQL روی سوکت یونیکس اجرا می‌شود |
+| `DB_CHARSET` / `DB_COLLATION` | `utf8mb4` / `utf8mb4_unicode_ci` | برای نمایش صحیح فارسی و ایموجی |
+| `DB_FOREIGN_KEYS` | `true` | فقط برای SQLite کاربرد دارد |
 | `SESSION_DRIVER` | `file` | بدون نیاز به جدول session |
 | `CACHE_STORE` | `file` | ذخیره throttle ورود |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | — | فقط هنگام seed خوانده می‌شوند |
-| `DB_FOREIGN_KEYS` | `true` | فعال بودن کلیدهای خارجی SQLite |
 
 پس از تغییر `.env` در محیط عملیاتی:
 
@@ -199,11 +257,12 @@ app/
   Support/                  JalaliDate, DocumentNumber
 config/                     app, auth, cache, database, dompdf, jalali, ...
 database/
+  create_database.sql       ساخت دیتابیس MySQL و نمونه کاربر
   migrations/               جداول سیستم + users/sessions/cache/jobs
   seeders/                  کاربر ادمین/اپراتور، تعرفه‌های پایه، درصد مالیات
 lang/fa/                    validation, auth, passwords, pagination
 public/
-  index.php (با بررسی پیش‌نیازها و پیام فارسی)، .htaccess
+  index.php (بررسی پیش‌نیازها، اتصال MySQL و پیام فارسی)، .htaccess
   css/app.css
   vendor/                   Bootstrap 5 RTL، jQuery، datepicker، Chart.js، فونت وزیرمتن
 resources/views/            ۳۳ نمای Blade (layouts، auth، dashboard، cargo، billing،
@@ -211,7 +270,7 @@ resources/views/            ۳۳ نمای Blade (layouts، auth، dashboard، ca
 routes/web.php              تمام مسیرهای وب
 .htaccess                   هدایت به public برای هاست‌هایی که document root را
                             نمی‌شود تغییر داد
-diagnose.php                ابزار عیب‌یابی پیش‌نیازها (بعد از رفع خطا حذف شود)
+diagnose.php                ابزار عیب‌یابی پیش‌نیازها و اتصال MySQL (بعد از رفع خطا حذف شود)
 scripts/                    کپی و بررسی دارایی‌های آفلاین (اختیاری)
 storage/fonts/              فونت‌های TTF برای PDF (Vazirmatn Regular/Bold)
 tests/                      تست‌های واحد و Feature
@@ -243,13 +302,17 @@ npm run assets:check
 php artisan test
 ```
 
-تست‌ها از SQLite در حافظه استفاده می‌کنند (`phpunit.xml`) و دیتابیس اصلی را تغییر نمی‌دهند. پوشش فعلی:
+تست‌ها با **SQLite در حافظه** اجرا می‌شوند (`phpunit.xml`) تا به سرور MySQL نیاز نداشته باشند و دیتابیس اصلی هم دست‌نخورده بماند. migrationها به‌صورت سازگار با هر دو موتور نوشته شده‌اند، بنابراین این تست‌ها همان رفتار MySQL را پوشش می‌دهند.
+
+پوشش فعلی:
 
 - `tests/Unit/JalaliDateTest.php` — نرمال‌سازی ارقام فارسی/عربی، اعتبار تاریخ شمسی، کبیسه
 - `tests/Feature/BillingFlowTest.php` — چرخه کامل درخواست → بارگیری → صورتحساب → لغو و آزادسازی
 - `tests/Feature/ValidationTest.php` — تاریخ نامعتبر، ارقام فارسی، ظرفیت، واگن تکراری، نماینده نامرتبط
 - `tests/Feature/AccessControlTest.php` — مهمان/اپراتور/ادمین، کاربر غیرفعال، محافظت از حساب خود
 - `tests/Feature/ReportsTest.php` — جمع کل گزارش مستقل از صفحه‌بندی و تاریخ شمسی
+
+> اگر می‌خواهید تست‌ها روی MySQL اجرا شوند، در `phpunit.xml` مقادیر `DB_CONNECTION`/`DB_DATABASE` را عوض کنید و یک دیتابیس تست جدا (مثلاً `wagon_system_test`) بسازید. تست‌ها با `RefreshDatabase` همه جدول‌ها را خالی می‌کنند، پس هرگز روی دیتابیس اصلی اجرا نکنید.
 
 ---
 
@@ -264,10 +327,24 @@ php artisan test
 
 ## پشتیبان‌گیری و نگهداری
 
-- کل داده‌ها در `database/database.sqlite` است. برای بک‌آپ، هنگام توقف برنامه این فایل (و در صورت وجود `-wal`/`-shm`) را کپی کنید.
+### بک‌آپ MySQL
+
+```bash
+mysqldump -u wagon_user -p --single-transaction --routines --triggers \
+    wagon_system > backup-$(date +%F).sql
+```
+
+بازیابی:
+
+```bash
+mysql -u wagon_user -p wagon_system < backup-2026-10-17.sql
+```
+
+- در cPanel از بخش **phpMyAdmin → Export** هم می‌توانید بک‌آپ بگیرید.
 - فایل `.env` و `storage/logs/` را در مخزن عمومی قرار ندهید (در `.gitignore` هستند).
 - رمزها با bcrypt هش می‌شوند؛ رمز اولیه را بعد از اولین ورود تغییر دهید.
 - برای محیط عملیاتی `APP_DEBUG=false` و HTTPS (به همراه `SESSION_SECURE_COOKIE=true`) توصیه می‌شود.
+- اگر خواستید داده‌ها را از SQLite قبلی منتقل کنید، از ابزارهایی مثل `mysqlworkbench` یا اسکریپت مهاجرت سفارشی استفاده کنید؛ در این نسخه ابزار خودکار انتقال داده وجود ندارد.
 
 ---
 
@@ -276,7 +353,7 @@ php artisan test
 - **Audit Log کامل** (ثبت تاریخچه تغییرات تعرفه/مالیات/فاکتور) پیاده‌سازی نشده است؛ فقط تاریخچه درصد مالیات و snapshotهای فاکتور وجود دارد.
 - چرخه پرداخت (پرداخت‌شده/تسویه‌شده) و گزارش‌های پرداخت وجود ندارد؛ لغو فاکتور، واگن‌ها را آزاد می‌کند.
 - محاسبات مالی به ریال و با `round` انجام می‌شود؛ برای واحدهای پولی با اعشار، بهتر است محاسبات در «ریال × ۱۰۰» انجام شود.
-- SQLite برای حجم‌های بالا و نوشتن هم‌زمان زیاد مناسب نیست؛ در آن صورت استفاده از MySQL/MariaDB توصیه می‌شود.
+- SQLite همچنان به‌عنوان حالت جایگزین (فقط برای تست و اجرای محلی) پشتیبانی می‌شود، اما محیط عملیاتی باید MySQL/MariaDB باشد.
 - تمایل به ارقام فارسی در همه جدول‌ها وجود دارد اما خروجی‌ها با ارقام لاتین و جداکننده هزارگان نمایش داده می‌شوند.
 
 ---

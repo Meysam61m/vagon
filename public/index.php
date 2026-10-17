@@ -129,27 +129,108 @@ if ($wagonNotWritable) {
     ]);
 }
 
-// بررسی دیتابیس SQLite (پیش‌فرض برنامه)
-$wagonDbDriver = 'sqlite';
-$wagonDbPath = $wagonBase.'/database/database.sqlite';
+// ---------------------------------------------------------------------------
+// بررسی دیتابیس (پیش‌فرض: MySQL / MariaDB)
+// ---------------------------------------------------------------------------
+$wagonEnvValue = function (string $key, ?string $default = null) use ($wagonEnv) {
+    if (is_string($wagonEnv) && preg_match('/^\s*'.preg_quote($key, '/').'\s*=\s*(.*)$/m', $wagonEnv, $m)) {
+        $value = trim($m[1], " \t\"'");
 
-if (is_string($wagonEnv)) {
-    if (preg_match('/^\s*DB_CONNECTION\s*=\s*(.*)$/m', $wagonEnv, $m) && trim($m[1], " \t\"'") !== '') {
-        $wagonDbDriver = trim($m[1], " \t\"'");
+        return $value === '' ? $default : $value;
     }
 
-    if (preg_match('/^\s*DB_DATABASE\s*=\s*(.*)$/m', $wagonEnv, $m)) {
-        $wagonCustomDb = trim($m[1], " \t\"'");
+    $env = getenv($key);
 
-        if ($wagonCustomDb !== '') {
-            $wagonDbPath = (substr($wagonCustomDb, 0, 1) === '/')
-                ? $wagonCustomDb
-                : $wagonBase.'/'.$wagonCustomDb;
+    return ($env === false || $env === '') ? $default : $env;
+};
+
+$wagonDbDriver = strtolower((string) $wagonEnvValue('DB_CONNECTION', 'mysql'));
+$wagonDbName = (string) $wagonEnvValue('DB_DATABASE', 'wagon_system');
+
+if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
+    if (! extension_loaded('pdo_mysql')) {
+        $wagonFatal('افزونه pdo_mysql روی PHP فعال نیست', [
+            'دیتابیس برنامه MySQL/MariaDB است و PHP به افزونه <code>pdo_mysql</code> نیاز دارد.',
+            'در cPanel → «Select PHP Version» → Extensions گزینه <code>pdo_mysql</code> (و <code>mysqli</code>) را فعال کنید.',
+            'در ویندوز/لینوکس داخل php.ini خط <code>extension=pdo_mysql</code> را از حالت comment خارج کنید و وب‌سرور را ری‌استارت کنید.',
+            'با دستور <code>php -m</code> بررسی کنید که <code>pdo_mysql</code> در فهرست باشد.',
+        ]);
+    }
+
+    $wagonDbHost = (string) $wagonEnvValue('DB_HOST', '127.0.0.1');
+    $wagonDbPort = (string) $wagonEnvValue('DB_PORT', '3306');
+    $wagonDbUser = (string) $wagonEnvValue('DB_USERNAME', 'root');
+    $wagonDbPass = (string) $wagonEnvValue('DB_PASSWORD', '');
+    $wagonDbSocket = (string) $wagonEnvValue('DB_SOCKET', '');
+
+    $wagonDsn = $wagonDbSocket !== ''
+        ? 'mysql:unix_socket='.$wagonDbSocket.';dbname='.$wagonDbName.';charset=utf8mb4'
+        : 'mysql:host='.$wagonDbHost.';port='.$wagonDbPort.';dbname='.$wagonDbName.';charset=utf8mb4';
+
+    try {
+        $wagonPdo = new PDO($wagonDsn, $wagonDbUser, $wagonDbPass, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_TIMEOUT => 5,
+        ]);
+
+        $wagonTableCount = (int) $wagonPdo->query(
+            'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
+        )->fetchColumn();
+
+        if ($wagonTableCount === 0) {
+            $wagonFatal('اتصال به MySQL برقرار شد، اما دیتابیس خالی است', [
+                'دیتابیس <code>'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'</code> ساخته شده اما هیچ جدولی ندارد.',
+                'دستور <code>php artisan migrate --seed</code> را در پوشه پروژه اجرا کنید.',
+            ]);
         }
-    }
-}
+    } catch (PDOException $wagonDbException) {
+        $wagonCode = (int) ($wagonDbException->errorInfo[1] ?? 0);
+        $wagonMessage = $wagonDbException->getMessage();
 
-if ($wagonDbDriver === 'sqlite') {
+        if ($wagonCode === 1049 || strpos($wagonMessage, 'Unknown database') !== false) {
+            $wagonFatal('دیتابیس «'.$wagonDbName.'» وجود ندارد', [
+                'در phpMyAdmin یا MySQL دستور زیر را اجرا کنید:',
+                '<code>CREATE DATABASE `'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;</code>',
+                'یا فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
+                'سپس <code>php artisan migrate --seed</code> را اجرا کنید.',
+            ]);
+        }
+
+        if ($wagonCode === 1045 || strpos($wagonMessage, 'Access denied') !== false) {
+            $wagonFatal('نام کاربری یا رمز MySQL درست نیست (Access denied)', [
+                'مقادیر <code>DB_USERNAME</code> و <code>DB_PASSWORD</code> را در <code>.env</code> بررسی کنید.',
+                'در cPanel معمولاً نام کاربری با پیشوند حساب هاست شروع می‌شود (مثلاً <code>user_wagon</code>).',
+                'مطمئن شوید کاربر دیتابیس به دیتابیس <code>'.htmlspecialchars($wagonDbName, ENT_QUOTES, 'UTF-8').'</code> دسترسی (Privileges) دارد.',
+            ]);
+        }
+
+        if (in_array($wagonCode, [2002, 2003], true) || strpos($wagonMessage, 'Connection refused') !== false) {
+            $wagonFatal('اتصال به سرور MySQL برقرار نشد', [
+                'مقدار <code>DB_HOST</code> و <code>DB_PORT</code> را بررسی کنید (پیش‌فرض: <code>127.0.0.1:3306</code>).',
+                'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
+                'در بعضی هاست‌ها به‌جای <code>localhost</code> باید از <code>127.0.0.1</code> استفاده شود (یا برعکس).',
+                'اگر MySQL روی سوکت یونیکس است، مقدار <code>DB_SOCKET</code> را تنظیم کنید.',
+            ]);
+        }
+
+        $wagonFatal('خطا در اتصال به دیتابیس MySQL', [
+            '<code>'.htmlspecialchars(get_class($wagonDbException), ENT_QUOTES, 'UTF-8').'</code>: '
+                .htmlspecialchars($wagonMessage, ENT_QUOTES, 'UTF-8'),
+            'مقادیر DB_* را در فایل <code>.env</code> بررسی کنید.',
+            'برای تست سریع اتصال، فایل <code>diagnose.php</code> را در مرورگر باز کنید.',
+        ]);
+    }
+} else {
+    // حالت جایگزین SQLite (برای تست‌های خودکار و اجرای سبک بدون سرور دیتابیس)
+    $wagonDbPath = $wagonBase.'/database/database.sqlite';
+    $wagonSqliteName = $wagonEnvValue('DB_DATABASE', null);
+
+    if (is_string($wagonSqliteName) && $wagonSqliteName !== '') {
+        $wagonDbPath = (substr($wagonSqliteName, 0, 1) === '/')
+            ? $wagonSqliteName
+            : $wagonBase.'/'.$wagonSqliteName;
+    }
+
     if (! is_file($wagonDbPath)) {
         @touch($wagonDbPath);
     }
@@ -159,7 +240,6 @@ if ($wagonDbDriver === 'sqlite') {
             'مسیر مورد انتظار: <code>database/database.sqlite</code>',
             'روی لینوکس یک فایل خالی بسازید: <code>touch database/database.sqlite</code> و دسترسی 664 بدهید.',
             'سپس <code>php artisan migrate --seed</code> را اجرا کنید.',
-            'اگر از MySQL استفاده می‌کنید، در <code>.env</code> مقدار <code>DB_CONNECTION=mysql</code> و مشخصات اتصال را تنظیم کنید.',
         ]);
     }
 }
@@ -184,5 +264,8 @@ try {
         'برای دیدن جزئیات در مرورگر، موقتاً در <code>.env</code> مقدار <code>APP_DEBUG=true</code> بگذارید و صفحه را رفرش کنید '
             .'(بعد از رفع خطا حتماً آن را <code>false</code> کنید).',
         'اگر پیام «No application encryption key» می‌بینید، <code>php artisan key:generate</code> را اجرا کنید.',
+        'اگر پیام <code>could not find driver</code> می‌بینید، افزونه <code>pdo_mysql</code> در PHP فعال نیست.',
+        'اگر پیام <code>Unknown database</code> یا <code>Access denied</code> می‌بینید، مقادیر DB_* در <code>.env</code> را اصلاح کنید '
+            .'یا فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
     ]);
 }
