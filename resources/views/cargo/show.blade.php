@@ -1,0 +1,118 @@
+@extends('layouts.app')
+@section('title', 'جزئیات درخواست بارگیری')
+
+@section('content')
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">درخواست بارگیری: {{ $cargo->request_number }}</h4>
+        <span class="badge bg-secondary fs-6">{{ $cargo->statusLabel() }}</span>
+    </div>
+
+    <div class="card p-4 mb-4">
+        <div class="row g-3">
+            <div class="col-md-3"><strong>صاحب کالا:</strong> {{ $cargo->owner?->name ?? '—' }}</div>
+            <div class="col-md-3"><strong>نماینده:</strong> {{ $cargo->representative?->name ?? '—' }}</div>
+            <div class="col-md-3"><strong>تاریخ درخواست:</strong> {{ $cargo->request_date_shamsi }}</div>
+            <div class="col-md-3"><strong>اپراتور ثبت‌کننده:</strong> {{ $cargo->operator?->name ?? '—' }}</div>
+        </div>
+        @if($cargo->notes)
+            <div class="mt-3"><strong>توضیحات:</strong> {{ $cargo->notes }}</div>
+        @endif
+    </div>
+
+    @if($cargo->status !== 'billed')
+        <form method="POST" action="{{ route('cargo.load', $cargo) }}" class="card p-4 mb-4">
+            @csrf
+            <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
+                <div>
+                    <h6 class="mb-1">ثبت عملیات بارگیری</h6>
+                    <div class="text-muted small">
+                        برای هر واگن تعرفه و وزن بارگیری‌شده را وارد کنید. وزن خالی یعنی آن واگن هنوز بارگیری نشده است.
+                    </div>
+                </div>
+                <div style="min-width: 200px;">
+                    <label class="form-label" for="loading_date_shamsi">تاریخ بارگیری (شمسی)</label>
+                    <input type="text" name="loading_date_shamsi" id="loading_date_shamsi"
+                           value="{{ old('loading_date_shamsi', $loadingDateShamsi) }}"
+                           class="form-control jalali-datepicker" autocomplete="off" required>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered bg-white align-middle">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>شماره واگن</th>
+                        <th style="min-width: 240px;">تعرفه</th>
+                        <th style="min-width: 130px;">وزن (تن)</th>
+                        <th>وضعیت</th>
+                        <th>صورتحساب</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach($cargo->wagons as $wagon)
+                        @php
+                            $oldWeight = old('loading.'.$wagon->id.'.weight', $wagon->loaded_weight);
+                            $oldTariff = old('loading.'.$wagon->id.'.tariff_id', $wagon->tariff_id);
+                        @endphp
+                        <tr>
+                            <td>{{ $loop->iteration }}</td>
+                            <td>{{ $wagon->wagon_number }}</td>
+                            <td>
+                                @if($wagon->is_settled)
+                                    {{ $wagon->tariff?->title ?? '—' }}
+                                @else
+                                    <select name="loading[{{ $wagon->id }}][tariff_id]" class="form-select form-select-sm">
+                                        <option value="">انتخاب تعرفه…</option>
+                                        @foreach($tariffs as $tariff)
+                                            <option value="{{ $tariff->id }}" @selected((string) $oldTariff === (string) $tariff->id)>
+                                                {{ $tariff->title }}{{ $tariff->is_active ? '' : ' (غیرفعال)' }}
+                                                — {{ $tariff->capacity }} تن
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                @endif
+                            </td>
+                            <td>
+                                @if($wagon->is_settled)
+                                    {{ $wagon->loaded_weight }}
+                                @else
+                                    <input type="number" step="0.01" min="0.01" max="200"
+                                           name="loading[{{ $wagon->id }}][weight]"
+                                           value="{{ $oldWeight }}"
+                                           class="form-control form-control-sm @error('loading.'.$wagon->id.'.weight') is-invalid @enderror">
+                                    @error('loading.'.$wagon->id.'.weight')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                @endif
+                            </td>
+                            <td>
+                                @if($wagon->is_settled)
+                                    <span class="badge bg-success">تسویه شده</span>
+                                @elseif($wagon->isLoaded())
+                                    <span class="badge bg-info text-dark">بارگیری شده</span>
+                                @else
+                                    <span class="badge bg-warning text-dark">در انتظار بارگیری</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($wagon->billingItem?->billing)
+                                    <a href="{{ route('billing.show', $wagon->billingItem->billing) }}">
+                                        {{ $wagon->billingItem->billing->billing_number }}
+                                    </a>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <button class="btn btn-primary" type="submit">ذخیره بارگیری</button>
+        </form>
+    @endif
+
+    <a href="{{ route('cargo.index') }}" class="btn btn-secondary">بازگشت</a>
+@endsection

@@ -1,0 +1,50 @@
+@extends('layouts.app')
+@section('title', 'افزودن نماینده')
+
+@section('content')
+    <h4 class="mb-3">افزودن نماینده جدید</h4>
+
+    <form method="POST" action="{{ route('representatives.store') }}" class="card p-4">
+        @csrf
+        <div class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label" for="name">نام</label>
+                <input type="text" name="name" id="name" value="{{ old('name') }}"
+                       class="form-control @error('name') is-invalid @enderror" required>
+                @error('name')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="national_id">کد ملی</label>
+                <input type="text" name="national_id" id="national_id" value="{{ old('national_id') }}"
+                       class="form-control @error('national_id') is-invalid @enderror">
+                @error('national_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="phone">تلفن</label>
+                <input type="text" name="phone" id="phone" value="{{ old('phone') }}"
+                       class="form-control @error('phone') is-invalid @enderror">
+                @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-12">
+                <label class="form-label">صاحبان کالای مرتبط</label>
+                <div class="row g-2">
+                    @foreach($owners as $owner)
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" name="owner_ids[]"
+                                       value="{{ $owner->id }}" id="owner_{{ $owner->id }}"
+                                       @checked(in_array($owner->id, old('owner_ids', [])))>
+                                <label class="form-check-label" for="owner_{{ $owner->id }}">{{ $owner->name }}</label>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                @error('owner_ids')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
+            </div>
+        </div>
+        <div class="mt-4 d-flex gap-2">
+            <button class="btn btn-primary" type="submit">ذخیره</button>
+            <a href="{{ route('representatives.index') }}" class="btn btn-secondary">انصراف</a>
+        </div>
+    </form>
+@endsection

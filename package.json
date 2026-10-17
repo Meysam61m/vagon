@@ -1,0 +1,18 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "assets": "node scripts/copy-vendor-assets.mjs",
+        "assets:check": "node scripts/check-vendor-assets.mjs"
+    },
+    "dependencies": {
+        "bootstrap": "^5.3.8",
+        "chart.js": "^4.5.1",
+        "jquery": "3.7.1",
+        "persian-date": "1.1.0",
+        "persian-datepicker": "^1.2.0"
+    },
+    "overrides": {
+        "persian-date": "1.1.0"
+    }
+}
