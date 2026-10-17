@@ -32,7 +32,20 @@ class ResetAdminPassword extends Command
             $user->restore();
         }
 
-        $password = $this->option('password') ?: Str::password(12, symbols: false);
+        $password = (string) $this->option('password');
+
+        // رمز دستی باید حداقل ۱۰ کاراکتر و شامل حرف و رقم باشد
+        if ($password !== '') {
+            if (mb_strlen($password) < 10
+                || ! preg_match('/\pL/u', $password)
+                || ! preg_match('/\pN/u', $password)) {
+                $this->error('رمز باید حداقل ۱۰ کاراکتر و شامل حرف و رقم باشد.');
+
+                return self::FAILURE;
+            }
+        } else {
+            $password = Str::password(12, symbols: false);
+        }
 
         $user->forceFill([
             'password' => $password,

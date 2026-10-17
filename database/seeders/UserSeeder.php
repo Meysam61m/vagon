@@ -14,6 +14,13 @@ class UserSeeder extends Seeder
         $adminPassword = config('app.seed_admin_password');
         $generated = false;
 
+        // رمز ضعیف از .env پذیرفته نمی‌شود؛ به‌جایش رمز تصادفی ساخته می‌شود
+        if (filled($adminPassword) && mb_strlen((string) $adminPassword) < 10) {
+            $this->command?->warn('SEED_ADMIN_PASSWORD کوتاه‌تر از ۱۰ کاراکتر است و نادیده گرفته شد.');
+
+            $adminPassword = null;
+        }
+
         if (blank($adminPassword)) {
             $adminPassword = Str::password(12, symbols: false);
             $generated = true;

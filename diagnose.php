@@ -117,6 +117,66 @@ function check(&$checks, $title, $state, $value, $hint = '')
 $env = read_env_file($base.'/.env');
 $envExists = is_file($base.'/.env');
 
+/*
+ * -------------------------------------------------------------------------
+ * محدودسازی دسترسی به این صفحه
+ * -------------------------------------------------------------------------
+ * این صفحه اطلاعات فنی سرور (نسخه PHP، مسیرها، کاربر MySQL و ...) را نشان
+ * می‌دهد و نباید عمومی باشد. دسترسی فقط در یکی از این دو حالت مجاز است:
+ *   ۱) درخواست از خود سرور (127.0.0.1 / ::1) باشد؛
+ *   ۲) DIAGNOSE_KEY در فایل .env تنظیم شده و با ?key=... یا هدر
+ *      X-Diagnose-Key مطابقت داشته باشد.
+ */
+$diagnoseKey = isset($env['DIAGNOSE_KEY']) ? trim((string) $env['DIAGNOSE_KEY']) : '';
+$remoteAddress = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+$isLocalRequest = in_array($remoteAddress, ['127.0.0.1', '::1'], true);
+
+$providedKey = '';
+
+if (isset($_GET['key']) && is_string($_GET['key'])) {
+    $providedKey = $_GET['key'];
+} elseif (isset($_SERVER['HTTP_X_DIAGNOSE_KEY'])) {
+    $providedKey = (string) $_SERVER['HTTP_X_DIAGNOSE_KEY'];
+}
+
+$diagnoseAllowed = $isLocalRequest
+    || ($diagnoseKey !== '' && hash_equals($diagnoseKey, $providedKey));
+
+if (! $diagnoseAllowed) {
+    if (! headers_sent()) {
+        http_response_code(403);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Robots-Tag: noindex, nofollow');
+        header('Cache-Control: no-store, max-age=0');
+    }
+
+    echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8">'
+        .'<meta name="viewport" content="width=device-width, initial-scale=1">'
+        .'<title>دسترسی به ابزار عیب‌یابی بسته است</title><style>'
+        .'body{font-family:Tahoma,Arial,sans-serif;background:#f7f7f8;margin:0;padding:32px;color:#111}'
+        .'.box{max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:26px 30px}'
+        .'h1{font-size:18px;margin:0 0 14px;color:#b45309;line-height:1.8}'
+        .'li{margin-bottom:10px;line-height:2}code{background:#f3f4f6;padding:2px 6px;border-radius:4px;direction:ltr;display:inline-block}'
+        .'.muted{color:#6b7280;font-size:13px;margin-top:18px;border-top:1px solid #eee;padding-top:12px;line-height:1.9}'
+        .'</style></head><body><div class="box">'
+        .'<h1>دسترسی به ابزار عیب‌یابی باز نیست</h1><ul>'
+        .'<li>این صفحه اطلاعات فنی سرور را نمایش می‌دهد و برای جلوگیری از افشای اطلاعات، فقط از خود سرور یا با کلید دسترسی باز می‌شود.</li>'
+        .'<li>یک کلید تصادفی در فایل <code>.env</code> اضافه کنید: <code>DIAGNOSE_KEY=یک-رشته-تصادفی-طولانی</code></li>'
+        .'<li>سپس این صفحه را با کلید باز کنید: <code>diagnose.php?key=همان-رشته</code></li>'
+        .'<li>یا از داخل سرور با SSH: <code>curl -s http://127.0.0.1/diagnose.php</code></li>'
+        .'<li>بعد از رفع خطا، این فایل را کاملاً حذف کنید.</li>'
+        .'</ul>'
+        .'<div class="muted">اگر فایل <code>.env</code> را تازه تغییر داده‌اید و کلید خوانده نمی‌شود، مطمئن شوید خط <code>DIAGNOSE_KEY</code> بدون فاصله و درست نوشته شده است.</div>'
+        .'</div></body></html>';
+
+    exit;
+}
+
+if (! headers_sent()) {
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Cache-Control: no-store, max-age=0');
+}
+
 // ---------- PHP ----------
 $phpOk = PHP_VERSION_ID >= 80200;
 check(

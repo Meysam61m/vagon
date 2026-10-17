@@ -112,6 +112,15 @@ return [
 
     'distinct' => ':attribute تکراری است.',
 
+    // پیام‌های قاعده Password (حداقل حرف/عدد و ...)
+    'password' => [
+        'letters' => ':attribute باید حداقل یک حرف داشته باشد.',
+        'mixed' => ':attribute باید شامل حروف بزرگ و کوچک باشد.',
+        'numbers' => ':attribute باید حداقل یک عدد داشته باشد.',
+        'symbols' => ':attribute باید حداقل یک نماد (مثل ! یا @) داشته باشد.',
+        'uncompromised' => ':attribute در نشت اطلاعات دیده شده است؛ رمز دیگری انتخاب کنید.',
+    ],
+
     'custom' => [
         'password' => [
             'min' => 'رمز عبور باید حداقل :min کاراکتر باشد.',

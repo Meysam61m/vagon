@@ -1,13 +1,21 @@
-# اگر ریشه سایت روی پوشه public تنظیم نشده باشد، این فایل همه درخواست‌ها را
-# به پوشه public هدایت می‌کند (کاربرد در هاست اشتراکی / cPanel).
+# اگر ریشه سایت روی پوشه public تنظیم شده باشد، این فایل استفاده نمی‌شود.
+# این فایل برای هاست اشتراکی است که DocumentRoot روی پوشه پروژه است.
 #
 # روش بهتر: Document Root را مستقیماً روی پوشه public بگذارید.
-# این فایل برای وقتی است که امکان تغییر ریشه سایت وجود ندارد.
+#
+# نکته امنیتی: تمام درخواست‌ها به public هدایت می‌شوند، فایل‌های مخفی مثل
+# .env و .git مسدود هستند و فهرست پوشه‌ها نمایش داده نمی‌شود.
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # درخواست‌های خود public و فایل عیب‌یابی را دوباره‌نویسی نکن
+    # ۱) هیچ فایل یا پوشه مخفی (با نقطه) قابل دسترسی نیست؛ فقط .well-known
+    RewriteRule "(^|/)\.(?!well-known/)" - [F,L]
+
+    # ۲) پوشه‌های داخلی پروژه هرگز مستقیماً سرو نشوند
+    RewriteRule ^(app|bootstrap|config|database|lang|resources|routes|scripts|storage|tests|vendor)(/|$) - [F,L]
+
+    # ۳) درخواست‌های خود public و فایل عیب‌یابی دوباره‌نویسی نشوند
     RewriteRule ^(?!public/)(?!diagnose\.php$)(.*)$ public/$1 [L]
 </IfModule>
 
@@ -18,7 +26,15 @@
 
 # بستن دسترسی مستقیم به فایل‌های حساس وقتی ریشه سایت پوشه پروژه است
 <IfModule mod_authz_core.c>
-    <FilesMatch "(^\.env.*|^composer\.(json|lock)$|^composer\.phar$|^package(-lock)?\.json$|^phpunit\.xml$|^artisan$|^README\.md$|^REVIEW\.md$|\.sqlite$|\.log$)">
+    <FilesMatch "(^\.env.*|^\.git.*|^composer\.(json|lock)$|^composer\.phar$|^package(-lock)?\.json$|^phpunit\.xml$|^artisan$|^README\.md$|^REVIEW\.md$|\\.sqlite$|\\.log$|\\.sql$)">
         Require all denied
     </FilesMatch>
+</IfModule>
+
+# هدرهای امنیتی پایه (لایه دوم؛ لایه اصلی در SecurityHeaders میان‌افزار است)
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header unset X-Powered-By
 </IfModule>

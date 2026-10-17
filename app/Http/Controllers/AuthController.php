@@ -24,6 +24,8 @@ class AuthController extends Controller
             'password' => 'رمز عبور',
         ]);
 
+        $credentials['email'] = mb_strtolower(trim($credentials['email']));
+
         $throttleKey = Str::transliterate(Str::lower($credentials['email']).'|'.$request->ip());
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {

@@ -113,6 +113,12 @@ return [
 
     'key' => env('APP_KEY'),
 
+    /*
+     * پروکسی‌های مورد اعتماد (برای تشخیص HTTPS و IP واقعی کاربر پشت CDN).
+     * خالی = هیچ پروکسی‌ای اعتماد نمی‌شود. نمونه: TRUSTED_PROXIES=*
+     */
+    'trusted_proxies' => env('TRUSTED_PROXIES', ''),
+
     'previous_keys' => [
         ...array_filter(
             explode(',', env('APP_PREVIOUS_KEYS', ''))

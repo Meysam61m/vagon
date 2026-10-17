@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
@@ -16,6 +17,20 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // پشت پروکسی/CDN: تشخیص درست HTTPS و IP کاربر
+        $trustedProxies = trim((string) config('app.trusted_proxies', ''));
+
+        if ($trustedProxies !== '') {
+            $proxies = $trustedProxies === '*'
+                ? ['0.0.0.0/0', '::/0']
+                : array_map('trim', explode(',', $trustedProxies));
+
+            Request::setTrustedProxies($proxies, Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO);
+        }
+
         // صفحه‌بندی باید با قالب Bootstrap 5 رندر شود، نه Tailwind
         Paginator::useBootstrapFive();
 

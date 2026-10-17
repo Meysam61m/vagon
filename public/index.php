@@ -223,6 +223,14 @@ $wagonEnvValue = function (string $key, $default = null) use ($wagonEnvValues) {
 $wagonDbDriver = strtolower((string) $wagonEnvValue('DB_CONNECTION', 'mysql'));
 $wagonDbName = (string) $wagonEnvValue('DB_DATABASE', 'wagon_system');
 
+/*
+ * در حالت production جزئیات اتصال (نام کاربری، مسیر، متن خطای MySQL)
+ * نمایش داده نمی‌شود تا اطلاعات سرور به بازدیدکننده عمومی نشت نکند.
+ * برای دیدن این جزئیات، موقتاً APP_DEBUG=true بگذارید.
+ */
+$wagonDebug = filter_var($wagonEnvValue('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN)
+    || strtolower((string) $wagonEnvValue('APP_ENV', 'production')) === 'local';
+
 if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
     if (! extension_loaded('pdo_mysql')) {
         $wagonFatal('افزونه pdo_mysql روی PHP فعال نیست', [
@@ -319,25 +327,35 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
 
         if ($wagonCode === 1044) {
             $wagonFatal('کاربر MySQL به دیتابیس «'.$wagonDbName.'» دسترسی ندارد', [
-                'کاربر <code>'.$wagonSafeUser.'</code> به MySQL وصل شد، اما اجازه استفاده از دیتابیس <code>'.$wagonSafeName.'</code> را ندارد.',
+                $wagonDebug
+                    ? 'کاربر <code>'.$wagonSafeUser.'</code> به MySQL وصل شد، اما اجازه استفاده از دیتابیس <code>'.$wagonSafeName.'</code> را ندارد.'
+                    : 'کاربر MySQL به دیتابیس برنامه دسترسی ندارد.',
                 'در cPanel → <strong>MySQL Databases</strong> → بخش <strong>Add User To Database</strong> کاربر را به این دیتابیس اضافه کنید.',
                 'هنگام اضافه‌کردن، گزینه <strong>ALL PRIVILEGES</strong> را انتخاب کنید.',
-                'در هاست‌های دیگر: <code>GRANT ALL PRIVILEGES ON `'.$wagonSafeName.'`.* TO \''.$wagonSafeUser.'\'@\'localhost\';</code>',
+                $wagonDebug
+                    ? 'در هاست‌های دیگر: <code>GRANT ALL PRIVILEGES ON `'.$wagonSafeName.'`.* TO \''.$wagonSafeUser.'\'@\'localhost\';</code>'
+                    : 'در هاست‌های دیگر، از پنل مدیریت دیتابیس دسترسی کامل (ALL PRIVILEGES) به این دیتابیس بدهید.',
                 'سپس صفحه را رفرش کنید.',
             ]);
         }
 
         if ($wagonCode === 1045 || strpos($wagonMessage, 'Access denied') !== false) {
-            $wagonHints = [
-                'مشخصات اتصال: کاربر <code>'.$wagonSafeUser.'</code>، مسیر <code>'.$wagonTriedText.'</code>، دیتابیس <code>'.$wagonSafeName.'</code>.',
-                $wagonPassHint,
-                'در cPanel نام کاربری دیتابیس معمولاً پیشوند حساب هاست را دارد؛ مثلاً <code>myuser_wagon</code> نه فقط <code>wagon</code>. مقدار کامل را در <code>DB_USERNAME</code> بگذارید.',
-                'در cPanel → <strong>MySQL Databases</strong> مطمئن شوید کاربر ساخته شده و با <strong>Add User To Database</strong> به دیتابیس اضافه شده است.',
-                'اگر رمز شامل <code>#</code>، فاصله یا کاراکترهای خاص است، آن را داخل دابل‌کوتیشن بگذارید: <code>DB_PASSWORD="p@ss#123"</code> (بدون کوتیشن، بخش بعد از # کامنت حساب می‌شود).',
-                'هر دو حالت <code>localhost</code> و <code>127.0.0.1</code> امتحان شد؛ رد شدن هر دو یعنی کاربر/رمز روی سرور پذیرفته نمی‌شود، نه اینکه آدرس اشتباه باشد.',
-                'روی XAMPP / Laragon رمز پیش‌فرض کاربر <code>root</code> معمولاً خالی است؛ اگر برای root رمز گذاشته‌اید همان را در <code>DB_PASSWORD</code> بگذارید.',
-                'در هاست اشتراکی کاربر <code>root</code> معمولاً غیرفعال است؛ باید کاربر دیتابیس مخصوص خودتان (با پیشوند حساب) را بسازید و در <code>DB_USERNAME</code> بگذارید.',
-            ];
+            $wagonHints = [];
+
+            if ($wagonDebug) {
+                $wagonHints[] = 'مشخصات اتصال: کاربر <code>'.$wagonSafeUser.'</code>، مسیر <code>'.$wagonTriedText.'</code>، دیتابیس <code>'.$wagonSafeName.'</code>.';
+                $wagonHints[] = $wagonPassHint;
+            }
+
+            $wagonHints[] = 'در cPanel نام کاربری دیتابیس معمولاً پیشوند حساب هاست را دارد؛ مثلاً <code>myuser_wagon</code> نه فقط <code>wagon</code>. مقدار کامل را در <code>DB_USERNAME</code> بگذارید.';
+            $wagonHints[] = 'در cPanel → <strong>MySQL Databases</strong> مطمئن شوید کاربر ساخته شده و با <strong>Add User To Database</strong> به دیتابیس اضافه شده است.';
+            $wagonHints[] = 'اگر رمز شامل <code>#</code>، فاصله یا کاراکترهای خاص است، آن را داخل دابل‌کوتیشن بگذارید: <code>DB_PASSWORD="p@ss#123"</code> (بدون کوتیشن، بخش بعد از # کامنت حساب می‌شود).';
+            $wagonHints[] = 'روی XAMPP / Laragon رمز پیش‌فرض کاربر <code>root</code> معمولاً خالی است؛ اگر برای root رمز گذاشته‌اید همان را در <code>DB_PASSWORD</code> بگذارید.';
+            $wagonHints[] = 'در هاست اشتراکی کاربر <code>root</code> معمولاً غیرفعال است؛ باید کاربر دیتابیس مخصوص خودتان (با پیشوند حساب) را بسازید و در <code>DB_USERNAME</code> بگذارید.';
+
+            if ($wagonDebug) {
+                $wagonHints[] = 'هر دو حالت <code>localhost</code> و <code>127.0.0.1</code> امتحان شد؛ رد شدن هر دو یعنی کاربر/رمز روی سرور پذیرفته نمی‌شود، نه اینکه آدرس اشتباه باشد.';
+            }
 
             if (is_file($wagonBase.'/bootstrap/cache/config.php')) {
                 $wagonHints[] = 'فایل <code>bootstrap/cache/config.php</code> وجود دارد و مقادیر قدیمی کش شده‌اند؛ یک بار <code>php artisan config:clear</code> را اجرا کنید (یا این فایل را حذف کنید).';
@@ -349,21 +367,35 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
         }
 
         if (in_array($wagonCode, [2002, 2003], true) || strpos($wagonMessage, 'Connection refused') !== false) {
-            $wagonFatal('اتصال به سرور MySQL برقرار نشد', [
-                'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code>.',
-                'مقدار <code>DB_HOST</code> و <code>DB_PORT</code> را بررسی کنید (پیش‌فرض: <code>127.0.0.1:3306</code>).',
+            $wagonHints = [];
+
+            if ($wagonDebug) {
+                $wagonHints[] = 'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code>.';
+            }
+
+            $wagonHints[] = 'مقدار <code>DB_HOST</code> و <code>DB_PORT</code> را بررسی کنید (پیش‌فرض: <code>127.0.0.1:3306</code>).';
+
+            $wagonFatal('اتصال به سرور MySQL برقرار نشد', array_merge($wagonHints, [
+                'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
                 'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
                 'در بعضی هاست‌ها به‌جای <code>localhost</code> باید از <code>127.0.0.1</code> استفاده شود (یا برعکس).',
                 'اگر MySQL روی سوکت یونیکس است، مقدار <code>DB_SOCKET</code> را تنظیم کنید.',
-            ]);
+            ]));
         }
 
-        $wagonFatal('خطا در اتصال به دیتابیس MySQL', [
-            'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code> — آخرین خطا از <code>'.$wagonLastLabel.'</code>:',
-            '<code>'.$wagonLastClass.'</code>: '.htmlspecialchars($wagonMessage, ENT_QUOTES, 'UTF-8'),
-            'مقادیر DB_* را در فایل <code>.env</code> بررسی کنید.',
-            'برای تست سریع اتصال، فایل <code>diagnose.php</code> را در مرورگر باز کنید.',
-        ]);
+        $wagonHints = [];
+
+        if ($wagonDebug) {
+            $wagonHints[] = 'مسیرهای امتحان‌شده: <code>'.$wagonTriedText.'</code> — آخرین خطا از <code>'.$wagonLastLabel.'</code>:';
+            $wagonHints[] = '<code>'.$wagonLastClass.'</code>: '.htmlspecialchars($wagonMessage, ENT_QUOTES, 'UTF-8');
+        } else {
+            $wagonHints[] = 'جزئیات فنی خطا برای امنیت نمایش داده نمی‌شود؛ برای دیدن آن موقتاً در <code>.env</code> مقدار <code>APP_DEBUG=true</code> بگذارید.';
+        }
+
+        $wagonHints[] = 'مقادیر DB_* را در فایل <code>.env</code> بررسی کنید.';
+        $wagonHints[] = 'برای تست سریع اتصال، فایل <code>diagnose.php</code> را در مرورگر باز کنید (نیاز به DIAGNOSE_KEY دارد).';
+
+        $wagonFatal('خطا در اتصال به دیتابیس MySQL', $wagonHints);
     }
 
     try {
@@ -371,11 +403,18 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
             'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()'
         )->fetchColumn();
     } catch (PDOException $wagonSchemaException) {
-        $wagonFatal('اتصال به MySQL برقرار شد، اما خواندن اطلاعات دیتابیس ممکن نشد', [
-            'کاربر <code>'.$wagonSafeUser.'</code> به دیتابیس <code>'.$wagonSafeName.'</code> وصل شد ولی دسترسی خواندن <code>information_schema</code> را ندارد.',
+        $wagonHints = [
+            $wagonDebug
+                ? 'کاربر <code>'.$wagonSafeUser.'</code> به دیتابیس <code>'.$wagonSafeName.'</code> وصل شد ولی دسترسی خواندن <code>information_schema</code> را ندارد.'
+                : 'کاربر MySQL به دیتابیس برنامه وصل شد ولی اجازه خواندن اطلاعات آن را ندارد.',
             'در cPanel → MySQL Databases → Add User To Database گزینه <strong>ALL PRIVILEGES</strong> را بدهید.',
-            'جزئیات خطا: <code>'.htmlspecialchars($wagonSchemaException->getMessage(), ENT_QUOTES, 'UTF-8').'</code>',
-        ]);
+        ];
+
+        if ($wagonDebug) {
+            $wagonHints[] = 'جزئیات خطا: <code>'.htmlspecialchars($wagonSchemaException->getMessage(), ENT_QUOTES, 'UTF-8').'</code>';
+        }
+
+        $wagonFatal('اتصال به MySQL برقرار شد، اما خواندن اطلاعات دیتابیس ممکن نشد', $wagonHints);
     }
 
     if ($wagonTableCount === 0) {
@@ -422,9 +461,16 @@ try {
 
     $app->handleRequest(Request::capture());
 } catch (Throwable $wagonException) {
-    $wagonFatal('خطا در راه‌اندازی برنامه', [
-        '<code>'.htmlspecialchars(get_class($wagonException), ENT_QUOTES, 'UTF-8').'</code>: '
-            .htmlspecialchars($wagonException->getMessage(), ENT_QUOTES, 'UTF-8'),
+    $wagonErrorHints = [];
+
+    if ($wagonDebug) {
+        $wagonErrorHints[] = '<code>'.htmlspecialchars(get_class($wagonException), ENT_QUOTES, 'UTF-8').'</code>: '
+            .htmlspecialchars($wagonException->getMessage(), ENT_QUOTES, 'UTF-8');
+    } else {
+        $wagonErrorHints[] = 'جزئیات فنی خطا برای امنیت نمایش داده نمی‌شود؛ برای دیدن آن موقتاً <code>APP_DEBUG=true</code> بگذارید.';
+    }
+
+    $wagonFatal('خطا در راه‌اندازی برنامه', array_merge($wagonErrorHints, [
         'جزئیات کامل در فایل <code>storage/logs/laravel.log</code> ثبت می‌شود.',
         'برای دیدن جزئیات در مرورگر، موقتاً در <code>.env</code> مقدار <code>APP_DEBUG=true</code> بگذارید و صفحه را رفرش کنید '
             .'(بعد از رفع خطا حتماً آن را <code>false</code> کنید).',
@@ -432,5 +478,5 @@ try {
         'اگر پیام <code>could not find driver</code> می‌بینید، افزونه <code>pdo_mysql</code> در PHP فعال نیست.',
         'اگر پیام <code>Unknown database</code> یا <code>Access denied</code> می‌بینید، مقادیر DB_* در <code>.env</code> را اصلاح کنید '
             .'یا فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
-    ]);
+    ]));
 }

@@ -265,7 +265,11 @@ php artisan db:seed
 | `DB_FOREIGN_KEYS` | `true` | فقط برای SQLite کاربرد دارد |
 | `SESSION_DRIVER` | `file` | بدون نیاز به جدول session |
 | `CACHE_STORE` | `file` | ذخیره throttle ورود |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | — | فقط هنگام seed خوانده می‌شوند |
+| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | — | فقط هنگام seed خوانده می‌شوند (رمز کوتاه‌تر از ۱۰ کاراکتر رد می‌شود) |
+| `SESSION_HTTP_ONLY` / `SESSION_SAME_SITE` | `true` / `lax` | محافظت کوکی نشست |
+| `SESSION_SECURE_COOKIE` | `false` | **روی HTTPS حتماً `true`** |
+| `TRUSTED_PROXIES` | خالی | IP پروکسی معکوس؛ فقط پشت nginx/CDN پر شود |
+| `DIAGNOSE_KEY` | خالی | کلید باز کردن `diagnose.php` از راه دور |
 
 پس از تغییر `.env` در محیط عملیاتی:
 
@@ -391,6 +395,18 @@ mysql -u wagon_user -p wagon_system < backup-2026-10-17.sql
 - محاسبات مالی به ریال و با `round` انجام می‌شود؛ برای واحدهای پولی با اعشار، بهتر است محاسبات در «ریال × ۱۰۰» انجام شود.
 - SQLite همچنان به‌عنوان حالت جایگزین (فقط برای تست و اجرای محلی) پشتیبانی می‌شود، اما محیط عملیاتی باید MySQL/MariaDB باشد.
 - تمایل به ارقام فارسی در همه جدول‌ها وجود دارد اما خروجی‌ها با ارقام لاتین و جداکننده هزارگان نمایش داده می‌شوند.
+
+---
+
+## امنیت
+
+بازبینی امنیتی کامل (احراز هویت، مجوزدهی، CSRF، XSS، SQL Injection، نشست/کوکی، هدرها، سیاست رمز، rate limit و فایل‌های نصب) در فایل [`SECURITY.md`](SECURITY.md) ثبت شده است. خلاصه وضعیت:
+
+- هدرهای امنیتی (`CSP`، `nosniff`، `Referrer-Policy`، `Permissions-Policy`، HSTS در production) روی همه پاسخ‌ها فعال است.
+- `diagnose.php` فقط از لوکال‌هاست یا با `DIAGNOSE_KEY` باز می‌شود؛ **بعد از نصب حذفش کنید**.
+- صفحه خطای راه‌اندازی در حالت production هیچ جزئیات فنی (نام کاربر دیتابیس، مسیر، Exception) نشان نمی‌دهد.
+- سیاست رمز: حداقل ۱۰ کاراکتر شامل حرف و رقم.
+- پیش از تحویل، چک‌لیست بخش ۶ فایل `SECURITY.md` را اجرا کنید (به‌ویژه `SESSION_SECURE_COOKIE=true` روی HTTPS و تغییر رمز ادمین نمونه).
 
 ---
 
