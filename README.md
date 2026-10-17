@@ -79,6 +79,71 @@ php artisan admin:reset-password admin@wagon.local --password="MyStrongPass-1404
 
 ---
 
+## رفع خطای 500 (Server Error)
+
+اگر بعد از آپلود پروژه صفحه «500 Server Error» می‌بینید، در ۹۹٪ موارد یکی از این دلایل است. فایل `diagnose.php` را در مرورگر باز کنید:
+
+```
+https://دامنه-شما/diagnose.php
+```
+
+این صفحه همه پیش‌نیازها را چک می‌کند و دقیقاً می‌گوید کدام مورد مشکل دارد (بعد از رفع خطا، فایل را حذف کنید).
+
+### ۱) پوشه `vendor` وجود ندارد (شایع‌ترین دلیل)
+فایل zip فقط شامل کد پروژه است و پوشه `vendor` داخل آن نیست. روی سرور (یا سیستم خودتان) اجرا کنید:
+
+```bash
+composer install
+```
+
+اگر Composer روی هاست نیست، از پشتیبانی بخواهید نصب/فعال کند. بدون `vendor`، Laravel حتی یک خطا هم در لاگ ثبت نمی‌کند و فقط صفحه ۵۰۰ می‌دهد.
+
+> از نسخه فعلی، `public/index.php` اگر `vendor` را نبیند پیام فارسی با راه‌حل نشان می‌دهد (نه صفحه ۵۰۰ خالی).
+
+### ۲) `APP_KEY` خالی است
+```bash
+php artisan key:generate
+```
+اگر فایل `.env` وجود ندارد، ابتدا از `.env.example` کپی بگیرید.
+
+### ۳) دسترسی نوشتن به `storage` و `bootstrap/cache`
+```bash
+chmod -R 775 storage bootstrap/cache
+```
+و مالکیت را به کاربر وب‌سرور بدهید (مثلاً `www-data` یا در cPanel کاربر هاست). روی ویندوز پوشه پروژه نباید Read-only باشد.
+
+### ۴) جدول‌های دیتابیس ساخته نشده‌اند
+```bash
+touch database/database.sqlite
+php artisan migrate --seed
+```
+
+### ۵) نسخه PHP کمتر از 8.2 است
+در cPanel → «Select PHP Version» نسخه 8.2 یا 8.3 را فعال کنید. افزونه‌های `mbstring`، `openssl`، `pdo_sqlite` و برای PDF `dom` هم باید فعال باشند.
+
+### ۶) ریشه سایت روی `public` نیست
+بهترین حالت: Document Root را روی پوشه `public` بگذارید.
+اگر امکان تغییر نیست، فایل `.htaccess` ریشه (که همراه پروژه هست) درخواست‌ها را به `public` هدایت می‌کند؛ فقط باید `mod_rewrite` و `AllowOverride` فعال باشد.
+
+### ۷) دیدن خطای واقعی
+در فایل `.env` موقتاً بگذارید:
+
+```dotenv
+APP_DEBUG=true
+```
+
+بعد صفحه را رفرش کنید یا فایل `storage/logs/laravel.log` را ببینید. بعد از پیدا کردن مشکل حتماً `APP_DEBUG=false` کنید.
+
+### ۸) تست مسیر بدون مرورگر
+```bash
+php -v
+php artisan --version
+php artisan migrate --seed
+```
+اگر `php artisan` اجرا نشد، مشکل در PHP/Composer است، نه در کد برنامه.
+
+---
+
 ## نصب دستی (بدون اسکریپت)
 
 ```bash
@@ -138,12 +203,15 @@ database/
   seeders/                  کاربر ادمین/اپراتور، تعرفه‌های پایه، درصد مالیات
 lang/fa/                    validation, auth, passwords, pagination
 public/
-  index.php, .htaccess
+  index.php (با بررسی پیش‌نیازها و پیام فارسی)، .htaccess
   css/app.css
   vendor/                   Bootstrap 5 RTL، jQuery، datepicker، Chart.js، فونت وزیرمتن
 resources/views/            ۳۳ نمای Blade (layouts، auth، dashboard، cargo، billing،
                             owners، representatives، tariffs، tax، users، reports)
 routes/web.php              تمام مسیرهای وب
+.htaccess                   هدایت به public برای هاست‌هایی که document root را
+                            نمی‌شود تغییر داد
+diagnose.php                ابزار عیب‌یابی پیش‌نیازها (بعد از رفع خطا حذف شود)
 scripts/                    کپی و بررسی دارایی‌های آفلاین (اختیاری)
 storage/fonts/              فونت‌های TTF برای PDF (Vazirmatn Regular/Bold)
 tests/                      تست‌های واحد و Feature

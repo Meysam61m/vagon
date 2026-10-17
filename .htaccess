@@ -1,0 +1,24 @@
+# اگر ریشه سایت روی پوشه public تنظیم نشده باشد، این فایل همه درخواست‌ها را
+# به پوشه public هدایت می‌کند (کاربرد در هاست اشتراکی / cPanel).
+#
+# روش بهتر: Document Root را مستقیماً روی پوشه public بگذارید.
+# این فایل برای وقتی است که امکان تغییر ریشه سایت وجود ندارد.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # درخواست‌های خود public و فایل عیب‌یابی را دوباره‌نویسی نکن
+    RewriteRule ^(?!public/)(?!diagnose\.php$)(.*)$ public/$1 [L]
+</IfModule>
+
+# جلوگیری از فهرست شدن فایل‌های پروژه
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+# بستن دسترسی مستقیم به فایل‌های حساس وقتی ریشه سایت پوشه پروژه است
+<IfModule mod_authz_core.c>
+    <FilesMatch "(^\.env.*|^composer\.(json|lock)$|^composer\.phar$|^package(-lock)?\.json$|^phpunit\.xml$|^artisan$|^README\.md$|^REVIEW\.md$|\.sqlite$|\.log$)">
+        Require all denied
+    </FilesMatch>
+</IfModule>

@@ -1,18 +1,27 @@
 #!/usr/bin/env php
 <?php
 
-use Illuminate\Foundation\Application;
-use Symfony\Component\Console\Input\ArgvInput;
-
 define('LARAVEL_START', microtime(true));
 
-// Register the Composer autoloader...
-require __DIR__.'/vendor/autoload.php';
+$vendor = __DIR__.'/vendor/autoload.php';
 
-// Bootstrap Laravel and handle the command...
-/** @var Application $app */
+if (! is_file($vendor)) {
+    fwrite(STDERR, "\n[خطا] پوشه vendor وجود ندارد؛ ابتدا در همین پوشه دستور زیر را اجرا کنید:\n\n");
+    fwrite(STDERR, "    composer install\n\n");
+    fwrite(STDERR, "اگر Composer نصب نیست: https://getcomposer.org/download/\n\n");
+    exit(1);
+}
+
+if (PHP_VERSION_ID < 80200) {
+    fwrite(STDERR, "\n[خطا] نسخه PHP شما ".PHP_VERSION." است؛ این برنامه به PHP 8.2 یا بالاتر نیاز دارد.\n\n");
+    exit(1);
+}
+
+require $vendor;
+
+/** @var \Illuminate\Foundation\Application $app */
 $app = require_once __DIR__.'/bootstrap/app.php';
 
-$status = $app->handleCommand(new ArgvInput);
+$status = $app->handleCommand(new \Symfony\Component\Console\Input\ArgvInput);
 
 exit($status);
