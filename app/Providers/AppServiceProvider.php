@@ -76,6 +76,7 @@ class AppServiceProvider extends ServiceProvider
                 || ! str_contains($content, 'wagons.edit-owner')
                 || ! str_contains($content, 'reports.setad')
                 || ! str_contains($content, 'tariffs.destroy')
+                || ! str_contains($content, 'cargo.quick-bill')
             ) {
                 @unlink($routeCache);
                 clearstatcache(true, $routeCache);
@@ -95,6 +96,14 @@ class AppServiceProvider extends ServiceProvider
                         ->name('wagons.update-owner');
                     Route::match(['post', 'put'], '/wagons/{wagon}', [CargoController::class, 'updateWagonOwner'])
                         ->name('wagons.update');
+                });
+                $registered = true;
+            }
+
+            if (! Route::has('cargo.quick-bill')) {
+                Route::middleware(['web', 'auth'])->group(function () {
+                    Route::post('/cargo/{cargo}/quick-bill', [CargoController::class, 'quickBill'])
+                        ->name('cargo.quick-bill');
                 });
                 $registered = true;
             }
@@ -132,7 +141,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v8';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v9';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -148,7 +157,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v8');
+                @file_put_contents($versionMarker, 'v9');
             }
         }
     }

@@ -2,18 +2,50 @@
 @section('title', 'صدور صورتحساب')
 
 @section('content')
-    <h4 class="mb-3">صدور صورتحساب جدید</h4>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-1">صدور صورتحساب جدید</h4>
+            <div class="text-muted small">
+                صاحبان کالای دارای واگن بارگیری‌شده در نوار زیر مشخص شده‌اند؛ با انتخاب هر صاحب کالا، نماینده و تمام واگن‌های آماده به‌طور خودکار انتخاب و محاسبه می‌شوند.
+            </div>
+        </div>
+        <a href="{{ route('billing.index') }}" class="btn btn-outline-secondary btn-sm">لیست صورتحساب‌ها</a>
+    </div>
 
-    {{-- مرحله اول: انتخاب صاحب کالا --}}
+    @php
+        $readyCounts = $readyCountsByOwner ?? collect();
+        $ownersWithReady = $owners->filter(fn($o) => ($readyCounts[$o->id] ?? 0) > 0);
+    @endphp
+
+    @if($ownersWithReady->isNotEmpty())
+        <div class="card border-success bg-light p-3 mb-3">
+            <div class="small fw-bold text-success mb-2">
+                صاحبان کالای دارای واگن آماده صدور صورتحساب (انتخاب سریع با ۱ کلیک):
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach($ownersWithReady as $readyOwner)
+                    <a href="{{ route('billing.create', ['owner_id' => $readyOwner->id]) }}"
+                       class="btn btn-sm {{ (int) $ownerId === (int) $readyOwner->id ? 'btn-success' : 'btn-outline-success bg-white' }}">
+                        {{ $readyOwner->name }}
+                        <span class="badge {{ (int) $ownerId === (int) $readyOwner->id ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">
+                            {{ $readyCounts[$readyOwner->id] }} واگن
+                        </span>
+                    </a>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <form method="GET" action="{{ route('billing.create') }}" class="card p-3 mb-4">
         <div class="row g-2 align-items-end">
-            <div class="col-md-5">
-                <label class="form-label" for="owner_id_filter">صاحب کالا</label>
-                <select name="owner_id" id="owner_id_filter" class="form-select" onchange="this.form.submit()">
-                    <option value="">صاحب کالا را انتخاب کنید…</option>
+            <div class="col-md-6">
+                <label class="form-label" for="billing_owner_filter">انتخاب صاحب کالا برای بارگذاری واگن‌های تسویه‌نشده</label>
+                <select name="owner_id" id="billing_owner_filter" class="form-select" onchange="this.form.submit()">
+                    <option value="">انتخاب کنید…</option>
                     @foreach($owners as $owner)
-                        <option value="{{ $owner->id }}" @selected((string) $ownerId === (string) $owner->id)>
-                            {{ $owner->name }}
+                        @php($rc = $readyCounts[$owner->id] ?? 0)
+                        <option value="{{ $owner->id }}" @selected((int) $ownerId === $owner->id)>
+                            {{ $owner->name }}{{ $rc > 0 ? " ({$rc} واگن آماده)" : '' }}
                         </option>
                     @endforeach
                 </select>
@@ -22,245 +54,182 @@
     </form>
 
     @if($ownerId)
-        @if($wagons->isEmpty())
-            <div class="alert alert-info">
-                هیچ واگن بارگیری‌شده و تسویه‌نشده‌ای برای این صاحب کالا یافت نشد.
-                ابتدا باید در بخش
-                <a href="{{ route('cargo.index') }}">درخواست‌های بارگیری</a>
-                وزن بارگیری ثبت شود.
+        <form method="POST" action="{{ route('billing.store') }}" class="card p-4" id="billing-form" data-tax="{{ $taxPercentage }}">
+            @csrf
+            <input type="hidden" name="owner_id" value="{{ $ownerId }}">
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label" for="representative_id">نماینده (انتخاب خودکار از درخواست بارگیری)</label>
+                    <select name="representative_id" id="representative_id" class="form-select">
+                        <option value="">—</option>
+                        @php($selectedRepId = old('representative_id', $defaultRepresentativeId ?? null))
+                        @foreach($representatives as $rep)
+                            <option value="{{ $rep->id }}" @selected((int) $selectedRepId === (int) $rep->id)>{{ $rep->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="billing_date_shamsi">تاریخ صدور (شمسی) <span class="text-danger">*</span></label>
+                    <input type="text" name="billing_date_shamsi" id="billing_date_shamsi"
+                           value="{{ old('billing_date_shamsi', $billingDateShamsi) }}"
+                           class="form-control jalali-datepicker" autocomplete="off" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" for="tax_display">درصد مالیات بر ارزش افزوده</label>
+                    <input type="text" id="tax_display" class="form-control" value="{{ $taxPercentage }}%" disabled>
+                </div>
             </div>
-        @else
-            @php
-                $oldWagons = collect(old('wagons', []))->keyBy('id');
-            @endphp
 
-            <form method="POST" action="{{ route('billing.store') }}" class="card p-4" id="billing-form">
-                @csrf
-                <input type="hidden" name="owner_id" value="{{ $ownerId }}">
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label" for="representative_id">نماینده</label>
-                        <select name="representative_id" id="representative_id" class="form-select">
-                            <option value="">انتخاب کنید…</option>
-                            @foreach($representatives as $representative)
-                                <option value="{{ $representative->id }}" @selected((string) old('representative_id') === (string) $representative->id)>
-                                    {{ $representative->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" for="billing_date_shamsi">تاریخ صدور (شمسی)</label>
-                        <input type="text" name="billing_date_shamsi" id="billing_date_shamsi"
-                               value="{{ old('billing_date_shamsi', $billingDateShamsi) }}"
-                               class="form-control jalali-datepicker @error('billing_date_shamsi') is-invalid @enderror"
-                               autocomplete="off" placeholder="۱۴۰۴/۰۷/۲۵" required>
-                        @error('billing_date_shamsi')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">درصد مالیات جاری</label>
-                        <input type="text" class="form-control" value="{{ $taxPercentage }}٪" disabled>
+            @if($wagons->isEmpty())
+                <div class="alert alert-warning">
+                    برای این صاحب کالا واگن بارگیری‌شده و تسویه‌نشده‌ای وجود ندارد.
+                    (ابتدا در بخش درخواست بارگیری، وزن و تعرفه واگن‌ها را ثبت کنید.)
+                </div>
+            @else
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <div class="small text-muted">
+                        واگن‌های آماده به‌صورت پیش‌فرض انتخاب شده‌اند؛ در صورت نیاز می‌توانید تیک هر واگن را بردارید یا تعرفه/وزن را تغییر دهید.
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="mb-0">واگن‌های بارگیری‌شده در انتظار تسویه</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="select-all">
-                        <label class="form-check-label" for="select-all">انتخاب همه</label>
-                    </div>
-                </div>
-
-                <div class="table-responsive mb-3">
+                <div class="table-responsive">
                     <table class="table table-bordered bg-white align-middle">
-                        <thead>
+                        <thead class="table-light">
                         <tr>
-                            <th style="width: 40px;"></th>
+                            <th><input type="checkbox" id="select-all" aria-label="انتخاب همه واگن‌ها" checked></th>
                             <th>شماره واگن</th>
+                            <th>درخواست</th>
                             <th>شرح کالا</th>
-                            <th>شماره درخواست</th>
-                            <th>نماینده</th>
-                            <th style="min-width: 220px;">تعرفه</th>
-                            <th style="min-width: 120px;">وزن بارگیری (تن)</th>
-                            <th>هزینه پایه</th>
+                            <th style="min-width: 240px;">تعرفه</th>
+                            <th style="min-width: 120px;">وزن (تن)</th>
+                            <th>هزینه پایه (ریال)</th>
+                            <th>مالیات (ریال)</th>
+                            <th>جمع کل (ریال)</th>
                         </tr>
                         </thead>
                         <tbody>
-                        @foreach($wagons as $index => $wagon)
+                        @foreach($wagons as $i => $wagon)
                             @php
-                                $old = $oldWagons->get($wagon->id);
-                                $checked = $old !== null;
-                                $selectedTariff = $old['tariff_id'] ?? $wagon->tariff_id;
-                                $selectedWeight = $old['weight'] ?? $wagon->loaded_weight;
-                                $capacity = $wagon->tariff?->capacity;
+                                $shouldCheck = empty($selectedCargoRequestId) || (int) $wagon->cargo_request_id === (int) $selectedCargoRequestId;
                             @endphp
-                            <tr data-row="{{ $index }}">
+                            <tr class="wagon-billing-row">
                                 <td>
-                                    <input type="checkbox" class="form-check-input wagon-check"
-                                           data-row="{{ $index }}" @checked($checked)>
-                                    <input type="hidden" name="wagons[{{ $index }}][id]" value="{{ $wagon->id }}"
-                                           data-row="{{ $index }}" @disabled(! $checked)>
+                                    <input type="checkbox" class="wagon-check" data-index="{{ $i }}"
+                                           aria-label="انتخاب واگن {{ $wagon->wagon_number }}"
+                                           @checked($shouldCheck)>
+                                    <input type="hidden" name="wagons[{{ $i }}][id]" value="{{ $wagon->id }}" {{ $shouldCheck ? '' : 'disabled' }}>
                                 </td>
-                                <td>{{ $wagon->wagon_number }}</td>
+                                <td class="fw-bold font-monospace">{{ $wagon->wagon_number }}</td>
+                                <td>{{ $wagon->cargoRequest?->request_number }}</td>
                                 <td>{{ $wagon->cargo_description ?: '—' }}</td>
-                                <td>{{ $wagon->cargoRequest->request_number }}</td>
-                                <td>{{ $wagon->cargoRequest->representative?->name ?? '-' }}</td>
                                 <td>
-                                    <select name="wagons[{{ $index }}][tariff_id]" class="form-select form-select-sm"
-                                            data-row="{{ $index }}" @disabled(! $checked)>
-                                        <option value="">انتخاب تعرفه…</option>
+                                    <select name="wagons[{{ $i }}][tariff_id]" class="form-select form-select-sm tariff-select" {{ $shouldCheck ? '' : 'disabled' }}>
                                         @foreach($tariffs as $tariff)
                                             <option value="{{ $tariff->id }}"
                                                     data-rate="{{ $tariff->rate }}"
                                                     data-capacity="{{ $tariff->capacity }}"
-                                                    @selected((string) $selectedTariff === (string) $tariff->id)>
-                                                {{ $tariff->title }} — {{ number_format($tariff->rate) }} ریال / {{ $tariff->capacity }} تن
+                                                @selected($wagon->tariff_id === $tariff->id)>
+                                                {{ $tariff->title }} ({{ $tariff->capacity }} تن — {{ number_format($tariff->rate) }})
                                             </option>
                                         @endforeach
                                     </select>
                                 </td>
                                 <td>
-                                    <input type="number" step="0.01" min="0.01"
-                                           max="{{ $capacity ?? 200 }}"
-                                           name="wagons[{{ $index }}][weight]"
-                                           value="{{ $selectedWeight }}"
-                                           class="form-control form-control-sm weight-input"
-                                           data-row="{{ $index }}" @disabled(! $checked)>
+                                    <input type="number" step="0.01" min="0.01" max="200"
+                                           name="wagons[{{ $i }}][weight]"
+                                           value="{{ $wagon->loaded_weight }}"
+                                           class="form-control form-control-sm weight-input" {{ $shouldCheck ? '' : 'disabled' }}>
                                 </td>
-                                <td class="cost-preview money" data-row="{{ $index }}">-</td>
+                                <td class="cell-base">0</td>
+                                <td class="cell-tax">0</td>
+                                <td class="cell-total fw-bold">0</td>
                             </tr>
                         @endforeach
                         </tbody>
-                        <tfoot>
+                        <tfoot class="table-light fw-bold">
                         <tr>
-                            <th colspan="7" class="text-end">جمع هزینه پایه</th>
-                            <th class="money" id="totalBase">۰</th>
-                        </tr>
-                        <tr>
-                            <th colspan="7" class="text-end">مالیات ({{ $taxPercentage }}٪)</th>
-                            <th class="money" id="totalTax">۰</th>
-                        </tr>
-                        <tr>
-                            <th colspan="7" class="text-end">مبلغ نهایی</th>
-                            <th class="money" id="totalFinal">۰</th>
+                            <td colspan="6" class="text-end">جمع کل صورتحساب:</td>
+                            <td id="sum-base">0</td>
+                            <td id="sum-tax">0</td>
+                            <td id="sum-total" class="text-success fs-6">0</td>
                         </tr>
                         </tfoot>
                     </table>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="notes">توضیحات</label>
-                    <textarea name="notes" id="notes" class="form-control" rows="2">{{ old('notes') }}</textarea>
+                    <label class="form-label" for="billing_notes">توضیحات</label>
+                    <textarea name="notes" id="billing_notes" class="form-control" rows="2">{{ old('notes') }}</textarea>
                 </div>
 
-                <div class="d-flex gap-2">
-                    <button class="btn btn-primary" type="submit">صدور صورتحساب</button>
-                    <a href="{{ route('billing.index') }}" class="btn btn-secondary">انصراف</a>
-                </div>
-            </form>
-        @endif
+                <button class="btn btn-success fw-semibold px-4" type="submit">صدور قطعی صورتحساب</button>
+            @endif
+        </form>
     @endif
 @endsection
 
 @push('scripts')
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const taxPercentage = {{ (float) $taxPercentage }};
+        (function () {
             const form = document.getElementById('billing-form');
+            if (!form) return;
 
-            if (!form) {
-                return;
-            }
+            const taxPct = parseFloat(form.dataset.tax || '0');
+            const fmt = n => Math.round(n).toLocaleString('en-US');
 
-            const rows = Array.from(document.querySelectorAll('tr[data-row]'));
-            const format = (value) => Number(value || 0).toLocaleString('fa-IR');
+            function recalc() {
+                let sumBase = 0, sumTax = 0;
 
-            function rowElements(index) {
-                return Array.from(document.querySelectorAll('[data-row="' + index + '"]'));
-            }
+                form.querySelectorAll('.wagon-billing-row').forEach(row => {
+                    const checked = row.querySelector('.wagon-check').checked;
+                    const select = row.querySelector('.tariff-select');
+                    const weightInput = row.querySelector('.weight-input');
+                    const hiddenId = row.querySelector('input[type="hidden"]');
 
-            function toggleRow(index, enabled) {
-                rowElements(index).forEach(function (element) {
-                    // چک‌باکس هرگز غیرفعال نمی‌شود؛ در غیر این صورت انتخاب مجدد ممکن نیست
-                    if (element.classList.contains('wagon-check')) {
+                    [select, weightInput, hiddenId].forEach(el => el.disabled = !checked);
+
+                    if (!checked) {
+                        row.querySelector('.cell-base').textContent = '0';
+                        row.querySelector('.cell-tax').textContent = '0';
+                        row.querySelector('.cell-total').textContent = '0';
                         return;
                     }
 
-                    element.disabled = !enabled;
-                });
-            }
+                    const opt = select.options[select.selectedIndex];
+                    const rate = parseFloat(opt.dataset.rate || '0');
+                    const cap = parseFloat(opt.dataset.capacity || '1');
+                    const w = parseFloat(weightInput.value || '0');
 
-            function calculateRow(index) {
-                const tariff = document.querySelector('select[data-row="' + index + '"]');
-                const weight = document.querySelector('input.weight-input[data-row="' + index + '"]');
-                const preview = document.querySelector('.cost-preview[data-row="' + index + '"]');
-                const checkbox = document.querySelector('.wagon-check[data-row="' + index + '"]');
+                    const base = cap > 0 ? Math.round((w / cap) * rate) : 0;
+                    const tax = Math.round(base * (taxPct / 100));
 
-                if (!checkbox.checked) {
-                    preview.textContent = '-';
-                    return 0;
-                }
+                    row.querySelector('.cell-base').textContent = fmt(base);
+                    row.querySelector('.cell-tax').textContent = fmt(tax);
+                    row.querySelector('.cell-total').textContent = fmt(base + tax);
 
-                const option = tariff.selectedOptions[0];
-                const rate = parseFloat(option?.dataset.rate || 0);
-                const capacity = parseFloat(option?.dataset.capacity || 0);
-                const value = parseFloat(weight.value || 0);
-
-                let cost = 0;
-                if (capacity > 0 && value > 0) {
-                    cost = Math.round((value / capacity) * rate);
-                }
-
-                preview.textContent = format(cost);
-
-                return cost;
-            }
-
-            function recalc() {
-                let totalBase = 0;
-
-                rows.forEach(function (row) {
-                    totalBase += calculateRow(row.dataset.row);
+                    sumBase += base;
+                    sumTax += tax;
                 });
 
-                const totalTax = Math.round(totalBase * (taxPercentage / 100));
-
-                document.getElementById('totalBase').textContent = format(totalBase);
-                document.getElementById('totalTax').textContent = format(totalTax);
-                document.getElementById('totalFinal').textContent = format(totalBase + totalTax);
+                document.getElementById('sum-base').textContent = fmt(sumBase);
+                document.getElementById('sum-tax').textContent = fmt(sumTax);
+                document.getElementById('sum-total').textContent = fmt(sumBase + sumTax);
             }
 
-            rows.forEach(function (row) {
-                const index = row.dataset.row;
-                const checkbox = document.querySelector('.wagon-check[data-row="' + index + '"]');
-                const tariff = document.querySelector('select[data-row="' + index + '"]');
-                const weight = document.querySelector('input.weight-input[data-row="' + index + '"]');
+            form.addEventListener('change', recalc);
+            form.addEventListener('input', recalc);
 
-                checkbox.addEventListener('change', function () {
-                    toggleRow(index, checkbox.checked);
+            const selectAll = document.getElementById('select-all');
+            if (selectAll) {
+                selectAll.addEventListener('change', function () {
+                    form.querySelectorAll('.wagon-check').forEach(cb => cb.checked = selectAll.checked);
                     recalc();
                 });
+            }
 
-                tariff.addEventListener('change', recalc);
-                weight.addEventListener('input', recalc);
-
-                const checked = checkbox.checked;
-                toggleRow(index, checked);
-            });
-
-            document.getElementById('select-all').addEventListener('change', function (event) {
-                rows.forEach(function (row) {
-                    const index = row.dataset.row;
-                    const checkbox = document.querySelector('.wagon-check[data-row="' + index + '"]');
-                    checkbox.checked = event.target.checked;
-                    toggleRow(index, checkbox.checked);
-                });
-
-                recalc();
-            });
-
+            // محاسبه اولیه به محض بارگذاری صفحه برای واگن‌های از پیش انتخاب‌شده
             recalc();
-        });
+        })();
     </script>
 @endpush

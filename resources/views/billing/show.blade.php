@@ -9,9 +9,15 @@
                 {{ $billing->statusLabel() }}
             </span>
         </h4>
-        <div class="d-flex gap-2">
-            <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-outline-secondary">
-                چاپ PDF
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary">
+                چاپ / دریافت PDF
+            </a>
+            <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary">
+                + ثبت درخواست جدید
+            </a>
+            <a href="{{ route('billing.create') }}" class="btn btn-outline-success">
+                + صدور صورتحساب بعدی
             </a>
             @if(auth()->user()->isAdmin() && ! $billing->isCancelled())
                 <form action="{{ route('billing.cancel', $billing) }}" method="POST"

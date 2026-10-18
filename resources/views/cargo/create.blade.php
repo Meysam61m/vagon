@@ -2,285 +2,650 @@
 @section('title', 'ثبت درخواست بارگیری')
 
 @section('content')
-    <h4 class="mb-3">ثبت درخواست بارگیری جدید</h4>
-
-    @php
-        $oldWagons = old('wagons');
-
-        if (! is_array($oldWagons) || $oldWagons === []) {
-            $oldWagons = [0 => ['number' => '', 'description' => '']];
-        }
-
-        // کلیدها دست نمی‌خورند تا پیام خطای هر ردیف به همان ردیف بچسبد
-        $nextWagonIndex = count($oldWagons) > 0 ? max(array_map('intval', array_keys($oldWagons))) + 1 : 1;
-    @endphp
-
-    <form method="POST" action="{{ route('cargo.store') }}" class="card p-4">
-        @csrf
-        <div class="row g-3">
-            <div class="col-md-6">
-                <label class="form-label" for="owner_id_input">صاحب کالا</label>
-                <select name="owner_id" id="owner_id_input" class="form-select @error('owner_id') is-invalid @enderror" required>
-                    <option value="">انتخاب کنید…</option>
-                    @foreach($owners as $owner)
-                        <option value="{{ $owner->id }}" @selected((string) old('owner_id') === (string) $owner->id)>
-                            {{ $owner->name }}
-                        </option>
-                    @endforeach
-                </select>
-                @error('owner_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-            <div class="col-md-6">
-                <label class="form-label" for="representative_id">نماینده</label>
-                <select name="representative_id" id="representative_id"
-                        class="form-select @error('representative_id') is-invalid @enderror" required>
-                    <option value="">ابتدا صاحب کالا را انتخاب کنید…</option>
-                    @foreach($representatives as $representative)
-                        <option value="{{ $representative->id }}"
-                                data-owners="{{ $representative->owners->pluck('id')->implode(',') }}"
-                                @selected((string) old('representative_id') === (string) $representative->id)>
-                            {{ $representative->name }}
-                        </option>
-                    @endforeach
-                </select>
-                @error('representative_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="request_date_shamsi">تاریخ درخواست (شمسی)</label>
-                <input type="text" name="request_date_shamsi" id="request_date_shamsi"
-                       value="{{ old('request_date_shamsi', $requestDateShamsi) }}"
-                       class="form-control jalali-datepicker @error('request_date_shamsi') is-invalid @enderror"
-                       autocomplete="off" placeholder="۱۴۰۴/۰۷/۲۵" required>
-                @error('request_date_shamsi')<div class="invalid-feedback">{{ $message }}</div>@enderror
-            </div>
-            <div class="col-12">
-                <label class="form-label">واگن‌ها و شرح کالا <span class="text-danger">*</span></label>
-                <div class="text-muted small mb-2">
-                    شرح کالا برای هر واگن الزامی است. اگر چند واگن همان کالا را دارند، شرح کالای ردیف بعدی به‌صورت خودکار
-                    از ردیف قبل پر می‌شود و در صورت نیاز می‌توانید تغییرش دهید.
-                </div>
-                <div class="row g-2 mb-1 text-muted small d-none d-md-flex">
-                    <div class="col-md-4">شماره واگن</div>
-                    <div class="col-md-6">شرح کالا</div>
-                    <div class="col-md-2"></div>
-                </div>
-                <div id="wagon-list">
-                    @foreach($oldWagons as $index => $wagon)
-                        <div class="row g-2 mb-2 wagon-row">
-                            <div class="col-md-4">
-                                <input type="text" name="wagons[{{ $index }}][number]"
-                                       data-wagon-number
-                                       class="form-control @error('wagons.'.$index.'.number') is-invalid @enderror"
-                                       value="{{ $wagon['number'] ?? '' }}" placeholder="مثلاً ۵۶۳۱۲۴"
-                                       autocomplete="off">
-                                @error('wagons.'.$index.'.number')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="col-md-6">
-                                <input type="text" name="wagons[{{ $index }}][description]"
-                                       data-wagon-description
-                                       class="form-control @error('wagons.'.$index.'.description') is-invalid @enderror"
-                                       value="{{ $wagon['description'] ?? '' }}" placeholder="مثلاً گندم"
-                                       autocomplete="off">
-                                @error('wagons.'.$index.'.description')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="col-md-2">
-                                <button type="button" class="btn btn-outline-danger w-100 remove-wagon">حذف</button>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-                <button type="button" id="add-wagon" class="btn btn-sm btn-outline-secondary">افزودن واگن</button>
-                @error('wagons')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                @error('wagons.*.number')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-                @error('wagons.*.description')<div class="text-danger small mt-1">{{ $message }}</div>@enderror
-            </div>
-            <div class="col-12">
-                <label class="form-label" for="notes">توضیحات</label>
-                <textarea name="notes" id="notes" class="form-control" rows="2">{{ old('notes') }}</textarea>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-1">ثبت درخواست بارگیری جدید</h4>
+            <div class="text-muted small">
+                تیپ عملیات ستاد: انتخاب صاحب کالا (نماینده به‌صورت خودکار فیلتر و انتخاب می‌شود) ← ورود تکی یا گروهی واگن‌ها ← ثبت درخواست یا صدور مستقیم صورتحساب در یک مرحله.
             </div>
         </div>
-        <div class="mt-4 d-flex gap-2">
-            <button class="btn btn-primary" type="submit">ثبت درخواست</button>
-            <a href="{{ route('cargo.index') }}" class="btn btn-secondary">انصراف</a>
+        <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">لیست درخواست‌ها</a>
+    </div>
+
+    <datalist id="common-cargo-descriptions">
+        <option value="میلگرد"></option>
+        <option value="کلاف"></option>
+        <option value="ناودونی"></option>
+        <option value="نبشی"></option>
+        <option value="تسمه-ناودونی"></option>
+        <option value="سود پرک"></option>
+        <option value="سیمان جامبو"></option>
+        <option value="کاشی"></option>
+        <option value="کاشی-چینی"></option>
+        <option value="شیر خشک"></option>
+        <option value="سنگ"></option>
+        <option value="سنگ ساختمانی"></option>
+        <option value="کروم"></option>
+        <option value="جوش شیرین"></option>
+        <option value="رزین"></option>
+        <option value="ام دی اف"></option>
+        <option value="شیشه"></option>
+        <option value="سوله"></option>
+        <option value="کابل"></option>
+    </datalist>
+
+    <form method="POST" action="{{ route('cargo.store') }}" class="card p-4" id="cargo-create-form">
+        @csrf
+        <input type="hidden" name="quick_action" id="quick_action_input" value="{{ old('quick_action', 'save_only') }}">
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label" for="owner_id_input">صاحب کالا <span class="text-danger">*</span></label>
+                <select name="owner_id" id="owner_id_input" class="form-select" required>
+                    <option value="">انتخاب کنید…</option>
+                    @foreach($owners as $owner)
+                        <option value="{{ $owner->id }}" @selected(old('owner_id') == $owner->id)>{{ $owner->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-1" for="representative_id">نماینده <span class="text-danger">*</span></label>
+                    <span class="badge bg-light text-secondary border small" id="rep-auto-hint">فیلتر خودکار بر اساس صاحب کالا</span>
+                </div>
+                <select name="representative_id" id="representative_id" class="form-select" required>
+                    <option value="">انتخاب کنید…</option>
+                    @foreach($representatives as $rep)
+                        <option value="{{ $rep->id }}"
+                                data-owners="{{ $rep->owners->pluck('id')->implode(',') }}"
+                                @selected(old('representative_id') == $rep->id)>
+                            {{ $rep->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label" for="request_date_shamsi_input">تاریخ درخواست (شمسی) <span class="text-danger">*</span></label>
+                <input type="text" name="request_date_shamsi" id="request_date_shamsi_input"
+                       value="{{ old('request_date_shamsi', $requestDateShamsi) }}"
+                       placeholder="مثلاً ۱۴۰۵/۰۱/۲۰"
+                       class="form-control jalali-datepicker" autocomplete="off" required>
+            </div>
+        </div>
+
+        <hr class="my-4">
+
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div>
+                <h6 class="mb-0">
+                    واگن‌ها و شرح کالا
+                    <span class="badge bg-primary ms-1" id="wagon-counter-badge">۱ واگن</span>
+                </h6>
+                <small class="text-muted">
+                    شرح کالا از واگن قبلی پیشنهاد می‌شود. با زدن کلید <kbd>Enter</kbd> در آخرین ردیف، واگن بعدی خودکار اضافه می‌شود.
+                </small>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-success" id="toggle-bulk-paste">
+                    + ورود گروهی شماره‌واگن‌ها (کپی از اکسل/متن)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="apply-first-desc-all" title="کپی شرح کالای ردیف اول برای تمام واگن‌ها">
+                    کپی شرح ردیف اول به همه
+                </button>
+                <button type="button" id="add-wagon" class="btn btn-sm btn-outline-primary">+ افزودن واگن (Enter)</button>
+            </div>
+        </div>
+
+        {{-- پنل ورود گروهی شماره‌واگن‌ها برای حذف کلیک‌های تکراری در محموله‌های چندواگنه --}}
+        <div id="bulk-paste-panel" class="card bg-light border-success p-3 mb-3 d-none">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold mb-1" for="bulk-wagon-numbers">
+                        لیست شماره‌واگن‌ها (هر خط، ویرگول، فاصله یا کپی مستقیم ستون اکسل)
+                    </label>
+                    <textarea id="bulk-wagon-numbers" class="form-control form-control-sm" rows="3"
+                              placeholder="مثلاً:&#10;663532&#10;651329&#10;661139"></textarea>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold mb-1" for="bulk-cargo-description">
+                        شرح کالای مشترک این واگن‌ها
+                    </label>
+                    <input type="text" id="bulk-cargo-description" class="form-control form-control-sm"
+                           list="common-cargo-descriptions"
+                           placeholder="مثلاً میلگرد، کاشی، سود پرک…">
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="button" id="apply-bulk-wagons" class="btn btn-sm btn-success">
+                        افزودن یکجا به جدول
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="wagon-rows">
+            @php($oldWagons = old('wagons', [['number' => '', 'description' => '']]))
+            @foreach($oldWagons as $index => $w)
+                <div class="row g-2 mb-2 wagon-row align-items-start">
+                    <div class="col-auto pt-2 text-muted small fw-bold wagon-row-num" style="min-width: 28px;">
+                        {{ $index + 1 }}.
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text"
+                               name="wagons[{{ $index }}][number]"
+                               value="{{ $w['number'] ?? '' }}"
+                               class="form-control @error('wagons.'.$index.'.number') is-invalid @enderror"
+                               data-wagon-number
+                               placeholder="شماره واگن (مثلاً 663532)"
+                               required>
+                        @error('wagons.'.$index.'.number')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-md-5">
+                        <input type="text"
+                               name="wagons[{{ $index }}][description]"
+                               value="{{ $w['description'] ?? '' }}"
+                               class="form-control @error('wagons.'.$index.'.description') is-invalid @enderror"
+                               data-wagon-description
+                               list="common-cargo-descriptions"
+                               placeholder="شرح کالا (اجباری — مثلاً میلگرد، کاشی)"
+                               required>
+                        @error('wagons.'.$index.'.description')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-outline-danger w-100 remove-wagon" tabindex="-1">حذف</button>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+
+        <hr class="my-4">
+
+        {{-- بخش بهینه‌سازی عملیات یک‌مرحله‌ای (ثبت هم‌زمان تعرفه/وزن و صدور فوری صورتحساب) --}}
+        <div class="card border-primary bg-light p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div>
+                    <h6 class="mb-0 text-primary">
+                        عملیات سریع یک‌مرحله‌ای: ثبت بارگیری و صدور هم‌زمان صورتحساب (اختیاری)
+                    </h6>
+                    <small class="text-muted">
+                        اگر تعرفه و وزن واگن‌ها مشخص است (مثلاً ۶۵ تن کامل طبق قرارداد)، همین‌جا انتخاب کنید تا بدون نیاز به مراجعه مجدد به صفحات «ثبت بارگیری» و «صدور صورتحساب»، کار در یک مرحله تمام شود.
+                    </small>
+                </div>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="quick-tariff-suggest-badge" style="display: none;">
+                    پیشنهاد خودکار از روی شرح کالا
+                </span>
+            </div>
+
+            <div class="row g-3 align-items-end">
+                <div class="col-md-7">
+                    <label class="form-label small fw-bold mb-1" for="quick_tariff_id">تعرفه بارگیری (برای اعمال به همه واگن‌های این درخواست)</label>
+                    <select name="quick_tariff_id" id="quick_tariff_id" class="form-select form-select-sm">
+                        <option value="">— فقط ثبت درخواست (بارگیری در مرحله بعد ثبت شود) —</option>
+                        @foreach($tariffs ?? [] as $tariff)
+                            <option value="{{ $tariff->id }}"
+                                    data-capacity="{{ $tariff->capacity }}"
+                                    data-code="{{ $tariff->code }}"
+                                    data-title="{{ $tariff->title }}"
+                                    @selected(old('quick_tariff_id') == $tariff->id)>
+                                {{ $tariff->title }} — ظرفیت قرارداد: {{ $tariff->capacity }} تن — نرخ کتابچه: {{ number_format($tariff->rate) }} ریال
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold mb-1" for="quick_weight">وزن بارگیری هر واگن (تن)</label>
+                    <div class="input-group input-group-sm">
+                        <input type="number" step="0.01" min="0.01" max="200"
+                               name="quick_weight" id="quick_weight"
+                               value="{{ old('quick_weight') }}"
+                               class="form-control"
+                               placeholder="خودکار = ظرفیت قرارداد">
+                        <button type="button" class="btn btn-outline-secondary" id="fill-contract-capacity-btn" title="قرار دادن ظرفیت کامل قرارداد">
+                            ظرفیت کامل
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="clear-quick-tariff">
+                        پاک کردن تعرفه
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="notes_input">توضیحات</label>
+            <textarea name="notes" id="notes_input" class="form-control" rows="2" placeholder="توضیحات تکمیلی در صورت نیاز…">{{ old('notes') }}</textarea>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button class="btn btn-primary" type="submit" data-submit-action="save_only">
+                ثبت درخواست بارگیری
+            </button>
+            <button class="btn btn-info text-dark fw-semibold" type="submit" data-submit-action="save_and_load" id="btn-save-and-load">
+                ثبت درخواست + ثبت بارگیری هم‌زمان
+            </button>
+            <button class="btn btn-success fw-semibold" type="submit" data-submit-action="save_load_and_bill" id="btn-save-load-bill">
+                ثبت کامل و صدور فوری صورتحساب (۱ کلیک)
+            </button>
+            <a href="{{ route('cargo.index') }}" class="btn btn-secondary ms-auto">انصراف</a>
         </div>
     </form>
 @endsection
 
 @push('scripts')
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const wagonList = document.getElementById('wagon-list');
-            let wagonIndex = {{ $nextWagonIndex }};
+        (function () {
+            const container = document.getElementById('wagon-rows');
+            const addBtn = document.getElementById('add-wagon');
+            const ownerSelect = document.getElementById('owner_id_input');
+            const repSelect = document.getElementById('representative_id');
+            const repHint = document.getElementById('rep-auto-hint');
+            const wagonCounterBadge = document.getElementById('wagon-counter-badge');
+            const quickTariffSelect = document.getElementById('quick_tariff_id');
+            const quickWeightInput = document.getElementById('quick_weight');
+            const quickSuggestBadge = document.getElementById('quick-tariff-suggest-badge');
+            const quickActionInput = document.getElementById('quick_action_input');
 
-            function rows() {
-                return Array.from(wagonList.querySelectorAll('.wagon-row'));
+            // ۱. فیلتر و انتخاب خودکار نماینده بر اساس صاحب کالا
+            const allRepOptions = Array.from(repSelect.querySelectorAll('option[data-owners]')).map(opt => ({
+                value: opt.value,
+                label: opt.textContent.trim(),
+                owners: (opt.getAttribute('data-owners') || '').split(',').map(s => s.trim()).filter(Boolean)
+            }));
+
+            function syncRepresentatives(preserveSelected) {
+                const ownerId = ownerSelect.value;
+                const currentRep = preserveSelected ? repSelect.value : '';
+
+                while (repSelect.options.length > 1) {
+                    repSelect.remove(1);
+                }
+
+                const matching = ownerId
+                    ? allRepOptions.filter(r => r.owners.includes(ownerId))
+                    : allRepOptions;
+
+                matching.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.value;
+                    opt.textContent = r.label;
+                    opt.setAttribute('data-owners', r.owners.join(','));
+                    repSelect.appendChild(opt);
+                });
+
+                if (currentRep && matching.some(r => r.value === currentRep)) {
+                    repSelect.value = currentRep;
+                } else if (ownerId && matching.length === 1) {
+                    repSelect.value = matching[0].value;
+                    if (repHint) {
+                        repHint.textContent = 'نماینده انحصاری خودکار انتخاب شد';
+                        repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
+                    }
+                } else if (ownerId) {
+                    if (repHint) {
+                        repHint.textContent = matching.length + ' نماینده مرتبط با این صاحب کالا';
+                        repHint.className = 'badge bg-info-subtle text-dark border small';
+                    }
+                } else if (repHint) {
+                    repHint.textContent = 'فیلتر خودکار بر اساس صاحب کالا';
+                    repHint.className = 'badge bg-light text-secondary border small';
+                }
             }
 
-            /**
-             * شرح کالای نزدیک‌ترین ردیف قبل که مقدار دارد.
-             */
-            function previousDescription(row) {
-                let cursor = row.previousElementSibling;
+            ownerSelect.addEventListener('change', function () {
+                syncRepresentatives(false);
+            });
+            syncRepresentatives(true);
 
-                while (cursor) {
-                    const input = cursor.querySelector('[data-wagon-description]');
+            // ۲. شماره‌گذاری ردیف‌ها و شمارنده واگن‌ها
+            function updateRowNumbersAndCount() {
+                const rows = container.querySelectorAll('.wagon-row');
+                rows.forEach((row, i) => {
+                    const numEl = row.querySelector('.wagon-row-num');
+                    if (numEl) {
+                        numEl.textContent = (i + 1) + '.';
+                    }
+                });
+                if (wagonCounterBadge) {
+                    wagonCounterBadge.textContent = rows.length + ' واگن';
+                }
+            }
 
+            // ۳. پیشنهاد خودکار تعرفه از روی شرح کالا
+            const keywordCodeMap = [
+                { code: 'T-1405-01', keywords: ['میلگرد', 'کلاف', 'ناودونی', 'نبشی', 'تسمه', 'سوله', 'شیشه', 'آهن', 'ورق', 'تیرآهن'] },
+                { code: 'T-1405-02', keywords: ['سود پرک', 'سودپرک'] },
+                { code: 'T-1405-03', keywords: ['سیمان', 'جامبو'] },
+                { code: 'T-1405-04', keywords: ['کاشی', 'چینی', 'سرامیک', 'شیر خشک', 'شیرخشک', 'آبمیوه', 'ابمیوه', 'کابل'] },
+                { code: 'T-1405-05', keywords: ['سنگ ساختمانی', 'سنگ'] },
+                { code: 'T-1405-06', keywords: ['کروم', 'جوش شیرین'] },
+                { code: 'T-1405-08', keywords: ['ام دی اف', 'MDF', 'mdf', 'نئوپان'] },
+                { code: 'T-1405-09', keywords: ['رزین'] }
+            ];
+
+            function suggestQuickTariffFromDescription(descText) {
+                if (!quickTariffSelect || quickTariffSelect.dataset.userSelected === '1') {
+                    return;
+                }
+                const norm = (descText || '').trim();
+                if (!norm) {
+                    return;
+                }
+                for (const item of keywordCodeMap) {
+                    if (item.keywords.some(kw => norm.includes(kw))) {
+                        const opt = Array.from(quickTariffSelect.options).find(o => o.dataset.code === item.code);
+                        if (opt) {
+                            quickTariffSelect.value = opt.value;
+                            if (opt.dataset.capacity && (!quickWeightInput.value || quickWeightInput.dataset.autoCapacity === '1')) {
+                                quickWeightInput.value = opt.dataset.capacity;
+                                quickWeightInput.dataset.autoCapacity = '1';
+                            }
+                            if (quickSuggestBadge) {
+                                quickSuggestBadge.style.display = 'inline-block';
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (quickTariffSelect) {
+                quickTariffSelect.addEventListener('change', function () {
+                    quickTariffSelect.dataset.userSelected = quickTariffSelect.value ? '1' : '0';
+                    const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
+                    if (opt && opt.dataset.capacity) {
+                        quickWeightInput.value = opt.dataset.capacity;
+                        quickWeightInput.dataset.autoCapacity = '1';
+                    }
+                });
+            }
+
+            const fillCapacityBtn = document.getElementById('fill-contract-capacity-btn');
+            if (fillCapacityBtn && quickTariffSelect && quickWeightInput) {
+                fillCapacityBtn.addEventListener('click', function () {
+                    const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
+                    if (opt && opt.dataset.capacity) {
+                        quickWeightInput.value = opt.dataset.capacity;
+                    } else {
+                        quickWeightInput.value = '65';
+                    }
+                });
+            }
+
+            const clearQuickBtn = document.getElementById('clear-quick-tariff');
+            if (clearQuickBtn && quickTariffSelect && quickWeightInput) {
+                clearQuickBtn.addEventListener('click', function () {
+                    quickTariffSelect.value = '';
+                    quickTariffSelect.dataset.userSelected = '0';
+                    quickWeightInput.value = '';
+                    if (quickSuggestBadge) {
+                        quickSuggestBadge.style.display = 'none';
+                    }
+                });
+            }
+
+            function getPreviousDescription(row) {
+                let prev = row ? row.previousElementSibling : container.lastElementChild;
+                while (prev) {
+                    const input = prev.querySelector('input[data-wagon-description]');
                     if (input && input.value.trim() !== '') {
                         return input.value;
                     }
-
-                    cursor = cursor.previousElementSibling;
+                    prev = prev.previousElementSibling;
                 }
-
                 return '';
             }
 
-            /**
-             * شرح کالا فقط برای ردیفی اجباری است که شماره واگن دارد؛
-             * ردیف‌های خالی اضافی جلوی ارسال فرم را نمی‌گیرند.
-             * پیام اعتبارسنجی هم فارسی و اختصاصی همین فیلد است.
-             */
-            function refreshRow(row) {
-                const number = row.querySelector('[data-wagon-number]');
-                const description = row.querySelector('[data-wagon-description]');
-
-                if (! number || ! description) {
+            function propagateSuggestionFrom(row) {
+                const sourceInput = row.querySelector('input[data-wagon-description]');
+                if (!sourceInput) {
                     return;
                 }
+                const value = sourceInput.value;
+                suggestQuickTariffFromDescription(value);
 
-                const needed = number.value.trim() !== '';
-                const empty = description.value.trim() === '';
-
-                description.required = needed;
-                description.placeholder = needed ? 'مثلاً گندم (الزامی)' : 'مثلاً گندم';
-                description.setCustomValidity(
-                    needed && empty ? 'شرح کالا برای این واگن الزامی است.' : ''
-                );
+                let next = row.nextElementSibling;
+                while (next) {
+                    const nextInput = next.querySelector('input[data-wagon-description]');
+                    if (!nextInput) {
+                        break;
+                    }
+                    if (nextInput.dataset.autoSuggested === '1' || nextInput.value.trim() === '') {
+                        nextInput.value = value;
+                        nextInput.dataset.autoSuggested = value.trim() !== '' ? '1' : '0';
+                    } else {
+                        break;
+                    }
+                    next = next.nextElementSibling;
+                }
             }
 
-            function buildRow(index) {
+            function bindDescriptionInput(row) {
+                const descInput = row.querySelector('input[data-wagon-description]');
+                const numInput = row.querySelector('input[data-wagon-number]');
+
+                if (descInput) {
+                    descInput.addEventListener('input', function () {
+                        descInput.dataset.autoSuggested = '0';
+                        propagateSuggestionFrom(row);
+                    });
+                }
+
+                // با زدن Enter در شماره واگن یا شرح کالا، ردیف بعدی خودکار ساخته و فوکوس می‌شود
+                [numInput, descInput].forEach(inp => {
+                    if (!inp) return;
+                    inp.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (inp === numInput && descInput && descInput.value.trim() === '') {
+                                descInput.focus();
+                                return;
+                            }
+                            const nextRow = row.nextElementSibling;
+                            if (nextRow) {
+                                const nextNum = nextRow.querySelector('input[data-wagon-number]');
+                                if (nextNum) nextNum.focus();
+                            } else {
+                                const createdRow = createWagonRow('', '');
+                                const newNum = createdRow.querySelector('input[data-wagon-number]');
+                                if (newNum) newNum.focus();
+                            }
+                        }
+                    });
+                });
+            }
+
+            container.querySelectorAll('.wagon-row').forEach(bindDescriptionInput);
+            updateRowNumbersAndCount();
+
+            let nextIndex = container.querySelectorAll('.wagon-row').length;
+
+            function createWagonRow(wagonNumber, cargoDescription) {
+                const index = nextIndex++;
+                const suggestedDescription = cargoDescription || getPreviousDescription(null);
                 const row = document.createElement('div');
-                row.className = 'row g-2 mb-2 wagon-row';
+                row.className = 'row g-2 mb-2 wagon-row align-items-start';
 
-                const numberColumn = document.createElement('div');
-                numberColumn.className = 'col-md-4';
+                const numCol = document.createElement('div');
+                numCol.className = 'col-auto pt-2 text-muted small fw-bold wagon-row-num';
+                numCol.style.minWidth = '28px';
 
+                const colNumber = document.createElement('div');
+                colNumber.className = 'col-md-4';
                 const numberInput = document.createElement('input');
                 numberInput.type = 'text';
                 numberInput.name = 'wagons[' + index + '][number]';
                 numberInput.className = 'form-control';
-                numberInput.placeholder = 'مثلاً ۵۶۳۱۲۴';
-                numberInput.autocomplete = 'off';
                 numberInput.setAttribute('data-wagon-number', '');
-                numberColumn.appendChild(numberInput);
+                numberInput.placeholder = 'شماره واگن (مثلاً 663532)';
+                numberInput.required = true;
+                numberInput.value = wagonNumber || '';
+                colNumber.appendChild(numberInput);
 
-                const descriptionColumn = document.createElement('div');
-                descriptionColumn.className = 'col-md-6';
+                const colDesc = document.createElement('div');
+                colDesc.className = 'col-md-5';
+                const descInput = document.createElement('input');
+                descInput.type = 'text';
+                descInput.name = 'wagons[' + index + '][description]';
+                descInput.className = 'form-control';
+                descInput.setAttribute('data-wagon-description', '');
+                descInput.setAttribute('list', 'common-cargo-descriptions');
+                descInput.placeholder = 'شرح کالا (اجباری — مثلاً میلگرد، کاشی)';
+                descInput.required = true;
+                descInput.value = suggestedDescription;
+                descInput.dataset.autoSuggested = (!cargoDescription && suggestedDescription !== '') ? '1' : '0';
+                colDesc.appendChild(descInput);
 
-                const descriptionInput = document.createElement('input');
-                descriptionInput.type = 'text';
-                descriptionInput.name = 'wagons[' + index + '][description]';
-                descriptionInput.className = 'form-control';
-                descriptionInput.placeholder = 'مثلاً گندم';
-                descriptionInput.autocomplete = 'off';
-                descriptionInput.setAttribute('data-wagon-description', '');
-                descriptionColumn.appendChild(descriptionInput);
+                const colBtn = document.createElement('div');
+                colBtn.className = 'col-md-2';
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-outline-danger w-100 remove-wagon';
+                removeBtn.tabIndex = -1;
+                removeBtn.textContent = 'حذف';
+                colBtn.appendChild(removeBtn);
 
-                const actionsColumn = document.createElement('div');
-                actionsColumn.className = 'col-md-2';
+                row.appendChild(numCol);
+                row.appendChild(colNumber);
+                row.appendChild(colDesc);
+                row.appendChild(colBtn);
+                container.appendChild(row);
 
-                const removeButton = document.createElement('button');
-                removeButton.type = 'button';
-                removeButton.className = 'btn btn-outline-danger w-100 remove-wagon';
-                removeButton.textContent = 'حذف';
-                actionsColumn.appendChild(removeButton);
-
-                row.appendChild(numberColumn);
-                row.appendChild(descriptionColumn);
-                row.appendChild(actionsColumn);
-
-                return { row: row, number: numberInput, description: descriptionInput };
+                bindDescriptionInput(row);
+                updateRowNumbersAndCount();
+                if (suggestedDescription) {
+                    suggestQuickTariffFromDescription(suggestedDescription);
+                }
+                return row;
             }
 
-            document.getElementById('add-wagon').addEventListener('click', function () {
-                const existing = rows();
-                const lastRow = existing.length > 0 ? existing[existing.length - 1] : null;
-                const lastDescription = lastRow ? lastRow.querySelector('[data-wagon-description]') : null;
-
-                // پیشنهاد شرح کالا: اول از ردیف آخر، بعد از نزدیک‌ترین ردیف قبلی که مقدار دارد
-                const suggested = lastDescription && lastDescription.value.trim() !== ''
-                    ? lastDescription.value
-                    : (lastRow ? previousDescription(lastRow) : '');
-
-                const created = buildRow(wagonIndex++);
-
-                if (suggested !== '') {
-                    created.description.value = suggested;
-                    created.description.dataset.autoFilled = '1';
-                }
-
-                wagonList.appendChild(created.row);
-                refreshRow(created.row);
-                created.number.focus();
+            addBtn.addEventListener('click', function () {
+                const row = createWagonRow('', '');
+                const numInput = row.querySelector('input[data-wagon-number]');
+                if (numInput) numInput.focus();
             });
 
-            wagonList.addEventListener('click', function (event) {
-                if (!event.target.classList.contains('remove-wagon')) {
-                    return;
-                }
-
-                if (rows().length > 1) {
-                    event.target.closest('.wagon-row').remove();
+            container.addEventListener('click', function (e) {
+                if (e.target.classList.contains('remove-wagon')) {
+                    const rows = container.querySelectorAll('.wagon-row');
+                    if (rows.length > 1) {
+                        e.target.closest('.wagon-row').remove();
+                        updateRowNumbersAndCount();
+                    }
                 }
             });
 
-            // با پر شدن شماره واگن، شرح کالای همان ردیف اجباری می‌شود
-            wagonList.addEventListener('input', function (event) {
-                const row = event.target.closest('.wagon-row');
+            // ۴. کپی شرح کالای ردیف اول به همه ردیف‌ها با ۱ کلیک
+            const applyFirstDescBtn = document.getElementById('apply-first-desc-all');
+            if (applyFirstDescBtn) {
+                applyFirstDescBtn.addEventListener('click', function () {
+                    const firstDesc = container.querySelector('input[data-wagon-description]');
+                    if (!firstDesc || !firstDesc.value.trim()) {
+                        return;
+                    }
+                    const val = firstDesc.value.trim();
+                    container.querySelectorAll('input[data-wagon-description]').forEach(inp => {
+                        inp.value = val;
+                    });
+                    suggestQuickTariffFromDescription(val);
+                });
+            }
 
-                if (!row) {
-                    return;
-                }
+            // ۵. ورود گروهی شماره‌واگن‌ها از اکسل یا لیست متنی
+            const toggleBulkBtn = document.getElementById('toggle-bulk-paste');
+            const bulkPanel = document.getElementById('bulk-paste-panel');
+            const applyBulkBtn = document.getElementById('apply-bulk-wagons');
+            const bulkNumbersInput = document.getElementById('bulk-wagon-numbers');
+            const bulkDescInput = document.getElementById('bulk-cargo-description');
 
-                if (event.target.matches('[data-wagon-number]')) {
-                    refreshRow(row);
-                    return;
-                }
+            if (toggleBulkBtn && bulkPanel) {
+                toggleBulkBtn.addEventListener('click', function () {
+                    bulkPanel.classList.toggle('d-none');
+                    if (!bulkPanel.classList.contains('d-none') && bulkNumbersInput) {
+                        bulkNumbersInput.focus();
+                    }
+                });
+            }
 
-                if (!event.target.matches('[data-wagon-description]')) {
-                    return;
-                }
+            if (applyBulkBtn && bulkNumbersInput) {
+                applyBulkBtn.addEventListener('click', function () {
+                    const raw = bulkNumbersInput.value || '';
+                    const tokens = raw
+                        .split(/[\r\n,،;\t\s]+/)
+                        .map(s => s.trim())
+                        .filter(Boolean);
 
-                // این ردیف را دستی ویرایش کرده‌اند؛ دیگر خودکار بازنویسی نشود
-                delete event.target.dataset.autoFilled;
-                refreshRow(row);
-
-                let next = row.nextElementSibling;
-
-                while (next) {
-                    const nextInput = next.querySelector('[data-wagon-description]');
-
-                    if (!nextInput) {
-                        break;
+                    const uniqueNumbers = Array.from(new Set(tokens));
+                    if (uniqueNumbers.length === 0) {
+                        return;
                     }
 
-                    // اولین ردیفی که کاربر خودش شرحش را نوشته، مرز گروه است
-                    if (!nextInput.dataset.autoFilled && nextInput.value.trim() !== '') {
-                        break;
-                    }
+                    const firstExistingDesc = container.querySelector('input[data-wagon-description]');
+                    const commonDesc = (bulkDescInput && bulkDescInput.value.trim())
+                        || (firstExistingDesc && firstExistingDesc.value.trim())
+                        || '';
 
-                    if (nextInput.value.trim() === '' || nextInput.dataset.autoFilled) {
-                        nextInput.value = event.target.value;
-                        nextInput.dataset.autoFilled = '1';
-                        refreshRow(next);
-                    }
+                    // اگر ردیف اول خالی است، همان را پر می‌کنیم
+                    const existingRows = Array.from(container.querySelectorAll('.wagon-row'));
+                    const existingNumbers = new Set();
+                    existingRows.forEach(r => {
+                        const n = r.querySelector('input[data-wagon-number]');
+                        if (n && n.value.trim()) {
+                            existingNumbers.add(n.value.trim());
+                        }
+                    });
 
-                    next = next.nextElementSibling;
-                }
+                    let firstEmptyRow = existingRows.find(r => {
+                        const n = r.querySelector('input[data-wagon-number]');
+                        return n && n.value.trim() === '';
+                    });
+
+                    uniqueNumbers.forEach(num => {
+                        if (existingNumbers.has(num)) {
+                            return;
+                        }
+                        existingNumbers.add(num);
+
+                        if (firstEmptyRow) {
+                            const nInp = firstEmptyRow.querySelector('input[data-wagon-number]');
+                            const dInp = firstEmptyRow.querySelector('input[data-wagon-description]');
+                            if (nInp) nInp.value = num;
+                            if (dInp && commonDesc && !dInp.value.trim()) dInp.value = commonDesc;
+                            firstEmptyRow = null;
+                        } else {
+                            createWagonRow(num, commonDesc);
+                        }
+                    });
+
+                    if (commonDesc) {
+                        suggestQuickTariffFromDescription(commonDesc);
+                    }
+                    bulkNumbersInput.value = '';
+                    bulkPanel.classList.add('d-none');
+                    updateRowNumbersAndCount();
+                });
+            }
+
+            // ۶. دکمه‌های ثبت چندمنظوره
+            document.querySelectorAll('button[data-submit-action]').forEach(btn => {
+                btn.addEventListener('click', function (e) {
+                    const action = btn.getAttribute('data-submit-action') || 'save_only';
+                    if (quickActionInput) {
+                        quickActionInput.value = action;
+                    }
+                    if ((action === 'save_and_load' || action === 'save_load_and_bill') && quickTariffSelect && !quickTariffSelect.value) {
+                        e.preventDefault();
+                        quickTariffSelect.focus();
+                        alert('برای ثبت هم‌زمان بارگیری یا صدور فوری صورتحساب، لطفاً ابتدا «تعرفه بارگیری» را از کادر آبی‌رنگ انتخاب کنید.');
+                    }
+                });
             });
-
-            // وضعیت اولیه ردیف‌ها (بعد از خطای اعتبارسنجی یا مقدارهای قبلی)
-            rows().forEach(refreshRow);
-        });
+        })();
     </script>
 @endpush

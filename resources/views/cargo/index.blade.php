@@ -2,84 +2,125 @@
 @section('title', 'درخواست‌های بارگیری')
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="mb-0">درخواست‌های بارگیری</h4>
-        <a href="{{ route('cargo.create') }}" class="btn btn-primary">ثبت درخواست جدید</a>
+        <div class="d-flex gap-2">
+            <a href="{{ route('billing.create') }}" class="btn btn-outline-success">صدور صورتحساب</a>
+            <a href="{{ route('cargo.create') }}" class="btn btn-primary">+ ثبت درخواست جدید</a>
+        </div>
     </div>
 
     <form method="GET" class="card p-3 mb-3">
         <div class="row g-2 align-items-end">
             <div class="col-md-4">
-                <label class="form-label" for="search">جستجو</label>
-                <input type="text" name="search" id="search" value="{{ request('search') }}" class="form-control"
-                       placeholder="شماره درخواست، نام صاحب کالا یا شماره واگن">
+                <label class="form-label" for="cargo_search">جستجو (شماره درخواست، شماره واگن، شرح کالا، صاحب کالا)</label>
+                <input type="text" name="search" id="cargo_search" value="{{ request('search') }}" class="form-control">
             </div>
             <div class="col-md-3">
-                <label class="form-label" for="owner_id">صاحب کالا</label>
-                <select name="owner_id" id="owner_id" class="form-select">
+                <label class="form-label" for="cargo_owner_id">صاحب کالا</label>
+                <select name="owner_id" id="cargo_owner_id" class="form-select">
                     <option value="">همه</option>
                     @foreach($owners as $owner)
-                        <option value="{{ $owner->id }}" @selected((string) request('owner_id') === (string) $owner->id)>
-                            {{ $owner->name }}
-                        </option>
+                        <option value="{{ $owner->id }}" @selected((int) request('owner_id') === $owner->id)>{{ $owner->name }}</option>
                     @endforeach
                 </select>
             </div>
             <div class="col-md-3">
-                <label class="form-label" for="status">وضعیت</label>
-                <select name="status" id="status" class="form-select">
+                <label class="form-label" for="cargo_status">وضعیت</label>
+                <select name="status" id="cargo_status" class="form-select">
                     <option value="">همه</option>
-                    @foreach($statusLabels as $value => $label)
-                        <option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>
+                    @foreach($statusLabels as $key => $label)
+                        <option value="{{ $key }}" @selected(request('status') === $key)>{{ $label }}</option>
                     @endforeach
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button class="btn btn-outline-primary" type="submit">فیلتر</button>
-                <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary">پاک کردن</a>
+            <div class="col-md-2 d-grid">
+                <button class="btn btn-secondary" type="submit">فیلتر</button>
             </div>
         </div>
     </form>
 
-    <div class="table-responsive">
-        <table class="table table-bordered table-hover bg-white">
-            <thead>
-            <tr>
-                <th>شماره درخواست</th>
-                <th>تاریخ</th>
-                <th>صاحب کالا</th>
-                <th>نماینده</th>
-                <th>تعداد واگن</th>
-                <th>وضعیت</th>
-                <th>عملیات</th>
-            </tr>
-            </thead>
-            <tbody>
-            @forelse($cargoRequests as $cargoRequest)
-                @php
-                    $badge = match ($cargoRequest->status) {
-                        'billed' => 'bg-success',
-                        'loaded' => 'bg-info text-dark',
-                        default => 'bg-warning text-dark',
-                    };
-                @endphp
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
                 <tr>
-                    <td>{{ $cargoRequest->request_number }}</td>
-                    <td>{{ $cargoRequest->request_date_shamsi }}</td>
-                    <td>{{ $cargoRequest->owner?->name ?? '—' }}</td>
-                    <td>{{ $cargoRequest->representative?->name ?? '—' }}</td>
-                    <td>{{ $cargoRequest->wagons->count() }}</td>
-                    <td><span class="badge {{ $badge }}">{{ $cargoRequest->statusLabel() }}</span></td>
-                    <td>
-                        <a href="{{ route('cargo.show', $cargoRequest) }}" class="btn btn-sm btn-outline-primary">مشاهده</a>
-                    </td>
+                    <th>شماره درخواست</th>
+                    <th>صاحب کالا</th>
+                    <th>نماینده</th>
+                    <th>شرح کالا / واگن‌ها</th>
+                    <th>تاریخ درخواست</th>
+                    <th>تعداد واگن</th>
+                    <th>وضعیت</th>
+                    <th>عملیات سریع</th>
                 </tr>
-            @empty
-                <tr><td colspan="7" class="text-center text-muted py-4">درخواستی یافت نشد.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                @forelse($cargoRequests as $req)
+                    @php
+                        $distinctOwners = $req->wagons->map(fn($w) => $w->ownerName())->unique()->filter()->values();
+                        $hasOwnerTransfer = $req->wagons->contains(fn($w) => $w->isOwnerChanged());
+                        $hasNumberEdit = $req->wagons->contains(fn($w) => $w->isNumberEdited());
+                        $distinctDescs = $req->wagons->pluck('cargo_description')->filter()->unique()->values();
+                        $readyWagonsCount = $req->wagons->filter(fn($w) => !$w->is_settled && $w->isLoaded() && $w->tariff_id)->count();
+                    @endphp
+                    <tr>
+                        <td class="fw-bold">
+                            <a href="{{ route('cargo.show', $req) }}" class="text-decoration-none">{{ $req->request_number }}</a>
+                        </td>
+                        <td>
+                            <div>{{ $req->owner?->name ?? '—' }}</div>
+                            @if($hasOwnerTransfer)
+                                <span class="badge bg-warning text-dark mt-1">دارای ویرایش صاحب کالا</span>
+                                <div class="small text-muted">{{ $distinctOwners->implode('، ') }}</div>
+                            @endif
+                            @if($hasNumberEdit)
+                                <span class="badge bg-info text-dark mt-1">دارای اصلاح شماره واگن</span>
+                            @endif
+                        </td>
+                        <td>{{ $req->representative?->name ?? '—' }}</td>
+                        <td>
+                            <div class="fw-semibold">{{ $distinctDescs->isNotEmpty() ? $distinctDescs->implode('، ') : '—' }}</div>
+                            <div class="small text-muted font-monospace">
+                                {{ $req->wagons->take(4)->pluck('wagon_number')->implode('، ') }}{{ $req->wagons->count() > 4 ? ' و …' : '' }}
+                            </div>
+                        </td>
+                        <td>{{ $req->request_date_shamsi }}</td>
+                        <td>{{ $req->wagons->count() }}</td>
+                        <td>
+                            @php($badge = ['pending' => 'warning text-dark', 'loaded' => 'info text-dark', 'billed' => 'success', 'cancelled' => 'danger'][$req->status] ?? 'secondary')
+                            <span class="badge bg-{{ $badge }}">{{ $req->statusLabel() }}</span>
+                        </td>
+                        <td class="text-nowrap">
+                            <div class="d-inline-flex gap-1 align-items-center">
+                                @if($req->status === 'pending')
+                                    <a href="{{ route('cargo.show', $req) }}" class="btn btn-sm btn-primary">
+                                        ثبت بارگیری
+                                    </a>
+                                @else
+                                    <a href="{{ route('cargo.show', $req) }}" class="btn btn-sm btn-outline-primary">
+                                        مشاهده
+                                    </a>
+                                @endif
+
+                                @if($readyWagonsCount > 0)
+                                    <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-success" title="صدور مستقیم صورتحساب برای {{ $readyWagonsCount }} واگن بارگیری‌شده">
+                                            صدور فوری صورتحساب
+                                        </button>
+                                    </form>
+                                @endif
+                            </div>
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="8" class="text-center text-muted py-4">موردی یافت نشد.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    {{ $cargoRequests->links() }}
+    <div class="mt-3">{{ $cargoRequests->links() }}</div>
 @endsection

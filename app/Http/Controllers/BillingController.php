@@ -59,8 +59,30 @@ class BillingController extends Controller
     {
         $owners = Owner::active()->orderBy('name')->get();
         $ownerId = $request->integer('owner_id') ?: null;
+        $selectedCargoRequestId = $request->integer('cargo_request_id') ?: null;
+        $defaultRepresentativeId = $request->integer('representative_id') ?: null;
+
+        if ($selectedCargoRequestId && ! $ownerId) {
+            $cr = CargoRequest::find($selectedCargoRequestId);
+            if ($cr) {
+                $ownerId = (int) $cr->owner_id;
+                $defaultRepresentativeId = $defaultRepresentativeId ?: (int) $cr->representative_id;
+            }
+        }
+
+        // شمارش واگن‌های بارگیری‌شده و تسویه‌نشده هر صاحب کالا برای دسترسی سریع اپراتور
+        $pendingWagonsForCounts = Wagon::query()
+            ->pendingSettlement()
+            ->loaded()
+            ->with('cargoRequest:id,owner_id')
+            ->get(['id', 'owner_id', 'cargo_request_id']);
+
+        $readyCountsByOwner = $pendingWagonsForCounts
+            ->groupBy(fn (Wagon $w) => (int) $w->effectiveOwnerId())
+            ->map(fn ($group) => $group->count());
 
         $wagons = collect();
+        $representatives = collect();
 
         if ($ownerId) {
             $wagons = Wagon::query()
@@ -76,19 +98,36 @@ class BillingController extends Controller
                 ->with(['cargoRequest.representative', 'owner', 'tariff'])
                 ->orderBy('wagon_number')
                 ->get();
+
+            $representatives = Representative::active()
+                ->whereHas('owners', fn ($q) => $q->where('owners.id', $ownerId))
+                ->orderBy('name')
+                ->get();
+
+            if (! $defaultRepresentativeId) {
+                $repIdsFromWagons = $wagons
+                    ->pluck('cargoRequest.representative_id')
+                    ->filter()
+                    ->unique();
+
+                if ($repIdsFromWagons->count() === 1) {
+                    $defaultRepresentativeId = (int) $repIdsFromWagons->first();
+                } elseif ($representatives->count() === 1) {
+                    $defaultRepresentativeId = (int) $representatives->first()->id;
+                }
+            }
         }
 
         return view('billing.create', [
             'owners' => $owners,
+            'readyCountsByOwner' => $readyCountsByOwner,
             'ownerId' => $ownerId,
+            'selectedCargoRequestId' => $selectedCargoRequestId,
+            'defaultRepresentativeId' => $defaultRepresentativeId,
             'wagons' => $wagons,
             'tariffs' => Tariff::active()->orderBy('title')->get(),
             'taxPercentage' => TaxSetting::currentPercentage(),
-            'representatives' => $ownerId
-                ? Representative::active()
-                    ->whereHas('owners', fn ($q) => $q->where('owners.id', $ownerId))
-                    ->orderBy('name')->get()
-                : collect(),
+            'representatives' => $representatives,
             'billingDateShamsi' => JalaliDate::today(),
         ]);
     }

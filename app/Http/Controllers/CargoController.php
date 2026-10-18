@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Billing;
+use App\Models\BillingItem;
 use App\Models\CargoRequest;
 use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Tariff;
+use App\Models\TaxSetting;
 use App\Models\Wagon;
 use App\Models\WagonOwnerLog;
 use App\Support\DocumentNumber;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -57,10 +61,12 @@ class CargoController extends Controller
     {
         $owners = Owner::active()->orderBy('name')->get();
         $representatives = Representative::active()->with('owners')->orderBy('name')->get();
+        $tariffs = Tariff::active()->orderBy('title')->get();
 
         return view('cargo.create', [
             'owners' => $owners,
             'representatives' => $representatives,
+            'tariffs' => $tariffs,
             'requestDateShamsi' => JalaliDate::today(),
         ]);
     }
@@ -75,6 +81,9 @@ class CargoController extends Controller
             'wagons.*.number' => ['nullable', 'string', 'max:50'],
             'wagons.*.description' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
+            'quick_tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
+            'quick_weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
+            'quick_action' => ['nullable', 'string', 'in:save_only,save_and_load,save_load_and_bill'],
         ], [], [
             'owner_id' => 'صاحب کالا',
             'representative_id' => 'نماینده',
@@ -82,6 +91,8 @@ class CargoController extends Controller
             'wagons' => 'واگن‌ها',
             'wagons.*.number' => 'شماره واگن',
             'wagons.*.description' => 'شرح کالا',
+            'quick_tariff_id' => 'تعرفه بارگیری سریع',
+            'quick_weight' => 'وزن بارگیری',
         ]);
 
         // نماینده باید به همین صاحب کالا تخصیص داده شده باشد
@@ -131,7 +142,36 @@ class CargoController extends Controller
             ]);
         }
 
-        $cargoRequest = DocumentNumber::withRetry(function () use ($data, $requestDate, $normalizedDate, $wagonRows) {
+        $quickAction = $data['quick_action'] ?? 'save_only';
+        $quickTariff = ! empty($data['quick_tariff_id']) ? Tariff::find($data['quick_tariff_id']) : null;
+
+        if (in_array($quickAction, ['save_and_load', 'save_load_and_bill'], true) && ! $quickTariff) {
+            throw ValidationException::withMessages([
+                'quick_tariff_id' => 'برای ثبت یک‌مرحله‌ای بارگیری/صورتحساب، انتخاب تعرفه الزامی است.',
+            ]);
+        }
+
+        $quickWeight = null;
+        if ($quickTariff) {
+            $quickWeight = ! empty($data['quick_weight']) ? (float) $data['quick_weight'] : (float) $quickTariff->capacity;
+            if ($quickWeight > (float) $quickTariff->capacity) {
+                throw ValidationException::withMessages([
+                    'quick_weight' => "وزن واردشده ({$quickWeight} تن) از ظرفیت تعرفه ({$quickTariff->capacity} تن) بیشتر است.",
+                ]);
+            }
+        }
+
+        $shouldLoadImmediately = $quickTariff !== null && ($quickAction !== 'save_only' || $request->filled('quick_tariff_id'));
+
+        $cargoRequest = DocumentNumber::withRetry(function () use (
+            $data,
+            $requestDate,
+            $normalizedDate,
+            $wagonRows,
+            $shouldLoadImmediately,
+            $quickTariff,
+            $quickWeight
+        ) {
             $cargoRequest = CargoRequest::create([
                 'request_number' => CargoRequest::generateRequestNumber(),
                 'owner_id' => $data['owner_id'],
@@ -139,7 +179,7 @@ class CargoController extends Controller
                 'operator_id' => auth()->id(),
                 'request_date' => $requestDate->toDateString(),
                 'request_date_shamsi' => $normalizedDate,
-                'status' => CargoRequest::STATUS_PENDING,
+                'status' => $shouldLoadImmediately ? CargoRequest::STATUS_LOADED : CargoRequest::STATUS_PENDING,
                 'notes' => $data['notes'] ?? null,
             ]);
 
@@ -149,15 +189,28 @@ class CargoController extends Controller
                     'owner_id' => $data['owner_id'],
                     'wagon_number' => $wagonRow['number'],
                     'cargo_description' => $wagonRow['description'],
+                    'tariff_id' => $shouldLoadImmediately ? $quickTariff->id : null,
+                    'loaded_weight' => $shouldLoadImmediately ? $quickWeight : null,
+                    'loaded_on' => $shouldLoadImmediately ? $requestDate->toDateString() : null,
                 ]);
             }
 
             return $cargoRequest;
         });
 
+        if ($quickAction === 'save_load_and_bill' && $shouldLoadImmediately) {
+            $billing = $this->issueInvoiceForCargoRequest($cargoRequest, $normalizedDate);
+
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('success', "درخواست بارگیری «{$cargoRequest->request_number}»، عملیات بارگیری و صورتحساب «{$billing->billing_number}» به‌صورت یک‌مرحله‌ای صادر شد.");
+        }
+
         return redirect()
             ->route('cargo.show', $cargoRequest)
-            ->with('success', 'درخواست بارگیری با موفقیت ثبت شد.');
+            ->with('success', $shouldLoadImmediately
+                ? 'درخواست بارگیری به همراه اطلاعات بارگیری واگن‌ها با موفقیت ثبت شد.'
+                : 'درخواست بارگیری با موفقیت ثبت شد.');
     }
 
     public function show(CargoRequest $cargo)
@@ -170,15 +223,23 @@ class CargoController extends Controller
 
         $tariffs = Tariff::orderByDesc('is_active')->orderBy('title')->get();
 
+        $suggestedTariffs = [];
+        foreach ($cargo->wagons as $wagon) {
+            if (! $wagon->tariff_id && $wagon->cargo_description) {
+                $suggestedTariffs[$wagon->id] = $this->suggestTariffId((string) $wagon->cargo_description, $tariffs);
+            }
+        }
+
         return view('cargo.show', [
             'cargo' => $cargo,
             'tariffs' => $tariffs,
+            'suggestedTariffs' => $suggestedTariffs,
             'loadingDateShamsi' => JalaliDate::today(),
         ]);
     }
 
     /**
-     * ثبت/ویرایش عملیات بارگیری واگن‌های یک درخواست.
+     * ثبت/ویرایش عملیات بارگیری واگن‌های یک درخواست (با قابلیت صدور هم‌زمان صورتحساب با ۱ کلیک).
      */
     public function storeLoading(Request $request, CargoRequest $cargo)
     {
@@ -199,6 +260,7 @@ class CargoController extends Controller
         ]);
 
         $loadingDate = JalaliDate::parse($data['loading_date_shamsi'], 'loading_date_shamsi');
+        $normalizedDate = JalaliDate::normalize($data['loading_date_shamsi']);
 
         $cargo->load('wagons');
 
@@ -275,9 +337,183 @@ class CargoController extends Controller
             }
         });
 
+        if ($request->boolean('issue_billing')) {
+            $cargo->refresh()->load('wagons.tariff');
+            $readyWagons = $cargo->wagons->filter(fn (Wagon $w) => ! $w->is_settled && $w->isLoaded() && $w->tariff_id);
+
+            if ($readyWagons->isEmpty()) {
+                return redirect()
+                    ->route('cargo.show', $cargo)
+                    ->with('warning', 'اطلاعات بارگیری ذخیره شد، اما هیچ واگن بارگیری‌شده و تسویه‌نشده‌ای برای صدور صورتحساب وجود ندارد.');
+            }
+
+            $billing = $this->issueInvoiceForCargoRequest($cargo, $normalizedDate);
+
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('success', "اطلاعات بارگیری ثبت شد و صورتحساب «{$billing->billing_number}» به‌صورت مستقیم صادر گردید.");
+        }
+
         return redirect()
             ->route('cargo.show', $cargo)
             ->with('success', 'اطلاعات بارگیری ثبت شد.');
+    }
+
+    /**
+     * صدور مستقیم صورتحساب یک‌کلیکی برای واگن‌های بارگیری‌شده یک درخواست بارگیری
+     */
+    public function quickBill(Request $request, CargoRequest $cargo)
+    {
+        $cargo->load('wagons.tariff');
+        $readyWagons = $cargo->wagons->filter(fn (Wagon $w) => ! $w->is_settled && $w->isLoaded() && $w->tariff_id);
+
+        if ($readyWagons->isEmpty()) {
+            return back()->with('warning', 'ابتدا تعرفه و وزن بارگیری واگن‌های این درخواست را ثبت کنید.');
+        }
+
+        $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
+
+        return redirect()
+            ->route('billing.show', $billing)
+            ->with('success', "صورتحساب «{$billing->billing_number}» با موفقیت صادر شد.");
+    }
+
+    /**
+     * تشخیص هوشمند تعرفه متناظر بر اساس شرح کالای واگن
+     */
+    private function suggestTariffId(string $cargoDescription, Collection $tariffs): ?int
+    {
+        $desc = str_replace(['ي', 'ك', "\u{200c}"], ['ی', 'ک', ' '], trim($cargoDescription));
+        if ($desc === '') {
+            return null;
+        }
+
+        $activeTariffs = $tariffs->where('is_active', true);
+
+        // تطبیق دقیق کلیدواژه‌های کالا با تعرفه‌های کتابچه ۱۴۰۵
+        $keywordCodeMap = [
+            'T-1405-01' => ['میلگرد', 'کلاف', 'ناودونی', 'نبشی', 'تسمه', 'سوله', 'شیشه', 'آهن', 'ورق', 'تیرآهن'],
+            'T-1405-02' => ['سود پرک', 'سودپرک'],
+            'T-1405-03' => ['سیمان', 'جامبو'],
+            'T-1405-04' => ['کاشی', 'چینی', 'سرامیک', 'شیر خشک', 'شیرخشک', 'آبمیوه', 'ابمیوه', 'شیر', 'کابل'],
+            'T-1405-05' => ['سنگ ساختمانی', 'سنگ'],
+            'T-1405-06' => ['کروم', 'جوش شیرین'],
+            'T-1405-08' => ['ام دی اف', 'MDF', 'mdf', 'نئوپان', 'تخته'],
+            'T-1405-09' => ['رزین'],
+            'T-1404-02' => ['متعلقات', 'دستگاه'],
+            'T-1404-05' => ['اسید استیک', 'اسید'],
+        ];
+
+        foreach ($keywordCodeMap as $code => $keywords) {
+            foreach ($keywords as $kw) {
+                if (str_contains($desc, $kw)) {
+                    $found = $activeTariffs->firstWhere('code', $code);
+                    if ($found) {
+                        return (int) $found->id;
+                    }
+                }
+            }
+        }
+
+        // تطبیق عمومی با عنوان تعرفه‌ها
+        foreach ($activeTariffs as $tariff) {
+            $titleNorm = str_replace(['ي', 'ك', "\u{200c}"], ['ی', 'ک', ' '], (string) $tariff->title);
+            if (str_contains($titleNorm, $desc)) {
+                return (int) $tariff->id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * صدور خودکار صورتحساب برای تمام واگن‌های بارگیری‌شده و تسویه‌نشده یک درخواست بارگیری
+     */
+    private function issueInvoiceForCargoRequest(CargoRequest $cargo, ?string $shamsiDate = null): Billing
+    {
+        $billingDateShamsi = $shamsiDate ? JalaliDate::normalize($shamsiDate) : JalaliDate::today();
+        $billingDate = JalaliDate::parse($billingDateShamsi, 'billing_date_shamsi');
+
+        return DocumentNumber::withRetry(function () use ($cargo, $billingDate, $billingDateShamsi) {
+            $cargo->load(['owner', 'representative', 'wagons.tariff']);
+            $taxPercentage = TaxSetting::currentPercentage();
+            $owner = $cargo->owner ?? Owner::findOrFail($cargo->owner_id);
+            $representative = $cargo->representative;
+
+            $wagons = Wagon::with('tariff')
+                ->where('cargo_request_id', $cargo->id)
+                ->where('is_settled', false)
+                ->whereNotNull('loaded_weight')
+                ->whereNotNull('tariff_id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($wagons->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'loading' => 'هیچ واگن بارگیری‌شده و تسویه‌نشده‌ای برای صدور صورتحساب یافت نشد.',
+                ]);
+            }
+
+            $items = [];
+            $baseAmount = 0;
+            $taxAmount = 0;
+
+            foreach ($wagons as $wagon) {
+                $tariff = $wagon->tariff;
+                if (! $tariff) {
+                    continue;
+                }
+
+                $weight = (float) $wagon->loaded_weight;
+                $baseCost = BillingItem::calculateBaseCost($weight, (float) $tariff->capacity, (float) $tariff->rate);
+                $itemTax = BillingItem::calculateTax($baseCost, $taxPercentage);
+
+                $baseAmount += $baseCost;
+                $taxAmount += $itemTax;
+
+                $items[] = [
+                    'wagon_id' => $wagon->id,
+                    'tariff_id' => $tariff->id,
+                    'tariff_title' => $tariff->title,
+                    'tariff_rate' => $tariff->rate,
+                    'tariff_capacity' => $tariff->capacity,
+                    'loaded_weight' => $weight,
+                    'base_cost' => $baseCost,
+                    'tax_amount' => $itemTax,
+                    'total_amount' => $baseCost + $itemTax,
+                ];
+            }
+
+            $billing = Billing::create([
+                'billing_number' => Billing::generateBillingNumber(),
+                'owner_id' => $owner->id,
+                'representative_id' => $representative?->id,
+                'operator_id' => auth()->id(),
+                'owner_name' => $owner->name,
+                'representative_name' => $representative?->name,
+                'billing_date' => $billingDate->toDateString(),
+                'billing_date_shamsi' => $billingDateShamsi,
+                'base_amount' => $baseAmount,
+                'tax_percentage' => $taxPercentage,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $baseAmount + $taxAmount,
+                'status' => Billing::STATUS_ISSUED,
+                'notes' => $cargo->notes,
+            ]);
+
+            foreach ($items as $item) {
+                $billing->items()->create($item);
+            }
+
+            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update(['is_settled' => true]);
+
+            $cargo->refresh()->load('wagons');
+            if ($cargo->wagons->every(fn (Wagon $w) => $w->is_settled)) {
+                $cargo->update(['status' => CargoRequest::STATUS_BILLED]);
+            }
+
+            return $billing;
+        });
     }
 
     /**
