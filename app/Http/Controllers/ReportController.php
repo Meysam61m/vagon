@@ -24,7 +24,9 @@ class ReportController extends Controller
         $fromShamsi = $request->filled('from') ? JalaliDate::normalize($request->string('from')->toString()) : null;
         $toShamsi = $request->filled('to') ? JalaliDate::normalize($request->string('to')->toString()) : null;
 
-        $from = $fromShamsi ? JalaliDate::parse($fromShamsi, 'from') : now()->startOfMonth()->startOfDay();
+        $from = $fromShamsi
+            ? JalaliDate::parse($fromShamsi, 'from')
+            : Carbon::instance(\Morilog\Jalali\Jalalian::fromCarbon(now())->getFirstDayOfMonth()->toCarbon())->startOfDay();
         $to = $toShamsi ? JalaliDate::parse($toShamsi, 'to') : now()->endOfDay();
 
         if ($from->greaterThan($to)) {

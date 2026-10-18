@@ -111,25 +111,56 @@
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 <script src="{{ asset('vendor/bootstrap-rtl/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ asset('vendor/persian-datepicker/persian-date.min.js') }}"></script>
-<script src="{{ asset('vendor/persian-datepicker/persian-datepicker.min.js') }}"></script>
+<script src="{{ asset('vendor/persian-datepicker/persian-datepicker.min.js') }}?v=2"></script>
 <script src="{{ asset('vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         // فعال‌سازی خودکار فیلدهای دارای کلاس jalali-datepicker (اگر پلاگین در دسترس باشد)
         if (window.jQuery && jQuery.fn && jQuery.fn.persianDatepicker) {
+            const toEnglishDigits = function (str) {
+                return String(str || '')
+                    .replace(/[۰-۹]/g, function (d) { return d.charCodeAt(0) - 1776; })
+                    .replace(/[٠-٩]/g, function (d) { return d.charCodeAt(0) - 1632; });
+            };
+
             jQuery('.jalali-datepicker').each(function () {
-                if (jQuery(this).data('persianDatepicker')) {
+                if (jQuery(this).data('persianDatepicker') || jQuery(this).data('datepicker')) {
                     return;
+                }
+
+                // نرمال‌سازی مقدار اولیه به ارقام لاتین و پاک‌سازی سال‌های نامعتبر (مانند ۷۸۴ ناشی از تفسیر میلادی)
+                const rawVal = toEnglishDigits(this.value || this.getAttribute('value') || '').trim();
+                const match = rawVal.match(/^(\d{3,4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+                if (match) {
+                    const year = parseInt(match[1], 10);
+                    if (year < 1300 || year > 1500) {
+                        this.value = '';
+                        this.removeAttribute('value');
+                    } else {
+                        const normalized = String(year).padStart(4, '0') + '/'
+                            + String(parseInt(match[2], 10)).padStart(2, '0') + '/'
+                            + String(parseInt(match[3], 10)).padStart(2, '0');
+                        this.value = normalized;
+                        this.setAttribute('value', normalized);
+                    }
                 }
 
                 jQuery(this).persianDatepicker({
                     format: 'YYYY/MM/DD',
                     autoClose: true,
-                    initialValue: false,
+                    initialValue: Boolean(this.value && this.value.trim() !== ''),
+                    initialValueType: 'persian',
+                    persianDigit: false,
                     observer: true,
                     calendar: {
                         persian: {
-                            locale: 'fa'
+                            locale: 'fa',
+                            leapYearMode: 'astronomical'
+                        }
+                    },
+                    toolbox: {
+                        calendarSwitch: {
+                            enabled: false
                         }
                     }
                 });
