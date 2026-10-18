@@ -11,7 +11,7 @@
                    class="form-control jalali-datepicker" autocomplete="off" placeholder="۱۴۰۴/۰۷/۳۰">
         </div>
         @isset($statusLabels)
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label" for="status">وضعیت</label>
                 <select name="status" id="status" class="form-select">
                     <option value="">همه</option>
@@ -21,8 +21,11 @@
                 </select>
             </div>
         @endisset
-        <div class="col-md-3 d-flex gap-2">
+        <div class="{{ isset($statusLabels) ? 'col-md-4' : 'col-md-6' }} d-flex gap-2 flex-wrap">
             <button class="btn btn-primary" type="submit">اعمال فیلتر</button>
+            <button class="btn btn-success" type="submit" name="export" value="excel">
+                خروجی اکسل (Excel)
+            </button>
             <a href="{{ url()->current() }}" class="btn btn-outline-secondary">بازنشانی</a>
         </div>
     </div>

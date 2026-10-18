@@ -124,7 +124,7 @@
     <div class="card mb-4" id="edited-wagons">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span class="fw-bold">آمار و فهرست واگن‌های ویرایش‌شده پس از صدور صورتحساب (اصلاح شماره واگن / تغییر صاحب کالا)</span>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
                 <span class="badge bg-warning text-dark">
                     واگن‌های ویرایش‌شده (کل): {{ number_format($wagonStats['edited']) }}
                 </span>
@@ -137,6 +137,10 @@
                 <span class="badge bg-secondary">
                     در بازه انتخابی: {{ number_format($wagonStats['edited_in_range']) }}
                 </span>
+                <a href="{{ route('dashboard', array_merge(request()->only(['from', 'to']), ['export' => 'edited_wagons'])) }}"
+                   class="btn btn-sm btn-success">
+                    خروجی اکسل (Excel)
+                </a>
             </div>
         </div>
         <div class="table-responsive">

@@ -8,10 +8,12 @@ use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Wagon;
 use App\Models\WagonOwnerLog;
+use App\Support\ExcelExport;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Morilog\Jalali\Jalalian;
 
 class DashboardController extends Controller
 {
@@ -77,6 +79,77 @@ class DashboardController extends Controller
             ->orderByDesc('id')
             ->limit(25)
             ->get();
+
+        if (in_array(strtolower((string) $request->query('export', '')), ['edited_wagons', 'excel', 'xlsx', '1'], true)) {
+            $allEdited = Wagon::ownerEdited()
+                ->with([
+                    'owner',
+                    'previousOwner',
+                    'ownerChangedBy',
+                    'cargoRequest.owner',
+                    'billingItem.billing',
+                ])
+                ->orderByDesc('owner_changed_at')
+                ->orderByDesc('id')
+                ->get();
+
+            $rows = [];
+            foreach ($allEdited as $idx => $wagon) {
+                $rows[] = [
+                    $idx + 1,
+                    $wagon->wagon_number,
+                    $wagon->isNumberEdited() ? $wagon->previous_wagon_number : '—',
+                    $wagon->editTypeLabel(),
+                    $wagon->cargo_description ?: '—',
+                    $wagon->cargoRequest?->request_number ?? '—',
+                    $wagon->billingItem?->billing?->billing_number ?? '—',
+                    $wagon->isOwnerChanged() ? ($wagon->previousOwner?->name ?? '—') : '—',
+                    $wagon->ownerName(),
+                    $wagon->owner_change_note ?: '—',
+                    $wagon->ownerChangedBy?->name ?? '—',
+                    $wagon->owner_changed_at
+                        ? Jalalian::fromCarbon(Carbon::instance($wagon->owner_changed_at))->format('Y/m/d H:i')
+                        : '—',
+                    (int) $wagon->owner_change_count,
+                ];
+            }
+
+            return ExcelExport::download(
+                'edited-wagons-'.JalaliDate::today('Y-m-d').'.xlsx',
+                'فهرست واگن‌های ویرایش‌شده (شماره واگن / صاحب کالا)',
+                [
+                    'ردیف',
+                    'شماره واگن فعلی',
+                    'شماره واگن قبلی',
+                    'نوع ویرایش',
+                    'شرح کالا',
+                    'شماره درخواست',
+                    'شماره صورتحساب',
+                    'صاحب کالای قبلی',
+                    'صاحب کالای فعلی',
+                    'علت و توضیحات ویرایش',
+                    'کاربر ویرایش‌کننده',
+                    'زمان آخرین ویرایش',
+                    'تعداد دفعات ویرایش',
+                ],
+                $rows,
+                [
+                    'جمع کل',
+                    count($rows).' واگن ویرایش‌شده',
+                    'اصلاح شماره: '.($wagonStats['number_edited'] ?? 0),
+                    'تغییر صاحب کالا: '.($wagonStats['owner_edited'] ?? 0),
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    (int) ($wagonStats['total_edit_logs'] ?? 0),
+                ]
+            );
+        }
 
         return view('dashboard.index', [
             'kpis' => $kpis,
