@@ -50,7 +50,7 @@
                         <th style="min-width: 130px;">وزن (تن)</th>
                         <th>وضعیت</th>
                         <th>صورتحساب</th>
-                        <th>ویرایش صاحب کالا</th>
+                        <th>ویرایش واگن</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -61,7 +61,14 @@
                         @endphp
                         <tr>
                             <td>{{ $loop->iteration }}</td>
-                            <td>{{ $wagon->wagon_number }}</td>
+                            <td>
+                                <div class="fw-bold">{{ $wagon->wagon_number }}</div>
+                                @if($wagon->isNumberEdited())
+                                    <span class="badge bg-info text-dark mt-1">شماره اصلاح‌شده</span>
+                                    <div class="small text-muted">قبلی: <span class="text-decoration-line-through">{{ $wagon->previous_wagon_number }}</span></div>
+                                    <div class="small text-muted">علت: {{ $wagon->owner_change_note }}</div>
+                                @endif
+                            </td>
                             <td>
                                 @if($wagon->is_settled)
                                     {{ $wagon->cargo_description ?: '—' }}
@@ -79,10 +86,10 @@
                             </td>
                             <td>
                                 <div>{{ $wagon->ownerName() }}</div>
-                                @if($wagon->isOwnerEdited())
+                                @if($wagon->isOwnerChanged())
                                     <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
                                     <div class="small text-muted">قبلی: {{ $wagon->previousOwner?->name ?? '—' }}</div>
-                                    <div class="small text-muted">توضیح: {{ $wagon->owner_change_note }}</div>
+                                    <div class="small text-muted">علت: {{ $wagon->owner_change_note }}</div>
                                 @endif
                             </td>
                             <td>
@@ -133,7 +140,7 @@
                             </td>
                             <td class="text-nowrap">
                                 <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
-                                    ویرایش صاحب کالا
+                                    ویرایش واگن
                                 </a>
                             </td>
                         </tr>
@@ -159,21 +166,28 @@
                         <th>وزن (تن)</th>
                         <th>وضعیت</th>
                         <th>صورتحساب</th>
-                        <th>ویرایش صاحب کالا</th>
+                        <th>ویرایش واگن</th>
                     </tr>
                     </thead>
                     <tbody>
                     @foreach($cargo->wagons as $wagon)
                         <tr>
                             <td>{{ $loop->iteration }}</td>
-                            <td>{{ $wagon->wagon_number }}</td>
+                            <td>
+                                <div class="fw-bold">{{ $wagon->wagon_number }}</div>
+                                @if($wagon->isNumberEdited())
+                                    <span class="badge bg-info text-dark mt-1">شماره اصلاح‌شده</span>
+                                    <div class="small text-muted">قبلی: <span class="text-decoration-line-through">{{ $wagon->previous_wagon_number }}</span></div>
+                                    <div class="small text-muted">علت: {{ $wagon->owner_change_note }}</div>
+                                @endif
+                            </td>
                             <td>{{ $wagon->cargo_description ?: '—' }}</td>
                             <td>
                                 <div>{{ $wagon->ownerName() }}</div>
-                                @if($wagon->isOwnerEdited())
+                                @if($wagon->isOwnerChanged())
                                     <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
                                     <div class="small text-muted">قبلی: {{ $wagon->previousOwner?->name ?? '—' }}</div>
-                                    <div class="small text-muted">توضیح: {{ $wagon->owner_change_note }}</div>
+                                    <div class="small text-muted">علت: {{ $wagon->owner_change_note }}</div>
                                 @endif
                             </td>
                             <td>{{ $wagon->tariff?->title ?? '—' }}</td>
@@ -190,7 +204,7 @@
                             </td>
                             <td class="text-nowrap">
                                 <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
-                                    ویرایش صاحب کالا
+                                    ویرایش واگن
                                 </a>
                             </td>
                         </tr>

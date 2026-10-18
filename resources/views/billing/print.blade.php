@@ -267,12 +267,19 @@
 @endphp
 @if($editedItems->isNotEmpty())
     <div class="notes">
-        <strong>تغییرات صاحب کالای واگن‌ها:</strong>
+        <strong>ویرایش‌های ثبت‌شده برای واگن‌ها پس از صدور صورتحساب:</strong>
         @foreach($editedItems as $editedItem)
+            @php $w = $editedItem->wagon; @endphp
             <div>
-                واگن {{ $editedItem->wagon->wagon_number }}:
-                از «{{ $editedItem->wagon->previousOwner?->name ?? '-' }}» به «{{ $editedItem->wagon->ownerName() }}»
-                — توضیح: {{ $editedItem->wagon->owner_change_note }}
+                واگن {{ $w->wagon_number }}:
+                @if($w->isNumberEdited() && $w->isOwnerChanged())
+                    اصلاح شماره واگن از «{{ $w->previous_wagon_number }}» به «{{ $w->wagon_number }}» و تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '-' }}» به «{{ $w->ownerName() }}»
+                @elseif($w->isNumberEdited())
+                    اصلاح شماره واگن از «{{ $w->previous_wagon_number }}» به «{{ $w->wagon_number }}»
+                @else
+                    تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '-' }}» به «{{ $w->ownerName() }}»
+                @endif
+                — علت: {{ $w->owner_change_note }}
             </div>
         @endforeach
     </div>

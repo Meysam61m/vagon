@@ -42,14 +42,20 @@
         @endphp
         @if($editedItems->isNotEmpty())
             <div class="alert alert-warning mt-3 mb-0 py-2">
-                <strong>تغییرات صاحب کالای واگن‌ها پس از صدور صورتحساب:</strong>
+                <strong>ویرایش‌های ثبت‌شده برای واگن‌ها پس از صدور صورتحساب:</strong>
                 <ul class="mb-0 mt-1 small">
                     @foreach($editedItems as $editedItem)
                         @php $w = $editedItem->wagon; @endphp
                         <li>
-                            واگن <strong>{{ $w->wagon_number }}</strong>:
-                            از «{{ $w->previousOwner?->name ?? '—' }}» به «<strong>{{ $w->ownerName() }}</strong>»
-                            — توضیح: {{ $w->owner_change_note }}
+                            واگن <strong>{{ $w->wagon_number }}</strong>
+                            @if($w->isNumberEdited() && $w->isOwnerChanged())
+                                (اصلاح شماره واگن از «<span class="text-decoration-line-through">{{ $w->previous_wagon_number }}</span>» به «<strong>{{ $w->wagon_number }}</strong>» و تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '—' }}» به «<strong>{{ $w->ownerName() }}</strong>»)
+                            @elseif($w->isNumberEdited())
+                                (اصلاح شماره واگن از «<span class="text-decoration-line-through">{{ $w->previous_wagon_number }}</span>» به «<strong>{{ $w->wagon_number }}</strong>»)
+                            @else
+                                (تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '—' }}» به «<strong>{{ $w->ownerName() }}</strong>»)
+                            @endif
+                            — علت: {{ $w->owner_change_note }}
                             <span class="text-muted">
                                 (@jdatetime($w->owner_changed_at){{ $w->ownerChangedBy ? ' توسط '.$w->ownerChangedBy->name : '' }})
                             </span>
@@ -75,7 +81,7 @@
                 <th>مالیات</th>
                 <th>جمع ردیف</th>
                 @if(! $billing->isCancelled())
-                    <th>ویرایش صاحب کالا</th>
+                    <th>ویرایش واگن</th>
                 @endif
             </tr>
             </thead>
@@ -86,17 +92,28 @@
                 @endphp
                 <tr>
                     <td>{{ $loop->iteration }}</td>
-                    <td>{{ $wagon?->wagon_number ?? '—' }}</td>
+                    <td>
+                        <div class="fw-bold">{{ $wagon?->wagon_number ?? '—' }}</div>
+                        @if($wagon?->isNumberEdited())
+                            <span class="badge bg-info text-dark mt-1">شماره اصلاح‌شده</span>
+                            <div class="small text-muted mt-1">
+                                قبلی: <span class="text-decoration-line-through">{{ $wagon->previous_wagon_number }}</span>
+                            </div>
+                            <div class="small text-muted">
+                                علت: {{ $wagon->owner_change_note }}
+                            </div>
+                        @endif
+                    </td>
                     <td>{{ $wagon?->cargo_description ?: '—' }}</td>
                     <td>
                         <div>{{ $wagon?->ownerName() ?? $billing->ownerName() }}</div>
-                        @if($wagon?->isOwnerEdited())
+                        @if($wagon?->isOwnerChanged())
                             <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
                             <div class="small text-muted mt-1">
                                 قبلی: {{ $wagon->previousOwner?->name ?? '—' }}
                             </div>
                             <div class="small text-muted">
-                                توضیح: {{ $wagon->owner_change_note }}
+                                علت: {{ $wagon->owner_change_note }}
                             </div>
                         @endif
                     </td>
@@ -111,7 +128,7 @@
                             @if($wagon)
                                 <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', ['wagon' => $wagon, 'billing_id' => $billing->id]) : url('/wagons/'.$wagon->id.'/edit-owner?billing_id='.$billing->id) }}"
                                    class="btn btn-sm btn-outline-primary">
-                                    ویرایش صاحب کالا
+                                    ویرایش واگن (شماره / صاحب کالا)
                                 </a>
                             @else
                                 —

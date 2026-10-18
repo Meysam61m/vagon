@@ -60,7 +60,7 @@ class AppServiceProvider extends ServiceProvider
 
     /**
      * اگر کش مسیرها (route:cache) از نسخه قبلی باقی مانده باشد یا فایل routes/web.php
-     * هنوز ری‌لود نشده باشد، مسیرهای ویرایش صاحب کالای واگن را ثبت و جدول نام مسیرها را تازه می‌کند.
+     * هنوز ری‌لود نشده باشد، مسیرهای ویرایش واگن را ثبت و جدول نام مسیرها را تازه می‌کند.
      */
     private function ensureWagonOwnerRoutesRegistered(): void
     {
@@ -74,12 +74,16 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $this->app->booted(function () {
-            if (! Route::has('wagons.edit-owner')) {
+            if (! Route::has('wagons.edit-owner') || ! Route::has('wagons.edit')) {
                 Route::middleware(['web', 'auth'])->group(function () {
                     Route::get('/wagons/{wagon}/edit-owner', [CargoController::class, 'editWagonOwner'])
                         ->name('wagons.edit-owner');
+                    Route::get('/wagons/{wagon}/edit', [CargoController::class, 'editWagonOwner'])
+                        ->name('wagons.edit');
                     Route::match(['post', 'put'], '/wagons/{wagon}/owner', [CargoController::class, 'updateWagonOwner'])
                         ->name('wagons.update-owner');
+                    Route::match(['post', 'put'], '/wagons/{wagon}', [CargoController::class, 'updateWagonOwner'])
+                        ->name('wagons.update');
                 });
 
                 $routes = app('router')->getRoutes();
@@ -92,7 +96,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v3';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v4';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -108,14 +112,14 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v3');
+                @file_put_contents($versionMarker, 'v4');
             }
         }
     }
 
     /**
      * اگر کاربر پس از کپی فایل‌های جدید هنوز دستور php artisan migrate را اجرا نکرده باشد،
-     * ستون‌ها و جدول تاریخچه ویرایش صاحب کالای واگن را به‌صورت خودکار و ایمن ایجاد می‌کند.
+     * ستون‌ها و جدول تاریخچه ویرایش واگن (شماره واگن / صاحب کالا) را به‌صورت خودکار و ایمن ایجاد می‌کند.
      */
     private function ensureWagonOwnerSchema(): void
     {
@@ -136,13 +140,16 @@ class AppServiceProvider extends ServiceProvider
                 });
             }
 
-            if (! Schema::hasColumn('wagons', 'owner_change_count')) {
+            if (! Schema::hasColumn('wagons', 'owner_change_count') || ! Schema::hasColumn('wagons', 'previous_wagon_number')) {
                 Schema::table('wagons', function (Blueprint $table) {
                     if (! Schema::hasColumn('wagons', 'owner_id')) {
                         $table->foreignId('owner_id')->nullable()->after('cargo_request_id')->constrained('owners')->nullOnDelete();
                     }
                     if (! Schema::hasColumn('wagons', 'previous_owner_id')) {
                         $table->foreignId('previous_owner_id')->nullable()->after('owner_id')->constrained('owners')->nullOnDelete();
+                    }
+                    if (! Schema::hasColumn('wagons', 'previous_wagon_number')) {
+                        $table->string('previous_wagon_number', 50)->nullable()->after('wagon_number');
                     }
                     if (! Schema::hasColumn('wagons', 'owner_change_note')) {
                         $table->text('owner_change_note')->nullable()->after('is_settled');
@@ -174,6 +181,9 @@ class AppServiceProvider extends ServiceProvider
                     $table->id();
                     $table->foreignId('wagon_id')->constrained('wagons')->cascadeOnDelete();
                     $table->foreignId('billing_id')->nullable()->constrained('billings')->nullOnDelete();
+                    $table->string('change_type', 30)->default('owner');
+                    $table->string('old_wagon_number', 50)->nullable();
+                    $table->string('new_wagon_number', 50)->nullable();
                     $table->foreignId('old_owner_id')->constrained('owners')->restrictOnDelete();
                     $table->foreignId('new_owner_id')->constrained('owners')->restrictOnDelete();
                     $table->string('old_owner_name');
@@ -184,6 +194,18 @@ class AppServiceProvider extends ServiceProvider
 
                     $table->index(['wagon_id', 'created_at']);
                     $table->index('created_at');
+                });
+            } else {
+                Schema::table('wagon_owner_logs', function (Blueprint $table) {
+                    if (! Schema::hasColumn('wagon_owner_logs', 'change_type')) {
+                        $table->string('change_type', 30)->default('owner')->after('billing_id');
+                    }
+                    if (! Schema::hasColumn('wagon_owner_logs', 'old_wagon_number')) {
+                        $table->string('old_wagon_number', 50)->nullable()->after('change_type');
+                    }
+                    if (! Schema::hasColumn('wagon_owner_logs', 'new_wagon_number')) {
+                        $table->string('new_wagon_number', 50)->nullable()->after('old_wagon_number');
+                    }
                 });
             }
         } catch (\Throwable) {

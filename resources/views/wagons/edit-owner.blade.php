@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'ویرایش صاحب کالای واگن ' . $wagon->wagon_number)
+@section('title', 'ویرایش واگن ' . $wagon->wagon_number)
 
 @section('content')
     @php
@@ -9,21 +9,20 @@
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="mb-0">
-            ویرایش صاحب کالای واگن: <span class="text-primary">{{ $wagon->wagon_number }}</span>
-            @if($wagon->isOwnerEdited())
-                <span class="badge bg-warning text-dark fs-6 align-middle">ویرایش‌شده ({{ $wagon->owner_change_count }} بار)</span>
-            @endif
+            ویرایش واگن: <span class="text-primary">{{ $wagon->wagon_number }}</span>
+            <span class="fs-6 text-muted fw-normal">(اصلاح شماره واگن / تغییر صاحب کالا)</span>
         </h4>
         <div class="d-flex gap-2">
             @if($billing)
-                <a href="{{ route('billing.show', $billing) }}" class="btn btn-outline-secondary btn-sm">
+                <a href="{{ route('billing.show', $billing) }}" class="btn btn-outline-secondary">
                     بازگشت به صورتحساب {{ $billing->billing_number }}
                 </a>
-            @endif
-            @if($wagon->cargoRequest)
-                <a href="{{ route('cargo.show', $wagon->cargoRequest) }}" class="btn btn-outline-secondary btn-sm">
-                    مشاهده درخواست {{ $wagon->cargoRequest->request_number }}
+            @elseif($wagon->cargoRequest)
+                <a href="{{ route('cargo.show', $wagon->cargoRequest) }}" class="btn btn-outline-secondary">
+                    بازگشت به درخواست {{ $wagon->cargoRequest->request_number }}
                 </a>
+            @else
+                <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">بازگشت به داشبورد</a>
             @endif
         </div>
     </div>
@@ -32,20 +31,24 @@
         <h6 class="mb-3">مشخصات فعلی واگن</h6>
         <div class="row g-3">
             <div class="col-md-3">
-                <strong>شماره واگن:</strong> {{ $wagon->wagon_number }}
+                <strong>شماره واگن فعلی:</strong>
+                <span class="fw-bold">{{ $wagon->wagon_number }}</span>
+                @if($wagon->isNumberEdited())
+                    <span class="text-muted small">(شماره قبلی: {{ $wagon->previous_wagon_number }})</span>
+                @endif
             </div>
             <div class="col-md-3">
                 <strong>شرح کالا:</strong> {{ $wagon->cargo_description ?: '—' }}
             </div>
             <div class="col-md-3">
                 <strong>صاحب کالای فعلی:</strong>
-                <span class="fw-bold">{{ $wagon->ownerName() }}</span>
+                <span class="badge bg-primary">{{ $wagon->ownerName() }}</span>
+                @if($wagon->previousOwner && (int) $wagon->previous_owner_id !== (int) $currentOwnerId)
+                    <span class="text-muted small">(قبلی: {{ $wagon->previousOwner->name }})</span>
+                @endif
             </div>
             <div class="col-md-3">
-                <strong>وزن بارگیری:</strong> {{ $wagon->loaded_weight ? $wagon->loaded_weight . ' تن' : '—' }}
-            </div>
-            <div class="col-md-3">
-                <strong>درخواست بارگیری:</strong>
+                <strong>شماره درخواست بارگیری:</strong>
                 @if($wagon->cargoRequest)
                     <a href="{{ route('cargo.show', $wagon->cargoRequest) }}">{{ $wagon->cargoRequest->request_number }}</a>
                 @else
@@ -53,82 +56,110 @@
                 @endif
             </div>
             <div class="col-md-3">
-                <strong>صورتحساب:</strong>
+                <strong>وزن بارگیری‌شده:</strong>
+                {{ $wagon->loaded_weight ? $wagon->loaded_weight . ' تن' : '—' }}
+            </div>
+            <div class="col-md-3">
+                <strong>تعرفه:</strong> {{ $wagon->tariff?->title ?? '—' }}
+            </div>
+            <div class="col-md-3">
+                <strong>وضعیت صورتحساب:</strong>
                 @if($billing)
-                    <a href="{{ route('billing.show', $billing) }}">{{ $billing->billing_number }}</a>
-                    <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : 'bg-success' }}">
-                        {{ $billing->statusLabel() }}
-                    </span>
+                    <a href="{{ route('billing.show', $billing) }}" class="badge bg-success text-decoration-none">
+                        {{ $billing->billing_number }}
+                    </a>
+                @elseif($wagon->is_settled)
+                    <span class="badge bg-success">تسویه شده</span>
                 @else
-                    <span class="text-muted">صادر نشده</span>
+                    <span class="badge bg-warning text-dark">در انتظار تسویه</span>
                 @endif
             </div>
-            @if($wagon->isOwnerEdited())
-                <div class="col-md-3">
-                    <strong>صاحب کالای قبلی:</strong> {{ $wagon->previousOwner?->name ?? '—' }}
-                </div>
-                <div class="col-md-3">
-                    <strong>آخرین ویرایش:</strong>
-                    @jdatetime($wagon->owner_changed_at)
+            <div class="col-md-3">
+                <strong>تعداد دفعات ویرایش:</strong>
+                <span class="badge {{ $wagon->isOwnerEdited() ? 'bg-warning text-dark' : 'bg-secondary' }}">
+                    {{ $wagon->owner_change_count }} بار
+                </span>
+            </div>
+        </div>
+
+        @if($wagon->isOwnerEdited() && $wagon->owner_change_note)
+            <div class="alert alert-warning mt-3 mb-0">
+                <div class="fw-bold mb-1">آخرین علت و توضیح ثبت‌شده برای ویرایش این واگن ({{ $wagon->editTypeLabel() }}):</div>
+                <div>{{ $wagon->owner_change_note }}</div>
+                <div class="small text-muted mt-1">
+                    زمان ویرایش: @jdatetime($wagon->owner_changed_at)
                     @if($wagon->ownerChangedBy)
-                        <span class="text-muted small">({{ $wagon->ownerChangedBy->name }})</span>
+                        | کاربر ویرایش‌کننده: {{ $wagon->ownerChangedBy->name }}
                     @endif
                 </div>
-                <div class="col-12">
-                    <div class="alert alert-warning mb-0 py-2">
-                        <strong>آخرین توضیح ثبت‌شده:</strong> {{ $wagon->owner_change_note }}
-                    </div>
-                </div>
-            @endif
-        </div>
+            </div>
+        @endif
     </div>
 
     <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('wagons.update-owner') ? route('wagons.update-owner', $wagon) : url('/wagons/'.$wagon->id.'/owner') }}" class="card p-4 mb-4">
         @csrf
-        @method('PUT')
-        @if(request('billing_id') || $billing)
-            <input type="hidden" name="billing_id" value="{{ request('billing_id', $billing?->id) }}">
+        @if($billing)
+            <input type="hidden" name="billing_id" value="{{ $billing->id }}">
         @endif
 
-        <h6 class="mb-2">ثبت تغییر صاحب کالا</h6>
+        <h6 class="mb-2">ثبت اصلاح شماره واگن یا تغییر صاحب کالا</h6>
         <p class="text-muted small mb-3">
-            در صورتی که پس از صدور صورتحساب، صاحب کالای این واگن تغییر کرده است، صاحب کالای جدید را انتخاب کرده و علت تغییر را به‌صورت کامل بنویسید. این تغییر در آمار واگن‌های ویرایش‌شده در داشبورد مدیر ثبت می‌شود.
+            اگر پس از صدور صورتحساب متوجه شده‌اید که <strong>شماره واگن اشتباه تایپ شده است</strong> یا <strong>صاحب کالای واگن تغییر کرده است</strong>،
+            مقدار صحیح را در فرم زیر وارد کرده و علت ویرایش را بنویسید. این ویرایش با ذکر علت، نام کاربر و زمان دقیق در <strong>داشبورد مدیریتی</strong> ثبت و نمایش داده می‌شود.
         </p>
 
         <div class="row g-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
+                <label class="form-label" for="wagon_number">
+                    شماره واگن (صحیح) <span class="text-danger">*</span>
+                </label>
+                <input type="text"
+                       name="wagon_number"
+                       id="wagon_number"
+                       maxlength="50"
+                       value="{{ old('wagon_number', $wagon->wagon_number) }}"
+                       class="form-control @error('wagon_number') is-invalid @enderror"
+                       placeholder="شماره صحیح واگن را وارد کنید"
+                       required>
+                @error('wagon_number')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text">
+                    شماره فعلی: <strong>{{ $wagon->wagon_number }}</strong> — در صورت اشتباه تایپی، شماره صحیح را وارد کنید.
+                </div>
+            </div>
+
+            <div class="col-md-4">
                 <label class="form-label" for="owner_id">
-                    صاحب کالای جدید <span class="text-danger">*</span>
+                    صاحب کالا <span class="text-danger">*</span>
                 </label>
                 <select name="owner_id" id="owner_id"
                         class="form-select @error('owner_id') is-invalid @enderror" required>
-                    <option value="">انتخاب صاحب کالای جدید…</option>
                     @foreach($owners as $owner)
                         <option value="{{ $owner->id }}"
-                            @selected((string) old('owner_id') === (string) $owner->id)
-                            @disabled((int) $owner->id === (int) $currentOwnerId && ! old('owner_id'))>
+                            @selected((string) old('owner_id', $currentOwnerId) === (string) $owner->id)>
                             {{ $owner->name }}
-                            @if((int) $owner->id === (int) $currentOwnerId)
-                                (صاحب کالای فعلی)
-                            @elseif(! $owner->is_active)
-                                (غیرفعال)
-                            @endif
+                            {{ (int) $owner->id === (int) $currentOwnerId ? '(صاحب فعلی واگن)' : '' }}
+                            {{ ! $owner->is_active ? '(غیرفعال)' : '' }}
                         </option>
                     @endforeach
                 </select>
                 @error('owner_id')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
+                <div class="form-text">
+                    اگر فقط شماره واگن را اصلاح می‌کنید، صاحب کالا را روی همان صاحب فعلی بگذارید.
+                </div>
             </div>
 
-            <div class="col-md-6">
-                <label class="form-label" for="representative_id">نماینده صاحب کالای جدید (اختیاری)</label>
+            <div class="col-md-4">
+                <label class="form-label" for="representative_id">نماینده صاحب کالا (اختیاری)</label>
                 <select name="representative_id" id="representative_id"
                         class="form-select @error('representative_id') is-invalid @enderror">
                     <option value="">انتخاب خودکار / بدون تغییر…</option>
                     @foreach($representatives as $rep)
                         <option value="{{ $rep->id }}"
-                                data-owners="{{ $rep->owners->pluck('id')->implode(',') }}"
+                                data-owners="{{ $rep->owners->pluck('id')->join(',') }}"
                                 @selected((string) old('representative_id') === (string) $rep->id)>
                             {{ $rep->name }}
                         </option>
@@ -141,11 +172,15 @@
 
             <div class="col-12">
                 <label class="form-label" for="owner_change_note">
-                    توضیحات تغییر صاحب کالا <span class="text-danger">*</span>
+                    علت و توضیحات ویرایش واگن <span class="text-danger">*</span>
                 </label>
-                <textarea name="owner_change_note" id="owner_change_note" rows="3" required minlength="3"
+                <textarea name="owner_change_note"
+                          id="owner_change_note"
+                          rows="3"
+                          required
+                          minlength="3"
                           class="form-control @error('owner_change_note') is-invalid @enderror"
-                          placeholder="علت تغییر صاحب کالای واگن پس از صدور صورتحساب را وارد کنید (الزامی)…">{{ old('owner_change_note') }}</textarea>
+                          placeholder="علت اصلاح شماره واگن (مثلاً اشتباه تایپی هنگام ثبت اولیه) یا علت تغییر صاحب کالا پس از صدور صورتحساب را بنویسید (الزامی)…">{{ old('owner_change_note') }}</textarea>
                 @error('owner_change_note')
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
@@ -153,58 +188,87 @@
         </div>
 
         <div class="mt-3 d-flex gap-2">
-            <button type="submit" class="btn btn-primary">ذخیره تغییر صاحب کالا</button>
+            <button type="submit" class="btn btn-primary">ذخیره ویرایش واگن</button>
             @if($billing)
-                <a href="{{ route('billing.show', $billing) }}" class="btn btn-secondary">انصراف</a>
+                <a href="{{ route('billing.show', $billing) }}" class="btn btn-outline-secondary">انصراف</a>
             @elseif($wagon->cargoRequest)
-                <a href="{{ route('cargo.show', $wagon->cargoRequest) }}" class="btn btn-secondary">انصراف</a>
-            @else
-                <a href="{{ route('dashboard') }}" class="btn btn-secondary">انصراف</a>
+                <a href="{{ route('cargo.show', $wagon->cargoRequest) }}" class="btn btn-outline-secondary">انصراف</a>
             @endif
         </div>
     </form>
 
-    @if($wagon->ownerLogs->isNotEmpty())
-        <div class="card">
-            <div class="card-header">
-                تاریخچه ویرایش‌های صاحب کالای این واگن ({{ $wagon->ownerLogs->count() }} مورد)
-            </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm mb-0 bg-white">
-                    <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>زمان ویرایش</th>
-                        <th>صاحب کالای قبلی</th>
-                        <th>صاحب کالای جدید</th>
-                        <th>شماره صورتحساب</th>
-                        <th>کاربر ویرایش‌کننده</th>
-                        <th>توضیحات</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach($wagon->ownerLogs as $log)
-                        <tr>
-                            <td>{{ $loop->iteration }}</td>
-                            <td class="text-nowrap">@jdatetime($log->created_at)</td>
-                            <td>{{ $log->old_owner_name }}</td>
-                            <td class="fw-bold">{{ $log->new_owner_name }}</td>
-                            <td>
-                                @if($log->billing)
-                                    <a href="{{ route('billing.show', $log->billing) }}">{{ $log->billing->billing_number }}</a>
-                                @else
-                                    —
-                                @endif
-                            </td>
-                            <td>{{ $log->user?->name ?? '—' }}</td>
-                            <td>{{ $log->note }}</td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
-            </div>
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>تاریخچه کامل ویرایش‌های این واگن</span>
+            <span class="badge bg-secondary">{{ $wagon->ownerLogs->count() }} مورد</span>
         </div>
-    @endif
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>زمان ویرایش</th>
+                    <th>نوع ویرایش</th>
+                    <th>شماره واگن (قبلی ← جدید)</th>
+                    <th>صاحب کالا (قبلی ← جدید)</th>
+                    <th>شماره صورتحساب</th>
+                    <th>کاربر ویرایش‌کننده</th>
+                    <th>علت و توضیحات</th>
+                </tr>
+                </thead>
+                <tbody>
+                @forelse($wagon->ownerLogs as $log)
+                    <tr>
+                        <td>{{ $loop->iteration }}</td>
+                        <td class="text-nowrap">@jdatetime($log->created_at)</td>
+                        <td>
+                            @if($log->change_type === 'wagon_number')
+                                <span class="badge bg-info text-dark">اصلاح شماره واگن</span>
+                            @elseif($log->change_type === 'both')
+                                <span class="badge bg-danger">اصلاح شماره و صاحب کالا</span>
+                            @else
+                                <span class="badge bg-warning text-dark">تغییر صاحب کالا</span>
+                            @endif
+                        </td>
+                        <td>
+                            @if($log->isWagonNumberChange())
+                                <span class="text-decoration-line-through text-danger">{{ $log->old_wagon_number }}</span>
+                                <span class="mx-1">←</span>
+                                <strong class="text-success">{{ $log->new_wagon_number }}</strong>
+                            @else
+                                <span class="text-muted">{{ $log->new_wagon_number ?: $wagon->wagon_number }} (بدون تغییر)</span>
+                            @endif
+                        </td>
+                        <td>
+                            @if((int) $log->old_owner_id !== (int) $log->new_owner_id)
+                                <span class="text-muted">{{ $log->old_owner_name }}</span>
+                                <span class="mx-1">←</span>
+                                <strong class="text-primary">{{ $log->new_owner_name }}</strong>
+                            @else
+                                <span class="text-muted">{{ $log->new_owner_name }} (بدون تغییر)</span>
+                            @endif
+                        </td>
+                        <td>
+                            @if($log->billing)
+                                <a href="{{ route('billing.show', $log->billing) }}">{{ $log->billing->billing_number }}</a>
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td>{{ $log->user?->name ?? '—' }}</td>
+                        <td>{{ $log->note }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-3">
+                            هنوز هیچ ویرایشی برای این واگن ثبت نشده است.
+                        </td>
+                    </tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -213,24 +277,21 @@
             const ownerSelect = document.getElementById('owner_id');
             const repSelect = document.getElementById('representative_id');
 
-            if (! ownerSelect || ! repSelect) {
-                return;
-            }
-
             function filterRepresentatives() {
                 const ownerId = ownerSelect.value;
 
-                Array.from(repSelect.options).forEach(function (opt) {
-                    if (! opt.value) {
+                Array.from(repSelect.options).forEach(function (option) {
+                    if (! option.value) {
                         return;
                     }
 
-                    const owners = (opt.getAttribute('data-owners') || '').split(',');
+                    const owners = (option.dataset.owners || '').split(',').filter(Boolean);
                     const allowed = ! ownerId || owners.includes(ownerId);
 
-                    opt.hidden = ! allowed;
-                    if (! allowed && opt.selected) {
-                        opt.selected = false;
+                    option.hidden = ! allowed;
+
+                    if (! allowed && option.selected) {
+                        repSelect.value = '';
                     }
                 });
             }

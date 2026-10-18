@@ -30,14 +30,16 @@ Route::post('/logout', [AuthController::class, 'logout'])
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    // درخواست‌های بارگیری و ویرایش صاحب کالای واگن
+    // درخواست‌های بارگیری و ویرایش واگن (شماره واگن / صاحب کالا)
     Route::get('/cargo', [CargoController::class, 'index'])->name('cargo.index');
     Route::get('/cargo/create', [CargoController::class, 'create'])->name('cargo.create');
     Route::post('/cargo', [CargoController::class, 'store'])->name('cargo.store');
     Route::get('/cargo/{cargo}', [CargoController::class, 'show'])->name('cargo.show');
     Route::post('/cargo/{cargo}/load', [CargoController::class, 'storeLoading'])->name('cargo.load');
     Route::get('/wagons/{wagon}/edit-owner', [CargoController::class, 'editWagonOwner'])->name('wagons.edit-owner');
+    Route::get('/wagons/{wagon}/edit', [CargoController::class, 'editWagonOwner'])->name('wagons.edit');
     Route::match(['post', 'put'], '/wagons/{wagon}/owner', [CargoController::class, 'updateWagonOwner'])->name('wagons.update-owner');
+    Route::match(['post', 'put'], '/wagons/{wagon}', [CargoController::class, 'updateWagonOwner'])->name('wagons.update');
 
     // صورتحساب‌ها
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');

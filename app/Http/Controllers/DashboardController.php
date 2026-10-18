@@ -59,6 +59,8 @@ class DashboardController extends Controller
             'settled' => Wagon::where('is_settled', true)->count(),
             'pending' => Wagon::where('is_settled', false)->count(),
             'edited' => Wagon::ownerEdited()->count(),
+            'number_edited' => Wagon::numberEdited()->count(),
+            'owner_edited' => Wagon::onlyOwnerChanged()->count(),
             'edited_in_range' => Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count(),
             'total_edit_logs' => WagonOwnerLog::count(),
         ];

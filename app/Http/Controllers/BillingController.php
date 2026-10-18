@@ -39,6 +39,7 @@ class BillingController extends Controller
                         ->orWhere('owner_name', 'like', $term)
                         ->orWhereHas('items.wagon', fn ($w) => $w
                             ->where('wagon_number', 'like', $term)
+                            ->orWhere('previous_wagon_number', 'like', $term)
                             ->orWhereHas('owner', fn ($wo) => $wo->where('name', 'like', $term)));
                 });
             })

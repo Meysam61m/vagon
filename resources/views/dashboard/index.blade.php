@@ -108,8 +108,12 @@
         <div class="col-6 col-md-3">
             <div class="card p-3 text-center border-warning h-100">
                 <div class="kpi-value text-warning-emphasis">{{ number_format($wagonStats['edited']) }}</div>
-                <div class="text-muted small">واگن‌های ویرایش‌شده (تغییر صاحب کالا)</div>
+                <div class="text-muted small">واگن‌های ویرایش‌شده (شماره / صاحب کالا)</div>
                 <div class="text-muted" style="font-size: 0.78rem;">
+                    اصلاح شماره: {{ number_format($wagonStats['number_edited'] ?? 0) }} |
+                    تغییر صاحب کالا: {{ number_format($wagonStats['owner_edited'] ?? 0) }}
+                </div>
+                <div class="text-muted" style="font-size: 0.75rem;">
                     در بازه: {{ number_format($wagonStats['edited_in_range']) }} |
                     کل ثبت ویرایش: {{ number_format($wagonStats['total_edit_logs']) }}
                 </div>
@@ -119,16 +123,19 @@
 
     <div class="card mb-4" id="edited-wagons">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span class="fw-bold">آمار واگن‌های ویرایش‌شده (تغییر صاحب کالا پس از صورتحساب)</span>
+            <span class="fw-bold">آمار و فهرست واگن‌های ویرایش‌شده پس از صدور صورتحساب (اصلاح شماره واگن / تغییر صاحب کالا)</span>
             <div class="d-flex gap-2 flex-wrap">
                 <span class="badge bg-warning text-dark">
                     واگن‌های ویرایش‌شده (کل): {{ number_format($wagonStats['edited']) }}
                 </span>
                 <span class="badge bg-info text-dark">
-                    در بازه انتخابی: {{ number_format($wagonStats['edited_in_range']) }}
+                    اصلاح شماره واگن: {{ number_format($wagonStats['number_edited'] ?? 0) }}
+                </span>
+                <span class="badge bg-primary">
+                    تغییر صاحب کالا: {{ number_format($wagonStats['owner_edited'] ?? 0) }}
                 </span>
                 <span class="badge bg-secondary">
-                    مجموع دفعات ویرایش: {{ number_format($wagonStats['total_edit_logs']) }}
+                    در بازه انتخابی: {{ number_format($wagonStats['edited_in_range']) }}
                 </span>
             </div>
         </div>
@@ -136,12 +143,12 @@
             <table class="table table-hover align-middle mb-0">
                 <thead>
                 <tr>
-                    <th>شماره واگن</th>
+                    <th>شماره واگن (فعلی / قبلی)</th>
+                    <th>نوع ویرایش</th>
                     <th>شرح کالا</th>
                     <th>درخواست / صورتحساب</th>
-                    <th>صاحب کالای قبلی</th>
-                    <th>صاحب کالای جدید</th>
-                    <th>توضیحات تغییر صاحب کالا</th>
+                    <th>صاحب کالا (قبلی ← فعلی)</th>
+                    <th>علت و توضیحات ویرایش</th>
                     <th>ویرایش‌کننده</th>
                     <th>زمان آخرین ویرایش</th>
                     <th>دفعات</th>
@@ -154,7 +161,23 @@
                         $billing = $wagon->billingItem?->billing;
                     @endphp
                     <tr>
-                        <td class="fw-bold">{{ $wagon->wagon_number }}</td>
+                        <td>
+                            <div class="fw-bold">{{ $wagon->wagon_number }}</div>
+                            @if($wagon->isNumberEdited())
+                                <div class="small text-danger">
+                                    قبلی: <span class="text-decoration-line-through">{{ $wagon->previous_wagon_number }}</span>
+                                </div>
+                            @endif
+                        </td>
+                        <td>
+                            @if($wagon->isNumberEdited() && $wagon->isOwnerChanged())
+                                <span class="badge bg-danger">اصلاح شماره و صاحب کالا</span>
+                            @elseif($wagon->isNumberEdited())
+                                <span class="badge bg-info text-dark">اصلاح شماره واگن</span>
+                            @else
+                                <span class="badge bg-warning text-dark">تغییر صاحب کالا</span>
+                            @endif
+                        </td>
                         <td>{{ $wagon->cargo_description ?: '—' }}</td>
                         <td>
                             @if($wagon->cargoRequest)
@@ -168,8 +191,15 @@
                                 </div>
                             @endif
                         </td>
-                        <td class="text-muted">{{ $wagon->previousOwner?->name ?? '—' }}</td>
-                        <td class="fw-bold text-primary">{{ $wagon->ownerName() }}</td>
+                        <td>
+                            @if($wagon->isOwnerChanged())
+                                <span class="text-muted">{{ $wagon->previousOwner?->name ?? '—' }}</span>
+                                <span class="mx-1">←</span>
+                                <strong class="text-primary">{{ $wagon->ownerName() }}</strong>
+                            @else
+                                <span class="fw-bold">{{ $wagon->ownerName() }}</span>
+                            @endif
+                        </td>
                         <td>{{ $wagon->owner_change_note ?: '—' }}</td>
                         <td>{{ $wagon->ownerChangedBy?->name ?? '—' }}</td>
                         <td class="text-nowrap">@jdatetime($wagon->owner_changed_at)</td>
@@ -183,7 +213,7 @@
                 @empty
                     <tr>
                         <td colspan="10" class="text-center text-muted py-3">
-                            هنوز صاحب کالای هیچ واگنی ویرایش نشده است.
+                            هنوز هیچ واگنی (شماره واگن یا صاحب کالا) ویرایش نشده است.
                         </td>
                     </tr>
                 @endforelse
