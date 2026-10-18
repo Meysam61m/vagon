@@ -4,6 +4,9 @@ namespace App\Providers;
 
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\TariffController;
+use App\Models\Tariff;
+use Database\Seeders\TariffSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
@@ -68,7 +71,12 @@ class AppServiceProvider extends ServiceProvider
         $routeCache = base_path('bootstrap/cache/routes-v7.php');
         if (is_file($routeCache)) {
             $content = @file_get_contents($routeCache);
-            if ($content === false || ! str_contains($content, 'wagons.edit-owner') || ! str_contains($content, 'reports.setad')) {
+            if (
+                $content === false
+                || ! str_contains($content, 'wagons.edit-owner')
+                || ! str_contains($content, 'reports.setad')
+                || ! str_contains($content, 'tariffs.import')
+            ) {
                 @unlink($routeCache);
                 clearstatcache(true, $routeCache);
             }
@@ -99,6 +107,16 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
+            if (! Route::has('tariffs.import') || ! Route::has('tariffs.seed-setad')) {
+                Route::middleware(['web', 'auth', 'role:admin'])->group(function () {
+                    Route::post('/tariffs/import', [TariffController::class, 'importExcel'])
+                        ->name('tariffs.import');
+                    Route::post('/tariffs/seed-setad', [TariffController::class, 'seedSetadTariffs'])
+                        ->name('tariffs.seed-setad');
+                });
+                $registered = true;
+            }
+
             if ($registered) {
                 $routes = app('router')->getRoutes();
                 $routes->refreshNameLookups();
@@ -110,7 +128,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v6';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v7';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -126,7 +144,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v6');
+                @file_put_contents($versionMarker, 'v7');
             }
         }
     }
@@ -221,6 +239,14 @@ class AppServiceProvider extends ServiceProvider
                         $table->string('new_wagon_number', 50)->nullable()->after('old_wagon_number');
                     }
                 });
+            }
+            if (Schema::hasTable('tariffs') && class_exists(TariffSeeder::class)) {
+                $hasSetadTariffs = DB::table('tariffs')->where('code', 'T-1405-01')->exists();
+                if (! $hasSetadTariffs) {
+                    foreach (TariffSeeder::defaultTariffs() as $t) {
+                        Tariff::updateOrCreate(['code' => $t['code']], $t + ['is_active' => true]);
+                    }
+                }
             }
         } catch (\Throwable) {
             // اگر اتصال دیتابیس هنوز برقرار نشده باشد (مثلاً قبل از نصب اولیه)، خطایی پرتاب نشود

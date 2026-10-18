@@ -89,6 +89,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/tariffs', [TariffController::class, 'index'])->name('tariffs.index');
         Route::get('/tariffs/create', [TariffController::class, 'create'])->name('tariffs.create');
         Route::post('/tariffs', [TariffController::class, 'store'])->name('tariffs.store');
+        Route::post('/tariffs/import', [TariffController::class, 'importExcel'])->name('tariffs.import');
+        Route::post('/tariffs/seed-setad', [TariffController::class, 'seedSetadTariffs'])->name('tariffs.seed-setad');
         Route::get('/tariffs/{tariff}/edit', [TariffController::class, 'edit'])->name('tariffs.edit');
         Route::put('/tariffs/{tariff}', [TariffController::class, 'update'])->name('tariffs.update');
         Route::patch('/tariffs/{tariff}/toggle', [TariffController::class, 'toggleActive'])->name('tariffs.toggle');

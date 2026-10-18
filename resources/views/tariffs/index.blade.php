@@ -2,9 +2,58 @@
 @section('title', 'مدیریت تعرفه‌ها')
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">مدیریت تعرفه‌ها</h4>
-        <a href="{{ route('tariffs.create') }}" class="btn btn-primary">افزودن تعرفه جدید</a>
+    @php
+        $taxPct = $taxPercentage ?? 10;
+    @endphp
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0">مدیریت تعرفه‌ها (کتابچه تعرفه عملیات بارگیری و تخلیه)</h4>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ route('tariffs.create') }}" class="btn btn-primary">افزودن تعرفه جدید</a>
+            <a href="{{ route('tariffs.index', array_merge(request()->query(), ['export' => 'excel'])) }}"
+               class="btn btn-success">
+                خروجی اکسل تعرفه‌ها (tarefe.xlsx)
+            </a>
+            <form method="POST"
+                  action="{{ \Illuminate\Support\Facades\Route::has('tariffs.seed-setad') ? route('tariffs.seed-setad') : url('/tariffs/seed-setad') }}"
+                  class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-outline-dark">
+                    ثبت تعرفه‌های کتابچه فاز ۲ شهید مطهری
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card p-3 mb-3 border-success">
+        <form method="POST"
+              action="{{ \Illuminate\Support\Facades\Route::has('tariffs.import') ? route('tariffs.import') : url('/tariffs/import') }}"
+              enctype="multipart/form-data"
+              class="row g-2 align-items-end">
+            @csrf
+            <div class="col-md-6">
+                <label class="form-label fw-bold" for="tariff_file">
+                    بارگذاری و بروزرسانی تعرفه‌ها از فایل اکسل (<code>tarefe.xlsx</code>)
+                </label>
+                <input type="file"
+                       name="tariff_file"
+                       id="tariff_file"
+                       accept=".xlsx"
+                       class="form-control @error('tariff_file') is-invalid @enderror"
+                       required>
+                @error('tariff_file')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text">
+                    فایل اکسل تعرفه (<code>.xlsx</code>) را انتخاب کنید تا کد، عنوان کالا/تعرفه، وسیله حمل (جرثقیل/لیفتراک/کارگری)، ظرفیت و نرخ کتابچه به‌صورت خودکار ثبت شود.
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success">
+                    بارگذاری فایل اکسل تعرفه
+                </button>
+            </div>
+        </form>
     </div>
 
     <form method="GET" class="card p-3 mb-3">
@@ -12,10 +61,10 @@
             <div class="col-md-4">
                 <label class="form-label" for="search">جستجو</label>
                 <input type="text" name="search" id="search" value="{{ request('search') }}" class="form-control"
-                       placeholder="کد یا عنوان تعرفه">
+                       placeholder="کد یا عنوان تعرفه / نام کالا">
             </div>
             <div class="col-md-3">
-                <label class="form-label" for="equipment_type">نوع دستگاه</label>
+                <label class="form-label" for="equipment_type">نوع دستگاه (وسیله حمل)</label>
                 <select name="equipment_type" id="equipment_type" class="form-select">
                     <option value="">همه</option>
                     @foreach(\App\Models\Tariff::EQUIPMENT_LABELS as $value => $label)
@@ -39,14 +88,16 @@
     </form>
 
     <div class="table-responsive">
-        <table class="table table-bordered table-hover bg-white">
+        <table class="table table-bordered table-hover bg-white align-middle">
             <thead>
             <tr>
                 <th>کد</th>
-                <th>عنوان</th>
+                <th>عنوان تعرفه / کالا</th>
                 <th>واحد</th>
                 <th>ظرفیت (تن)</th>
-                <th>نرخ (ریال)</th>
+                <th>مبلغ تعرفه در کتابچه (ریال)</th>
+                <th>مبلغ با احتساب مالیات ({{ $taxPct }}٪)</th>
+                <th>نرخ هر تن در کتابچه (ریال)</th>
                 <th>دسته</th>
                 <th>نوع دستگاه</th>
                 <th>وضعیت</th>
@@ -55,14 +106,24 @@
             </thead>
             <tbody>
             @forelse($tariffs as $tariff)
+                @php
+                    $withVat = (int) round($tariff->rate * (1 + ($taxPct / 100)));
+                    $perTon = (float) $tariff->capacity > 0 ? (int) round($tariff->rate / (float) $tariff->capacity) : 0;
+                @endphp
                 <tr>
-                    <td>{{ $tariff->code }}</td>
+                    <td class="fw-bold">{{ $tariff->code }}</td>
                     <td>{{ $tariff->title }}</td>
                     <td>{{ $tariff->unit }}</td>
                     <td>{{ $tariff->capacity }}</td>
-                    <td class="money">{{ number_format($tariff->rate) }}</td>
+                    <td class="money fw-bold" style="background-color: rgba(146, 208, 80, 0.25);">
+                        {{ number_format($tariff->rate) }}
+                    </td>
+                    <td class="money fw-bold text-primary">{{ number_format($withVat) }}</td>
+                    <td class="money text-muted">{{ number_format($perTon) }}</td>
                     <td>{{ $tariff->categoryLabel() }}</td>
-                    <td>{{ $tariff->equipmentLabel() }}</td>
+                    <td>
+                        <span class="badge bg-info text-dark">{{ $tariff->equipmentLabel() }}</span>
+                    </td>
                     <td>
                         <span class="badge {{ $tariff->is_active ? 'bg-success' : 'bg-secondary' }}">
                             {{ $tariff->is_active ? 'فعال' : 'غیرفعال' }}
@@ -80,7 +141,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" class="text-center text-muted py-4">تعرفه‌ای یافت نشد.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted py-4">تعرفه‌ای یافت نشد.</td></tr>
             @endforelse
             </tbody>
         </table>
