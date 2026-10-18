@@ -7,6 +7,7 @@ use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Tariff;
 use App\Models\Wagon;
+use App\Models\WagonOwnerLog;
 use App\Support\DocumentNumber;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
@@ -17,9 +18,16 @@ class CargoController extends Controller
 {
     public function index(Request $request)
     {
-        $cargoRequests = CargoRequest::with(['owner', 'representative', 'wagons'])
+        $cargoRequests = CargoRequest::with(['owner', 'representative', 'wagons.owner'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
-            ->when($request->filled('owner_id'), fn ($q) => $q->where('owner_id', $request->integer('owner_id')))
+            ->when($request->filled('owner_id'), function ($q) use ($request) {
+                $ownerId = $request->integer('owner_id');
+
+                $q->where(function ($sub) use ($ownerId) {
+                    $sub->where('owner_id', $ownerId)
+                        ->orWhereHas('wagons', fn ($w) => $w->where('owner_id', $ownerId));
+                });
+            })
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = '%'.trim($request->string('search')).'%';
 
@@ -28,7 +36,8 @@ class CargoController extends Controller
                         ->orWhereHas('owner', fn ($owner) => $owner->where('name', 'like', $term))
                         ->orWhereHas('wagons', fn ($wagon) => $wagon
                             ->where('wagon_number', 'like', $term)
-                            ->orWhere('cargo_description', 'like', $term));
+                            ->orWhere('cargo_description', 'like', $term)
+                            ->orWhereHas('owner', fn ($wOwner) => $wOwner->where('name', 'like', $term)));
                 });
             })
             ->latest('request_date')
@@ -136,6 +145,7 @@ class CargoController extends Controller
             foreach ($wagonRows as $wagonRow) {
                 Wagon::create([
                     'cargo_request_id' => $cargoRequest->id,
+                    'owner_id' => $data['owner_id'],
                     'wagon_number' => $wagonRow['number'],
                     'cargo_description' => $wagonRow['description'],
                 ]);
@@ -153,6 +163,7 @@ class CargoController extends Controller
     {
         $cargo->load([
             'owner', 'representative', 'operator',
+            'wagons.owner', 'wagons.previousOwner', 'wagons.ownerChangedBy',
             'wagons.tariff', 'wagons.billingItem.billing',
         ]);
 
@@ -266,5 +277,195 @@ class CargoController extends Controller
         return redirect()
             ->route('cargo.show', $cargo)
             ->with('success', 'اطلاعات بارگیری ثبت شد.');
+    }
+
+    /**
+     * فرم ویرایش صاحب کالای واگن (به‌ویژه پس از صدور صورتحساب) همراه با تاریخچه ویرایش‌ها.
+     */
+    public function editWagonOwner(Wagon $wagon)
+    {
+        $wagon->load([
+            'cargoRequest.owner',
+            'cargoRequest.representative',
+            'owner',
+            'previousOwner',
+            'ownerChangedBy',
+            'tariff',
+            'billingItem.billing',
+            'ownerLogs.user',
+            'ownerLogs.billing',
+        ]);
+
+        $owners = Owner::orderByDesc('is_active')->orderBy('name')->get();
+        $representatives = Representative::active()->with('owners')->orderBy('name')->get();
+
+        return view('wagons.edit-owner', [
+            'wagon' => $wagon,
+            'owners' => $owners,
+            'representatives' => $representatives,
+        ]);
+    }
+
+    /**
+     * ذخیره تغییر صاحب کالای واگن با الزام به ثبت توضیح و ثبت در آمار واگن‌های ویرایش‌شده.
+     */
+    public function updateWagonOwner(Request $request, Wagon $wagon)
+    {
+        if (! $request->filled('owner_change_note')) {
+            if ($request->filled('note')) {
+                $request->merge(['owner_change_note' => $request->input('note')]);
+            } elseif ($request->filled('description')) {
+                $request->merge(['owner_change_note' => $request->input('description')]);
+            }
+        }
+
+        $data = $request->validate([
+            'owner_id' => ['required', 'integer', 'exists:owners,id'],
+            'representative_id' => ['nullable', 'integer', 'exists:representatives,id'],
+            'owner_change_note' => ['required', 'string', 'min:3', 'max:2000'],
+        ], [
+            'owner_id.required' => 'انتخاب صاحب کالای جدید الزامی است.',
+            'owner_change_note.required' => 'ثبت توضیح برای تغییر صاحب کالای واگن الزامی است.',
+            'owner_change_note.min' => 'توضیح تغییر صاحب کالا باید حداقل ۳ کاراکتر باشد.',
+        ], [
+            'owner_id' => 'صاحب کالای جدید',
+            'representative_id' => 'نماینده',
+            'owner_change_note' => 'توضیحات تغییر صاحب کالا',
+        ]);
+
+        if (! empty($data['representative_id'])) {
+            $linked = DB::table('owner_representative')
+                ->where('owner_id', $data['owner_id'])
+                ->where('representative_id', $data['representative_id'])
+                ->exists();
+
+            if (! $linked) {
+                throw ValidationException::withMessages([
+                    'representative_id' => 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.',
+                ]);
+            }
+        }
+
+        $wagon->load(['cargoRequest.owner', 'owner', 'billingItem.billing.items.wagon']);
+
+        $oldOwnerId = $wagon->effectiveOwnerId();
+        $oldOwner = $wagon->owner ?? $wagon->cargoRequest?->owner ?? ($oldOwnerId ? Owner::find($oldOwnerId) : null);
+        $newOwner = Owner::findOrFail($data['owner_id']);
+
+        if ((int) $oldOwnerId === (int) $newOwner->id) {
+            throw ValidationException::withMessages([
+                'owner_id' => 'صاحب کالای انتخاب‌شده با صاحب کالای فعلی واگن یکسان است.',
+            ]);
+        }
+
+        $note = trim((string) $data['owner_change_note']);
+
+        if ($note === '') {
+            throw ValidationException::withMessages([
+                'owner_change_note' => 'ثبت توضیح برای تغییر صاحب کالای واگن الزامی است.',
+            ]);
+        }
+
+        $billing = $wagon->billingItem?->billing;
+
+        DB::transaction(function () use ($wagon, $oldOwnerId, $oldOwner, $newOwner, $note, $data, $billing) {
+            $wagon->update([
+                'previous_owner_id' => $oldOwnerId,
+                'owner_id' => $newOwner->id,
+                'owner_change_note' => $note,
+                'owner_changed_at' => now(),
+                'owner_changed_by' => auth()->id(),
+                'owner_change_count' => (int) $wagon->owner_change_count + 1,
+            ]);
+
+            if ($oldOwnerId) {
+                WagonOwnerLog::create([
+                    'wagon_id' => $wagon->id,
+                    'billing_id' => $billing?->id,
+                    'old_owner_id' => $oldOwnerId,
+                    'new_owner_id' => $newOwner->id,
+                    'old_owner_name' => $oldOwner?->name ?? '—',
+                    'new_owner_name' => $newOwner->name,
+                    'user_id' => auth()->id(),
+                    'note' => $note,
+                ]);
+            }
+
+            // اگر صورتحساب فعالی برای این واگن صادر شده و همه واگن‌های آن صورتحساب اکنون متعلق به صاحب جدید هستند،
+            // مشخصات صاحب کالا در هدر صورتحساب نیز به‌روز می‌شود.
+            if ($billing && ! $billing->isCancelled()) {
+                $billing->load('items.wagon.cargoRequest');
+
+                $allBillingWagonsSameOwner = $billing->items->isNotEmpty()
+                    && $billing->items->every(fn ($item) => (int) $item->wagon?->effectiveOwnerId() === (int) $newOwner->id);
+
+                if ($allBillingWagonsSameOwner) {
+                    $newRep = null;
+
+                    if (! empty($data['representative_id'])) {
+                        $newRep = Representative::find($data['representative_id']);
+                    } elseif ($billing->representative_id && DB::table('owner_representative')
+                        ->where('owner_id', $newOwner->id)
+                        ->where('representative_id', $billing->representative_id)
+                        ->exists()) {
+                        $newRep = $billing->representative;
+                    } else {
+                        $newRep = $newOwner->representatives()->where('is_active', true)->orderBy('representatives.id')->first();
+                    }
+
+                    $billing->update([
+                        'owner_id' => $newOwner->id,
+                        'owner_name' => $newOwner->name,
+                        'representative_id' => $newRep?->id,
+                        'representative_name' => $newRep?->name,
+                    ]);
+                }
+            }
+
+            // اگر همه واگن‌های درخواست بارگیری به صاحب جدید منتقل شده‌اند، درخواست بارگیری هم همگام شود
+            $cargoRequest = $wagon->cargoRequest()->with('wagons')->first();
+
+            if ($cargoRequest) {
+                $allRequestWagonsSameOwner = $cargoRequest->wagons->isNotEmpty()
+                    && $cargoRequest->wagons->every(fn (Wagon $w) => (int) $w->effectiveOwnerId() === (int) $newOwner->id);
+
+                if ($allRequestWagonsSameOwner) {
+                    $repId = $cargoRequest->representative_id;
+
+                    if (! empty($data['representative_id'])) {
+                        $repId = (int) $data['representative_id'];
+                    } elseif (! DB::table('owner_representative')
+                        ->where('owner_id', $newOwner->id)
+                        ->where('representative_id', $repId)
+                        ->exists()) {
+                        $repId = $newOwner->representatives()
+                            ->orderByDesc('is_active')
+                            ->orderBy('representatives.id')
+                            ->value('representatives.id') ?? $repId;
+                    }
+
+                    $cargoRequest->update([
+                        'owner_id' => $newOwner->id,
+                        'representative_id' => $repId,
+                    ]);
+                }
+            }
+        });
+
+        $message = "صاحب کالای واگن «{$wagon->wagon_number}» با موفقیت به «{$newOwner->name}» تغییر یافت و در آمار واگن‌های ویرایش‌شده ثبت شد.";
+
+        if ($request->filled('billing_id') && $billing) {
+            return redirect()->route('billing.show', $billing)->with('success', $message);
+        }
+
+        if ($billing) {
+            return redirect()->route('billing.show', $billing)->with('success', $message);
+        }
+
+        if ($wagon->cargoRequest) {
+            return redirect()->route('cargo.show', $wagon->cargoRequest)->with('success', $message);
+        }
+
+        return redirect()->route('dashboard')->with('success', $message);
     }
 }

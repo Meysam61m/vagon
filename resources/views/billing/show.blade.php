@@ -36,39 +36,92 @@
         @if($billing->notes)
             <div class="mt-3"><strong>توضیحات:</strong> {{ $billing->notes }}</div>
         @endif
+
+        @php
+            $editedItems = $billing->items->filter(fn ($i) => $i->wagon?->isOwnerEdited());
+        @endphp
+        @if($editedItems->isNotEmpty())
+            <div class="alert alert-warning mt-3 mb-0 py-2">
+                <strong>تغییرات صاحب کالای واگن‌ها پس از صدور صورتحساب:</strong>
+                <ul class="mb-0 mt-1 small">
+                    @foreach($editedItems as $editedItem)
+                        @php $w = $editedItem->wagon; @endphp
+                        <li>
+                            واگن <strong>{{ $w->wagon_number }}</strong>:
+                            از «{{ $w->previousOwner?->name ?? '—' }}» به «<strong>{{ $w->ownerName() }}</strong>»
+                            — توضیح: {{ $w->owner_change_note }}
+                            <span class="text-muted">
+                                (@jdatetime($w->owner_changed_at){{ $w->ownerChangedBy ? ' توسط '.$w->ownerChangedBy->name : '' }})
+                            </span>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
     </div>
 
     <div class="table-responsive mb-3">
-        <table class="table table-bordered bg-white">
+        <table class="table table-bordered bg-white align-middle">
             <thead>
             <tr>
                 <th>#</th>
                 <th>شماره واگن</th>
                 <th>شرح کالا</th>
+                <th>صاحب کالا</th>
                 <th>تعرفه</th>
                 <th>ظرفیت (تن)</th>
                 <th>وزن (تن)</th>
                 <th>هزینه پایه</th>
                 <th>مالیات</th>
                 <th>جمع ردیف</th>
+                @if(! $billing->isCancelled())
+                    <th>ویرایش صاحب کالا</th>
+                @endif
             </tr>
             </thead>
             <tbody>
             @forelse($billing->items as $index => $item)
+                @php
+                    $wagon = $item->wagon;
+                @endphp
                 <tr>
                     <td>{{ $loop->iteration }}</td>
-                    <td>{{ $item->wagon?->wagon_number ?? '—' }}</td>
-                    <td>{{ $item->wagon?->cargo_description ?: '—' }}</td>
+                    <td>{{ $wagon?->wagon_number ?? '—' }}</td>
+                    <td>{{ $wagon?->cargo_description ?: '—' }}</td>
+                    <td>
+                        <div>{{ $wagon?->ownerName() ?? $billing->ownerName() }}</div>
+                        @if($wagon?->isOwnerEdited())
+                            <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
+                            <div class="small text-muted mt-1">
+                                قبلی: {{ $wagon->previousOwner?->name ?? '—' }}
+                            </div>
+                            <div class="small text-muted">
+                                توضیح: {{ $wagon->owner_change_note }}
+                            </div>
+                        @endif
+                    </td>
                     <td>{{ $item->tariff_title }}</td>
                     <td>{{ $item->tariff_capacity }}</td>
                     <td>{{ $item->loaded_weight }}</td>
                     <td class="money">{{ number_format($item->base_cost) }}</td>
                     <td class="money">{{ number_format($item->tax_amount) }}</td>
                     <td class="money">{{ number_format($item->total_amount) }}</td>
+                    @if(! $billing->isCancelled())
+                        <td class="text-nowrap">
+                            @if($wagon)
+                                <a href="{{ route('wagons.edit-owner', ['wagon' => $wagon, 'billing_id' => $billing->id]) }}"
+                                   class="btn btn-sm btn-outline-primary">
+                                    ویرایش صاحب کالا
+                                </a>
+                            @else
+                                —
+                            @endif
+                        </td>
+                    @endif
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="text-center text-muted py-3">
+                    <td colspan="{{ $billing->isCancelled() ? 10 : 11 }}" class="text-center text-muted py-3">
                         ردیفی برای این صورتحساب ثبت نشده است (صورتحساب لغو شده).
                     </td>
                 </tr>

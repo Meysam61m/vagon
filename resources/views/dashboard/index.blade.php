@@ -87,23 +87,108 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
             <div class="card p-3 text-center bg-light h-100">
                 <div class="kpi-value">{{ number_format($wagonStats['loaded']) }}</div>
                 <div class="text-muted small">واگن بارگیری‌شده (کل)</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
             <div class="card p-3 text-center bg-light h-100">
                 <div class="kpi-value">{{ number_format($wagonStats['settled']) }}</div>
                 <div class="text-muted small">واگن تسویه‌شده</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-3">
             <div class="card p-3 text-center bg-light h-100">
                 <div class="kpi-value">{{ number_format($wagonStats['pending']) }}</div>
                 <div class="text-muted small">در انتظار تسویه</div>
             </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card p-3 text-center border-warning h-100">
+                <div class="kpi-value text-warning-emphasis">{{ number_format($wagonStats['edited']) }}</div>
+                <div class="text-muted small">واگن‌های ویرایش‌شده (تغییر صاحب کالا)</div>
+                <div class="text-muted" style="font-size: 0.78rem;">
+                    در بازه: {{ number_format($wagonStats['edited_in_range']) }} |
+                    کل ثبت ویرایش: {{ number_format($wagonStats['total_edit_logs']) }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4" id="edited-wagons">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="fw-bold">آمار واگن‌های ویرایش‌شده (تغییر صاحب کالا پس از صورتحساب)</span>
+            <div class="d-flex gap-2 flex-wrap">
+                <span class="badge bg-warning text-dark">
+                    واگن‌های ویرایش‌شده (کل): {{ number_format($wagonStats['edited']) }}
+                </span>
+                <span class="badge bg-info text-dark">
+                    در بازه انتخابی: {{ number_format($wagonStats['edited_in_range']) }}
+                </span>
+                <span class="badge bg-secondary">
+                    مجموع دفعات ویرایش: {{ number_format($wagonStats['total_edit_logs']) }}
+                </span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                <tr>
+                    <th>شماره واگن</th>
+                    <th>شرح کالا</th>
+                    <th>درخواست / صورتحساب</th>
+                    <th>صاحب کالای قبلی</th>
+                    <th>صاحب کالای جدید</th>
+                    <th>توضیحات تغییر صاحب کالا</th>
+                    <th>ویرایش‌کننده</th>
+                    <th>زمان آخرین ویرایش</th>
+                    <th>دفعات</th>
+                    <th>عملیات</th>
+                </tr>
+                </thead>
+                <tbody>
+                @forelse($editedWagons as $wagon)
+                    @php
+                        $billing = $wagon->billingItem?->billing;
+                    @endphp
+                    <tr>
+                        <td class="fw-bold">{{ $wagon->wagon_number }}</td>
+                        <td>{{ $wagon->cargo_description ?: '—' }}</td>
+                        <td>
+                            @if($wagon->cargoRequest)
+                                <a href="{{ route('cargo.show', $wagon->cargoRequest) }}">{{ $wagon->cargoRequest->request_number }}</a>
+                            @endif
+                            @if($billing)
+                                <div>
+                                    <a href="{{ route('billing.show', $billing) }}" class="small text-success">
+                                        {{ $billing->billing_number }}
+                                    </a>
+                                </div>
+                            @endif
+                        </td>
+                        <td class="text-muted">{{ $wagon->previousOwner?->name ?? '—' }}</td>
+                        <td class="fw-bold text-primary">{{ $wagon->ownerName() }}</td>
+                        <td>{{ $wagon->owner_change_note ?: '—' }}</td>
+                        <td>{{ $wagon->ownerChangedBy?->name ?? '—' }}</td>
+                        <td class="text-nowrap">@jdatetime($wagon->owner_changed_at)</td>
+                        <td><span class="badge bg-warning text-dark">{{ number_format($wagon->owner_change_count) }}</span></td>
+                        <td class="text-nowrap">
+                            <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                ویرایش / تاریخچه
+                            </a>
+                        </td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-3">
+                            هنوز صاحب کالای هیچ واگنی ویرایش نشده است.
+                        </td>
+                    </tr>
+                @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 

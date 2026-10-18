@@ -54,7 +54,14 @@ class OwnerController extends Controller
 
     public function destroy(Owner $owner)
     {
-        if ($owner->cargoRequests()->exists() || $owner->billings()->exists()) {
+        $hasWagonLinks = \App\Models\Wagon::where('owner_id', $owner->id)
+            ->orWhere('previous_owner_id', $owner->id)
+            ->exists()
+            || \App\Models\WagonOwnerLog::where('old_owner_id', $owner->id)
+                ->orWhere('new_owner_id', $owner->id)
+                ->exists();
+
+        if ($owner->cargoRequests()->exists() || $owner->billings()->exists() || $hasWagonLinks) {
             return back()->with('warning', 'این صاحب کالا سابقه درخواست یا صورتحساب دارد و حذف نمی‌شود؛ آن را غیرفعال کنید.');
         }
 

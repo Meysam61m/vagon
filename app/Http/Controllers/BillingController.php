@@ -21,15 +21,25 @@ class BillingController extends Controller
 {
     public function index(Request $request)
     {
-        $billings = Billing::with('owner', 'representative', 'operator')
-            ->when($request->filled('owner_id'), fn ($q) => $q->where('owner_id', $request->integer('owner_id')))
+        $billings = Billing::with('owner', 'representative', 'operator', 'items.wagon.owner')
+            ->when($request->filled('owner_id'), function ($q) use ($request) {
+                $ownerId = $request->integer('owner_id');
+
+                $q->where(function ($sub) use ($ownerId) {
+                    $sub->where('owner_id', $ownerId)
+                        ->orWhereHas('items.wagon', fn ($w) => $w->where('owner_id', $ownerId));
+                });
+            })
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->toString()))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = '%'.trim($request->string('search')->toString()).'%';
 
                 $q->where(function ($inner) use ($term) {
                     $inner->where('billing_number', 'like', $term)
-                        ->orWhere('owner_name', 'like', $term);
+                        ->orWhere('owner_name', 'like', $term)
+                        ->orWhereHas('items.wagon', fn ($w) => $w
+                            ->where('wagon_number', 'like', $term)
+                            ->orWhereHas('owner', fn ($wo) => $wo->where('name', 'like', $term)));
                 });
             })
             ->latest('billing_date')
@@ -55,8 +65,14 @@ class BillingController extends Controller
             $wagons = Wagon::query()
                 ->pendingSettlement()
                 ->loaded()
-                ->whereHas('cargoRequest', fn ($q) => $q->where('owner_id', $ownerId))
-                ->with(['cargoRequest.representative', 'tariff'])
+                ->where(function ($q) use ($ownerId) {
+                    $q->where('owner_id', $ownerId)
+                        ->orWhere(function ($sub) use ($ownerId) {
+                            $sub->whereNull('owner_id')
+                                ->whereHas('cargoRequest', fn ($cr) => $cr->where('owner_id', $ownerId));
+                        });
+                })
+                ->with(['cargoRequest.representative', 'owner', 'tariff'])
                 ->orderBy('wagon_number')
                 ->get();
         }
@@ -150,7 +166,7 @@ class BillingController extends Controller
                     ]);
                 }
 
-                if ((int) $wagon->cargoRequest->owner_id !== (int) $owner->id) {
+                if ((int) $wagon->effectiveOwnerId() !== (int) $owner->id) {
                     throw ValidationException::withMessages([
                         'wagons' => "واگن {$wagon->wagon_number} متعلق به صاحب کالای انتخاب‌شده نیست.",
                     ]);
@@ -248,14 +264,26 @@ class BillingController extends Controller
 
     public function show(Billing $billing)
     {
-        $billing->load(['items.wagon', 'items.tariff', 'representative']);
+        $billing->load([
+            'items.wagon.owner',
+            'items.wagon.previousOwner',
+            'items.wagon.ownerChangedBy',
+            'items.wagon.cargoRequest',
+            'items.tariff',
+            'representative',
+        ]);
 
         return view('billing.show', ['billing' => $billing]);
     }
 
     public function print(Billing $billing)
     {
-        $billing->load(['items.wagon', 'representative']);
+        $billing->load([
+            'items.wagon.owner',
+            'items.wagon.previousOwner',
+            'items.wagon.cargoRequest',
+            'representative',
+        ]);
 
         // اگر افزونه dom روی سرور فعال نباشد، Dompdf نمی‌تواند HTML را پارس کند.
         // به‌جای خطای ۵۰۰، همان فاکتور را به‌صورت HTML قابل چاپ (Ctrl+P → Save as PDF) نشان می‌دهیم.

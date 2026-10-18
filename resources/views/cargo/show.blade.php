@@ -45,10 +45,12 @@
                         <th>#</th>
                         <th>شماره واگن</th>
                         <th style="min-width: 190px;">شرح کالا <span class="text-danger">*</span></th>
+                        <th>صاحب کالا</th>
                         <th style="min-width: 240px;">تعرفه</th>
                         <th style="min-width: 130px;">وزن (تن)</th>
                         <th>وضعیت</th>
                         <th>صورتحساب</th>
+                        <th>ویرایش صاحب کالا</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -73,6 +75,14 @@
                                     @error('loading.'.$wagon->id.'.description')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
+                                @endif
+                            </td>
+                            <td>
+                                <div>{{ $wagon->ownerName() }}</div>
+                                @if($wagon->isOwnerEdited())
+                                    <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
+                                    <div class="small text-muted">قبلی: {{ $wagon->previousOwner?->name ?? '—' }}</div>
+                                    <div class="small text-muted">توضیح: {{ $wagon->owner_change_note }}</div>
                                 @endif
                             </td>
                             <td>
@@ -121,6 +131,11 @@
                                     —
                                 @endif
                             </td>
+                            <td class="text-nowrap">
+                                <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                    ویرایش صاحب کالا
+                                </a>
+                            </td>
                         </tr>
                     @endforeach
                     </tbody>
@@ -129,6 +144,61 @@
 
             <button class="btn btn-primary" type="submit">ذخیره بارگیری</button>
         </form>
+    @else
+        <div class="card p-4 mb-4">
+            <h6 class="mb-3">واگن‌های این درخواست (صورتحساب‌شده)</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered bg-white align-middle mb-0">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>شماره واگن</th>
+                        <th>شرح کالا</th>
+                        <th>صاحب کالا</th>
+                        <th>تعرفه</th>
+                        <th>وزن (تن)</th>
+                        <th>وضعیت</th>
+                        <th>صورتحساب</th>
+                        <th>ویرایش صاحب کالا</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach($cargo->wagons as $wagon)
+                        <tr>
+                            <td>{{ $loop->iteration }}</td>
+                            <td>{{ $wagon->wagon_number }}</td>
+                            <td>{{ $wagon->cargo_description ?: '—' }}</td>
+                            <td>
+                                <div>{{ $wagon->ownerName() }}</div>
+                                @if($wagon->isOwnerEdited())
+                                    <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
+                                    <div class="small text-muted">قبلی: {{ $wagon->previousOwner?->name ?? '—' }}</div>
+                                    <div class="small text-muted">توضیح: {{ $wagon->owner_change_note }}</div>
+                                @endif
+                            </td>
+                            <td>{{ $wagon->tariff?->title ?? '—' }}</td>
+                            <td>{{ $wagon->loaded_weight ?? '—' }}</td>
+                            <td><span class="badge bg-success">تسویه شده</span></td>
+                            <td>
+                                @if($wagon->billingItem?->billing)
+                                    <a href="{{ route('billing.show', $wagon->billingItem->billing) }}">
+                                        {{ $wagon->billingItem->billing->billing_number }}
+                                    </a>
+                                @else
+                                    —
+                                @endif
+                            </td>
+                            <td class="text-nowrap">
+                                <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                    ویرایش صاحب کالا
+                                </a>
+                            </td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
     @endif
 
     <a href="{{ route('cargo.index') }}" class="btn btn-secondary">بازگشت</a>

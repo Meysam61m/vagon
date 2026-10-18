@@ -161,7 +161,14 @@ class ReportController extends Controller
     {
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
-        $items = BillingItem::with(['wagon', 'billing.owner', 'tariff'])
+        $items = BillingItem::with([
+            'wagon.owner',
+            'wagon.previousOwner',
+            'wagon.ownerChangedBy',
+            'wagon.cargoRequest.owner',
+            'billing.owner',
+            'tariff',
+        ])
             ->whereHas('billing', fn ($q) => $q
                 ->whereBetween('billing_date', [$from, $to])
                 ->where('status', Billing::STATUS_ISSUED))
@@ -187,16 +194,18 @@ class ReportController extends Controller
     {
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
-        $stats = DB::table('billings')
-            ->join('owners', 'owners.id', '=', 'billings.owner_id')
+        $stats = DB::table('billing_items')
+            ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
+            ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
+            ->join('owners', 'owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'))
             ->whereBetween('billings.billing_date', [$from, $to])
             ->where('billings.status', Billing::STATUS_ISSUED)
             ->whereNull('billings.deleted_at')
             ->select('owners.id', 'owners.name')
-            ->selectRaw('COUNT(*) as billing_count')
-            ->selectRaw('COALESCE(SUM(billings.base_amount), 0) as base_amount')
-            ->selectRaw('COALESCE(SUM(billings.tax_amount), 0) as tax_amount')
-            ->selectRaw('COALESCE(SUM(billings.total_amount), 0) as total_amount')
+            ->selectRaw('COUNT(DISTINCT billings.id) as billing_count')
+            ->selectRaw('COALESCE(SUM(billing_items.base_cost), 0) as base_amount')
+            ->selectRaw('COALESCE(SUM(billing_items.tax_amount), 0) as tax_amount')
+            ->selectRaw('COALESCE(SUM(billing_items.total_amount), 0) as total_amount')
             ->groupBy('owners.id', 'owners.name')
             ->orderByDesc('total_amount')
             ->get();

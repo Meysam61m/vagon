@@ -7,6 +7,7 @@ use App\Models\CargoRequest;
 use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Wagon;
+use App\Models\WagonOwnerLog;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -31,15 +32,21 @@ class DashboardController extends Controller
             'loaded_wagons' => Wagon::whereNotNull('loaded_weight')->where('is_settled', false)->count(),
             'active_owners' => Owner::active()->count(),
             'active_representatives' => Representative::active()->count(),
+            'edited_wagons' => Wagon::ownerEdited()->count(),
+            'edited_wagons_in_range' => Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count(),
         ];
 
         $loadingChart = $this->dailyLoading($from, $to);
         $revenueChart = $this->dailyRevenue($from, $to);
 
-        $ownerShareChart = Billing::whereBetween('billing_date', [$from, $to])
-            ->where('status', Billing::STATUS_ISSUED)
-            ->join('owners', 'owners.id', '=', 'billings.owner_id')
-            ->select('owners.name', DB::raw('SUM(billings.total_amount) as total'))
+        $ownerShareChart = DB::table('billing_items')
+            ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
+            ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
+            ->join('owners', 'owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'))
+            ->whereBetween('billings.billing_date', [$from, $to])
+            ->where('billings.status', Billing::STATUS_ISSUED)
+            ->whereNull('billings.deleted_at')
+            ->select('owners.name', DB::raw('SUM(billing_items.total_amount) as total'))
             ->groupBy('owners.id', 'owners.name')
             ->orderByDesc('total')
             ->limit(8)
@@ -51,7 +58,23 @@ class DashboardController extends Controller
             'loaded' => Wagon::whereNotNull('loaded_weight')->count(),
             'settled' => Wagon::where('is_settled', true)->count(),
             'pending' => Wagon::where('is_settled', false)->count(),
+            'edited' => Wagon::ownerEdited()->count(),
+            'edited_in_range' => Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count(),
+            'total_edit_logs' => WagonOwnerLog::count(),
         ];
+
+        $editedWagons = Wagon::ownerEdited()
+            ->with([
+                'owner',
+                'previousOwner',
+                'ownerChangedBy',
+                'cargoRequest.owner',
+                'billingItem.billing',
+            ])
+            ->orderByDesc('owner_changed_at')
+            ->orderByDesc('id')
+            ->limit(25)
+            ->get();
 
         return view('dashboard.index', [
             'kpis' => $kpis,
@@ -60,6 +83,7 @@ class DashboardController extends Controller
             'ownerShareChart' => $ownerShareChart,
             'recentBillings' => $recentBillings,
             'wagonStats' => $wagonStats,
+            'editedWagons' => $editedWagons,
             'fromShamsi' => JalaliDate::fromCarbon($from),
             'toShamsi' => JalaliDate::fromCarbon($to),
         ]);

@@ -151,6 +151,7 @@ return [
         'address' => 'آدرس',
         'description' => 'توضیحات',
         'notes' => 'توضیحات',
+        'owner_change_note' => 'توضیحات تغییر صاحب کالا',
         'code' => 'کد تعرفه',
         'title' => 'عنوان',
         'unit' => 'واحد',

@@ -33,7 +33,7 @@
     </div>
 
     <div class="table-responsive">
-        <table class="table table-bordered bg-white">
+        <table class="table table-bordered bg-white align-middle">
             <thead>
             <tr>
                 <th>شماره واگن</th>
@@ -45,14 +45,25 @@
                 <th>هزینه پایه</th>
                 <th>مالیات ردیف</th>
                 <th>جمع ردیف</th>
+                <th>عملیات</th>
             </tr>
             </thead>
             <tbody>
             @forelse($items as $item)
+                @php
+                    $wagon = $item->wagon;
+                @endphp
                 <tr>
-                    <td>{{ $item->wagon?->wagon_number ?? '—' }}</td>
-                    <td>{{ $item->wagon?->cargo_description ?: '—' }}</td>
-                    <td>{{ $item->billing?->ownerName() ?? '—' }}</td>
+                    <td>{{ $wagon?->wagon_number ?? '—' }}</td>
+                    <td>{{ $wagon?->cargo_description ?: '—' }}</td>
+                    <td>
+                        <div>{{ $wagon?->ownerName() ?? $item->billing?->ownerName() ?? '—' }}</div>
+                        @if($wagon?->isOwnerEdited())
+                            <span class="badge bg-warning text-dark mt-1">ویرایش‌شده</span>
+                            <div class="small text-muted">قبلی: {{ $wagon->previousOwner?->name ?? '—' }}</div>
+                            <div class="small text-muted">توضیح: {{ $wagon->owner_change_note }}</div>
+                        @endif
+                    </td>
                     <td>
                         @if($item->billing)
                             <a href="{{ route('billing.show', $item->billing) }}">{{ $item->billing->billing_number }}</a>
@@ -65,9 +76,18 @@
                     <td class="money">{{ number_format($item->base_cost) }}</td>
                     <td class="money">{{ number_format($item->tax_amount) }}</td>
                     <td class="money">{{ number_format($item->total_amount) }}</td>
+                    <td class="text-nowrap">
+                        @if($wagon)
+                            <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                ویرایش صاحب کالا
+                            </a>
+                        @else
+                            —
+                        @endif
+                    </td>
                 </tr>
             @empty
-                <tr><td colspan="9" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
+                <tr><td colspan="10" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
             @endforelse
             </tbody>
         </table>

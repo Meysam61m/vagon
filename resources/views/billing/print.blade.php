@@ -262,6 +262,22 @@
     </div>
 @endif
 
+@php
+    $editedItems = $billing->items->filter(fn ($i) => $i->wagon?->isOwnerEdited());
+@endphp
+@if($editedItems->isNotEmpty())
+    <div class="notes">
+        <strong>تغییرات صاحب کالای واگن‌ها:</strong>
+        @foreach($editedItems as $editedItem)
+            <div>
+                واگن {{ $editedItem->wagon->wagon_number }}:
+                از «{{ $editedItem->wagon->previousOwner?->name ?? '-' }}» به «{{ $editedItem->wagon->ownerName() }}»
+                — توضیح: {{ $editedItem->wagon->owner_change_note }}
+            </div>
+        @endforeach
+    </div>
+@endif
+
 <div class="footer">
     <div>تاریخ چاپ: {{ \App\Support\JalaliDate::today() }}</div>
     <div>این سند به صورت خودکار توسط سامانه مدیریت بارگیری واگن صادر شده است.</div>
