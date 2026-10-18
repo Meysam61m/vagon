@@ -108,6 +108,22 @@ class TariffController extends Controller
         return back()->with('success', $tariff->is_active ? 'تعرفه فعال شد.' : 'تعرفه غیرفعال شد.');
     }
 
+    public function destroy(Tariff $tariff)
+    {
+        $title = $tariff->title;
+        $code = $tariff->code;
+
+        DB::transaction(function () use ($tariff) {
+            DB::table('wagons')->where('tariff_id', $tariff->id)->update(['tariff_id' => null]);
+            DB::table('billing_items')->where('tariff_id', $tariff->id)->update(['tariff_id' => null]);
+            $tariff->delete();
+        });
+
+        return redirect()
+            ->route('tariffs.index')
+            ->with('success', "تعرفه «{$title}» ({$code}) با موفقیت حذف شد.");
+    }
+
     /**
      * ثبت/بروزرسانی تعرفه‌های پیش‌فرض کتابچه عملیات فاز ۲ شهید مطهری (۱۴۰۵ و ۱۴۰۴)
      */

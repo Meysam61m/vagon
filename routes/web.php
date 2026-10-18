@@ -94,6 +94,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/tariffs/{tariff}/edit', [TariffController::class, 'edit'])->name('tariffs.edit');
         Route::put('/tariffs/{tariff}', [TariffController::class, 'update'])->name('tariffs.update');
         Route::patch('/tariffs/{tariff}/toggle', [TariffController::class, 'toggleActive'])->name('tariffs.toggle');
+        Route::delete('/tariffs/{tariff}', [TariffController::class, 'destroy'])->name('tariffs.destroy');
+        Route::post('/tariffs/{tariff}/delete', [TariffController::class, 'destroy'])->name('tariffs.delete');
 
         // مالیات
         Route::get('/tax', [TaxController::class, 'edit'])->name('tax.edit');

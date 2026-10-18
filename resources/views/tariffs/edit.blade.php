@@ -5,7 +5,16 @@
     @php
         $taxPct = $taxPercentage ?? 10;
     @endphp
-    <h4 class="mb-3">ویرایش تعرفه: {{ $tariff->code }}</h4>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">ویرایش تعرفه: {{ $tariff->code }}</h4>
+        <form action="{{ \Illuminate\Support\Facades\Route::has('tariffs.destroy') ? route('tariffs.destroy', $tariff) : url('/tariffs/'.$tariff->id) }}"
+              method="POST"
+              onsubmit="return confirm('آیا از حذف تعرفه «{{ $tariff->title }}» اطمینان دارید؟');">
+            @csrf
+            @method('DELETE')
+            <button class="btn btn-outline-danger" type="submit">حذف تعرفه</button>
+        </form>
+    </div>
 
     <form method="POST" action="{{ route('tariffs.update', $tariff) }}" class="card p-4">
         @csrf

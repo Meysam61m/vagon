@@ -138,6 +138,14 @@
                                 {{ $tariff->is_active ? 'غیرفعال‌سازی' : 'فعال‌سازی' }}
                             </button>
                         </form>
+                        <form action="{{ \Illuminate\Support\Facades\Route::has('tariffs.destroy') ? route('tariffs.destroy', $tariff) : url('/tariffs/'.$tariff->id) }}"
+                              method="POST"
+                              class="d-inline"
+                              onsubmit="return confirm('آیا از حذف تعرفه «{{ $tariff->title }}» اطمینان دارید؟');">
+                            @csrf
+                            @method('DELETE')
+                            <button class="btn btn-sm btn-outline-danger" type="submit">حذف</button>
+                        </form>
                     </td>
                 </tr>
             @empty

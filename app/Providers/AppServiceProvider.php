@@ -75,7 +75,7 @@ class AppServiceProvider extends ServiceProvider
                 $content === false
                 || ! str_contains($content, 'wagons.edit-owner')
                 || ! str_contains($content, 'reports.setad')
-                || ! str_contains($content, 'tariffs.import')
+                || ! str_contains($content, 'tariffs.destroy')
             ) {
                 @unlink($routeCache);
                 clearstatcache(true, $routeCache);
@@ -107,12 +107,16 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
-            if (! Route::has('tariffs.import') || ! Route::has('tariffs.seed-setad')) {
+            if (! Route::has('tariffs.import') || ! Route::has('tariffs.seed-setad') || ! Route::has('tariffs.destroy')) {
                 Route::middleware(['web', 'auth', 'role:admin'])->group(function () {
                     Route::post('/tariffs/import', [TariffController::class, 'importExcel'])
                         ->name('tariffs.import');
                     Route::post('/tariffs/seed-setad', [TariffController::class, 'seedSetadTariffs'])
                         ->name('tariffs.seed-setad');
+                    Route::delete('/tariffs/{tariff}', [TariffController::class, 'destroy'])
+                        ->name('tariffs.destroy');
+                    Route::post('/tariffs/{tariff}/delete', [TariffController::class, 'destroy'])
+                        ->name('tariffs.delete');
                 });
                 $registered = true;
             }
@@ -128,7 +132,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v7';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v8';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -144,7 +148,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v7');
+                @file_put_contents($versionMarker, 'v8');
             }
         }
     }
@@ -240,13 +244,15 @@ class AppServiceProvider extends ServiceProvider
                     }
                 });
             }
-            if (Schema::hasTable('tariffs') && class_exists(TariffSeeder::class)) {
+            $seededMarker = storage_path('framework/.setad_tariffs_seeded_v1');
+            if (! is_file($seededMarker) && Schema::hasTable('tariffs') && class_exists(TariffSeeder::class)) {
                 $hasSetadTariffs = DB::table('tariffs')->where('code', 'T-1405-01')->exists();
                 if (! $hasSetadTariffs) {
                     foreach (TariffSeeder::defaultTariffs() as $t) {
                         Tariff::updateOrCreate(['code' => $t['code']], $t + ['is_active' => true]);
                     }
                 }
+                @file_put_contents($seededMarker, '1');
             }
         } catch (\Throwable) {
             // اگر اتصال دیتابیس هنوز برقرار نشده باشد (مثلاً قبل از نصب اولیه)، خطایی پرتاب نشود
