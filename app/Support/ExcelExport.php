@@ -45,6 +45,297 @@ class ExcelExport
     }
 
     /**
+     * ساخت و ارسال فایل اکسل «گزارش ستاد» دقیقاً مطابق قالب و فرمول‌های فایل نمونه
+     * (لیست واگن‌های فاز ۲ شهید مطهری با ستون‌های B تا M، ستون سبز مبلغ تعرفه کتابچه و امضاهای انتهای صفحه).
+     *
+     * @param  string  $filename
+     * @param  string  $fromShamsi
+     * @param  string  $toShamsi
+     * @param  iterable<int, array<string, mixed>>  $itemsData
+     */
+    public static function downloadSetadReport(
+        string $filename,
+        string $fromShamsi,
+        string $toShamsi,
+        iterable $itemsData
+    ): Response {
+        if (! str_ends_with(strtolower($filename), '.xlsx')) {
+            $filename .= '.xlsx';
+        }
+
+        $xlsxBinary = self::buildSetadXlsx($fromShamsi, $toShamsi, $itemsData);
+
+        $safeAsciiName = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) ?: 'setad-report.xlsx';
+        $encodedName = rawurlencode($filename);
+
+        return new Response($xlsxBinary, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$safeAsciiName}\"; filename*=UTF-8''{$encodedName}",
+            'Content-Length' => (string) strlen($xlsxBinary),
+            'Cache-Control' => 'max-age=0, no-cache, no-store, must-revalidate',
+            'Pragma' => 'public',
+        ]);
+    }
+
+    /**
+     * @param  iterable<int, array<string, mixed>>  $itemsData
+     */
+    public static function buildSetadXlsx(string $fromShamsi, string $toShamsi, iterable $itemsData): string
+    {
+        $title = "لیست واگن های فاز 2 شهید مطهری در بازه زمانی {$fromShamsi} لغایت {$toShamsi}";
+
+        $files = [
+            '[Content_Types].xml' => self::contentTypesXml(),
+            '_rels/.rels' => self::rootRelsXml(),
+            'xl/_rels/workbook.xml.rels' => self::workbookRelsXml(),
+            'xl/workbook.xml' => self::workbookXml('Sheet1'),
+            'xl/styles.xml' => self::setadStylesXml(),
+            'xl/worksheets/sheet1.xml' => self::setadSheetXml($title, $itemsData),
+        ];
+
+        return self::buildZipArchive($files);
+    }
+
+    private static function setadStylesXml(): string
+    {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            .'<numFmts count="2">'
+            .'<numFmt numFmtId="164" formatCode="_ * #,##0.00_-_ ;_ * #,##0.00\-_ ;_ * &quot;-&quot;??_-_ ;_ @_ "/>'
+            .'<numFmt numFmtId="165" formatCode="_ * #,##0_-_ ;_ * #,##0\-_ ;_ * &quot;-&quot;??_-_ ;_ @_ "/>'
+            .'</numFmts>'
+            .'<fonts count="3">'
+            // 0: Arial 11
+            .'<font><sz val="11"/><color rgb="FF000000"/><name val="Arial"/><family val="2"/></font>'
+            // 1: B Nazanin 11 Bold
+            .'<font><b/><sz val="11"/><color rgb="FF000000"/><name val="B Nazanin"/><charset val="178"/></font>'
+            // 2: B Nazanin 12 Bold (Title)
+            .'<font><b/><sz val="12"/><color rgb="FF000000"/><name val="B Nazanin"/><charset val="178"/></font>'
+            .'</fonts>'
+            .'<fills count="4">'
+            .'<fill><patternFill patternType="none"/></fill>'
+            .'<fill><patternFill patternType="gray125"/></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FF92D050"/><bgColor indexed="64"/></patternFill></fill>'
+            .'</fills>'
+            .'<borders count="3">'
+            .'<border><left/><right/><top/><bottom/><diagonal/></border>'
+            .'<border>'
+            .'<left style="thin"><color rgb="FF000000"/></left>'
+            .'<right style="thin"><color rgb="FF000000"/></right>'
+            .'<top style="thin"><color rgb="FF000000"/></top>'
+            .'<bottom style="thin"><color rgb="FF000000"/></bottom>'
+            .'<diagonal/>'
+            .'</border>'
+            .'<border>'
+            .'<left/><right/><top/><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/>'
+            .'</border>'
+            .'</borders>'
+            .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            .'<cellXfs count="8">'
+            // 0: پیش‌فرض خالی
+            .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            // 1: عنوان بالای جدول (B1:M1) - B Nazanin 12 Bold با خط زیرین
+            .'<xf numFmtId="0" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/>'
+            .'</xf>'
+            // 2: سرستون‌ها (B2:M2) - B Nazanin 11 Bold با کادر کامل
+            .'<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/>'
+            .'</xf>'
+            // 3: سلول متنی/ردیف وسط‌چین با کادر (B, C, D, E, H, L, M)
+            .'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/>'
+            .'</xf>'
+            // 4: سلول عددی/مبلغ با فرمت #,##0 و کادر (F, G, J, K)
+            .'<xf numFmtId="165" fontId="1" fillId="2" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2"/>'
+            .'</xf>'
+            // 5: سلول سبز «مبلغ تعرفه در کتابچه» (ستون I) با پس‌زمینه #92D050 و فرمت #,##0
+            .'<xf numFmtId="165" fontId="1" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2"/>'
+            .'</xf>'
+            // 6: سلول توضیحات طولانی با wrapText (ستون M در محاسبه تناژی)
+            .'<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2" wrapText="1"/>'
+            .'</xf>'
+            // 7: امضاهای پایین جدول (B Nazanin 11 Bold بدون کادر)
+            .'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1">'
+            .'<alignment horizontal="center" vertical="center" readingOrder="2"/>'
+            .'</xf>'
+            .'</cellXfs>'
+            .'</styleSheet>';
+    }
+
+    /**
+     * @param  iterable<int, array<string, mixed>>  $itemsData
+     */
+    private static function setadSheetXml(string $title, iterable $itemsData): string
+    {
+        $headers = [
+            'B' => 'ردیف',
+            'C' => 'شماره واگن',
+            'D' => 'تعرفه',
+            'E' => 'نام صاحب کالا',
+            'F' => 'مبلغ با احتساب مالیات بر ارزش افزوده',
+            'G' => 'مبلغ کل قابل دریافت از مشتری',
+            'H' => 'توضیحات/ شماره وسیله حمل',
+            'I' => 'مبلغ تعرفه در کتابچه',
+            'J' => 'تناژ (عملیاتی)',
+            'K' => 'محاسبه بر اساس کتابچه تعرفه',
+            'L' => 'نحوه محاسبه',
+            'M' => 'توضیحات',
+        ];
+
+        $widths = [
+            1 => 2.25,    // A (ستون حاشیه)
+            2 => 10,      // B: ردیف
+            3 => 14.5,    // C: شماره واگن
+            4 => 16.5,    // D: تعرفه
+            5 => 24,      // E: نام صاحب کالا
+            6 => 20,      // F: مبلغ با احتساب مالیات بر ارزش افزوده
+            7 => 23,      // G: مبلغ کل قابل دریافت از مشتری
+            8 => 29.5,    // H: توضیحات/ شماره وسیله حمل
+            9 => 22,      // I: مبلغ تعرفه در کتابچه
+            10 => 18.75,  // J: تناژ (عملیاتی)
+            11 => 24,     // K: محاسبه بر اساس کتابچه تعرفه
+            12 => 22,     // L: نحوه محاسبه
+            13 => 28,     // M: توضیحات
+        ];
+
+        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            .'<sheetViews><sheetView rightToLeft="1" tabSelected="1" workbookViewId="0"/></sheetViews>'
+            .'<sheetFormatPr defaultRowHeight="19.5"/>'
+            .'<cols>';
+
+        foreach ($widths as $colIdx => $w) {
+            $xml .= '<col min="'.$colIdx.'" max="'.$colIdx.'" width="'.$w.'" customWidth="1"/>';
+        }
+
+        $xml .= '</cols><sheetData>';
+
+        // ردیف ۱: بنر عنوان (B1:M1 ادغام‌شده)
+        $xml .= '<row r="1" ht="26.25" customHeight="1">';
+        foreach (array_keys($headers) as $colLetter) {
+            if ($colLetter === 'B') {
+                $xml .= '<c r="B1" s="1" t="inlineStr"><is><t>'.self::xmlEscape($title).'</t></is></c>';
+            } else {
+                $xml .= '<c r="'.$colLetter.'1" s="1"/>';
+            }
+        }
+        $xml .= '</row>';
+
+        // ردیف ۲: سرستون‌ها (B2:M2)
+        $xml .= '<row r="2" ht="19.5" customHeight="1">';
+        foreach ($headers as $colLetter => $label) {
+            $xml .= '<c r="'.$colLetter.'2" s="2" t="inlineStr"><is><t>'.self::xmlEscape($label).'</t></is></c>';
+        }
+        $xml .= '</row>';
+
+        // ردیف‌های داده (از ردیف ۳ به بعد)
+        $rowNum = 3;
+        foreach ($itemsData as $row) {
+            $xml .= '<row r="'.$rowNum.'" ht="19.5" customHeight="1">';
+
+            // B: ردیف
+            $xml .= '<c r="B'.$rowNum.'" s="3"><v>'.((int) $row['index']).'</v></c>';
+
+            // C: شماره واگن
+            $wagonNo = (string) ($row['wagon_number'] ?? '');
+            if (ctype_digit($wagonNo) && ! str_starts_with($wagonNo, '0')) {
+                $xml .= '<c r="C'.$rowNum.'" s="3"><v>'.$wagonNo.'</v></c>';
+            } else {
+                $xml .= '<c r="C'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape($wagonNo).'</t></is></c>';
+            }
+
+            // D: تعرفه (شرح کالا / نام تعرفه)
+            $xml .= '<c r="D'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['tariff_name'] ?? '')).'</t></is></c>';
+
+            // E: نام صاحب کالا
+            $xml .= '<c r="E'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['owner_name'] ?? '')).'</t></is></c>';
+
+            // F: مبلغ با احتساب مالیات بر ارزش افزوده
+            $xml .= '<c r="F'.$rowNum.'" s="4"><v>'.((int) ($row['total_with_vat'] ?? 0)).'</v></c>';
+
+            // G: مبلغ کل قابل دریافت از مشتری
+            if (! empty($row['is_tonnage'])) {
+                $gVal = (float) ($row['customer_payable'] ?? 0);
+                $xml .= '<c r="G'.$rowNum.'" s="4"><f>J'.$rowNum.'*K'.$rowNum.'</f><v>'.$gVal.'</v></c>';
+            } else {
+                $xml .= '<c r="G'.$rowNum.'" s="4"/>';
+            }
+
+            // H: توضیحات/ شماره وسیله حمل
+            $xml .= '<c r="H'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['equipment_label'] ?? '')).'</t></is></c>';
+
+            // I: مبلغ تعرفه در کتابچه (ستون سبز رنگ #92D050)
+            $bookletRate = (float) ($row['booklet_rate'] ?? 0);
+            if (! empty($row['is_tonnage'])) {
+                $xml .= '<c r="I'.$rowNum.'" s="5"><v>'.round($bookletRate).'</v></c>';
+            } else {
+                $vatDivisor = (float) ($row['vat_divisor'] ?? 1.1);
+                $xml .= '<c r="I'.$rowNum.'" s="5"><f>F'.$rowNum.'/'.$vatDivisor.'</f><v>'.$bookletRate.'</v></c>';
+            }
+
+            // J: تناژ (عملیاتی)
+            if (! empty($row['is_tonnage']) && isset($row['operational_tonnage']) && $row['operational_tonnage'] !== null) {
+                $xml .= '<c r="J'.$rowNum.'" s="4"><v>'.((float) $row['operational_tonnage']).'</v></c>';
+            } else {
+                $xml .= '<c r="J'.$rowNum.'" s="4"/>';
+            }
+
+            // K: محاسبه بر اساس کتابچه تعرفه
+            if (! empty($row['is_tonnage'])) {
+                $cap = (float) ($row['capacity'] ?? 65);
+                $capStr = floor($cap) == $cap ? (string) ((int) $cap) : (string) $cap;
+                $perTon = (float) ($row['per_ton_rate'] ?? 0);
+                $xml .= '<c r="K'.$rowNum.'" s="4"><f>I'.$rowNum.'/'.$capStr.'</f><v>'.$perTon.'</v></c>';
+            } else {
+                $xml .= '<c r="K'.$rowNum.'" s="4"/>';
+            }
+
+            // L: نحوه محاسبه
+            $xml .= '<c r="L'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['calc_method'] ?? 'طبق قرارداد')).'</t></is></c>';
+
+            // M: توضیحات
+            $notes = trim((string) ($row['notes'] ?? ''));
+            if ($notes !== '') {
+                $xml .= '<c r="M'.$rowNum.'" s="6" t="inlineStr"><is><t>'.self::xmlEscape($notes).'</t></is></c>';
+            } else {
+                $xml .= '<c r="M'.$rowNum.'" s="3"/>';
+            }
+
+            $xml .= '</row>';
+            $rowNum++;
+        }
+
+        // ردیف‌های امضا در پایین گزارش (دقیقاً مطابق ساختار فایل نمونه ستاد)
+        $sigRow1 = $rowNum + 4;
+        $sigRow2 = $rowNum + 7;
+        $sigRow3 = $rowNum + 8;
+
+        $xml .= '<row r="'.$sigRow1.'" ht="21" customHeight="1">'
+            .'<c r="D'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء طرف قرار داد / پیمانکار</t></is></c>'
+            .'<c r="L'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء مدیر شعبه</t></is></c>'
+            .'</row>';
+
+        $xml .= '<row r="'.$sigRow2.'" ht="21" customHeight="1">'
+            .'<c r="D'.$sigRow2.'" s="7" t="inlineStr"><is><t>امضاء مدیر مجتمع </t></is></c>'
+            .'</row>';
+
+        $xml .= '<row r="'.$sigRow3.'" ht="21" customHeight="1">'
+            .'<c r="L'.$sigRow3.'" s="7" t="inlineStr"><is><t>امضاء رئیس عملیات</t></is></c>'
+            .'</row>';
+
+        $xml .= '</sheetData>'
+            .'<mergeCells count="1"><mergeCell ref="B1:M1"/></mergeCells>'
+            .'</worksheet>';
+
+        return $xml;
+    }
+
+    /**
      * @param  array<int, string>  $headers
      * @param  iterable<int, array<int, mixed>>  $rows
      * @param  array<int, mixed>|null  $totalsRow

@@ -1,3 +1,4 @@
 # فایل‌های بسته‌بندی‌شده در آرشیوهای خودکار GitHub (codeload) نیایند
 /wagon-system-mysql.zip export-ignore
 /wagon-system.rar export-ignore
+/*.xlsx export-ignore

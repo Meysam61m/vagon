@@ -569,4 +569,139 @@ class ReportController extends Controller
 
         return view('reports.representatives', compact('stats', 'fromShamsi', 'toShamsi'));
     }
+
+    /**
+     * گزارش ستاد (لیست واگن‌های فاز ۲ شهید مطهری مطابق فرمت اکسل ستاد)
+     */
+    public function setad(Request $request)
+    {
+        [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
+
+        $baseQuery = BillingItem::query()
+            ->select('billing_items.*')
+            ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
+            ->whereBetween('billings.billing_date', [$from, $to])
+            ->where('billings.status', Billing::STATUS_ISSUED)
+            ->whereNull('billings.deleted_at')
+            ->with([
+                'wagon.owner',
+                'wagon.previousOwner',
+                'wagon.cargoRequest.owner',
+                'billing.owner',
+                'tariff',
+            ])
+            ->orderBy('billings.billing_date')
+            ->orderBy('billing_items.id');
+
+        $allItems = $baseQuery->get();
+
+        $rows = [];
+        $totals = [
+            'count' => 0,
+            'tonnage_count' => 0,
+            'total_with_vat' => 0,
+            'customer_payable' => 0.0,
+            'booklet_rate' => 0.0,
+            'operational_tonnage' => 0.0,
+        ];
+
+        foreach ($allItems as $idx => $item) {
+            $mapped = $this->mapSetadRow($item, $idx + 1);
+            $rows[] = $mapped;
+
+            $totals['count']++;
+            $totals['total_with_vat'] += (int) $mapped['total_with_vat'];
+            $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
+
+            if ($mapped['is_tonnage']) {
+                $totals['tonnage_count']++;
+                $totals['customer_payable'] += (float) ($mapped['customer_payable'] ?? 0);
+                $totals['operational_tonnage'] += (float) ($mapped['operational_tonnage'] ?? 0);
+            }
+        }
+
+        if ($this->wantsExcel($request)) {
+            return ExcelExport::downloadSetadReport(
+                'setad-report-'.$this->fileDateRange($fromShamsi, $toShamsi).'.xlsx',
+                $fromShamsi,
+                $toShamsi,
+                $rows
+            );
+        }
+
+        return view('reports.setad', [
+            'rows' => $rows,
+            'totals' => $totals,
+            'fromShamsi' => $fromShamsi,
+            'toShamsi' => $toShamsi,
+        ]);
+    }
+
+    /**
+     * تبدیل یک ردیف صورتحساب به ساختار ۱۲ ستونی گزارش ستاد
+     *
+     * @return array<string, mixed>
+     */
+    private function mapSetadRow(BillingItem $item, int $index): array
+    {
+        $wagon = $item->wagon;
+        $billing = $item->billing;
+        $tariff = $item->tariff;
+
+        $taxPct = (float) ($billing?->tax_percentage ?? 10);
+        $vatDivisor = $taxPct > 0 ? round(1 + ($taxPct / 100), 4) : 1.1;
+
+        $loadedWeight = (float) $item->loaded_weight;
+        $capacity = (float) ($item->tariff_capacity ?: ($tariff?->capacity ?: 65));
+
+        // اگر وزن بارگیری‌شده کمتر از ظرفیت کامل واگن باشد، محاسبه از نوع «طبق قرارداد-محاسبه تناژی» است
+        $isTonnage = $capacity > 0 && $loadedWeight > 0 && ($capacity - $loadedWeight) >= 0.01;
+
+        $totalWithVat = (int) $item->total_amount;
+        $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
+
+        $bookletRate = $isTonnage
+            ? (float) ($item->tariff_rate ?: ($tariff?->rate ?: $item->base_cost))
+            : ($totalWithVat / ($vatDivisor > 0 ? $vatDivisor : 1.1));
+
+        $perTonRate = ($isTonnage && $capacity > 0) ? ($bookletRate / $capacity) : null;
+        $customerPayable = ($isTonnage && $perTonRate !== null) ? ($loadedWeight * $perTonRate) : null;
+
+        $calcMethod = $isTonnage ? 'طبق قرارداد-محاسبه تناژی' : 'طبق قرارداد';
+
+        $weightClean = floor($loadedWeight) == $loadedWeight
+            ? (string) ((int) $loadedWeight)
+            : (string) $loadedWeight;
+
+        $customNotes = collect([
+            $billing?->notes,
+            $wagon?->cargoRequest?->notes,
+        ])->map(fn ($n) => trim((string) $n))->filter()->unique()->implode(' - ');
+
+        if ($isTonnage && $customNotes === '') {
+            $notes = "عملیات به صورت ترکیبی توسط کارگر و {$equipmentLabel} انجام شده است ، تناژ اعلامی ({$weightClean} تن) بر اساس مستندات نماینده صاحب کالا می باشد و جهت جلو گیری از اعتراض صاحب کالا محاسبات بر اساس تناژ عملیاتی لیفتراک یا جرثقیل لحاظ شده و مابقی خدماتی که توسط کارگر انجام شده است مستقیما با سرکارگر مربوطه تسویه می گردد";
+        } else {
+            $notes = $customNotes;
+        }
+
+        return [
+            'index' => $index,
+            'wagon_id' => $wagon?->id,
+            'billing_id' => $billing?->id,
+            'wagon_number' => $wagon?->wagon_number ?? '—',
+            'tariff_name' => $wagon?->cargo_description ?: $item->tariff_title,
+            'owner_name' => $wagon?->ownerName() ?? $billing?->ownerName() ?? '—',
+            'total_with_vat' => $totalWithVat,
+            'customer_payable' => $customerPayable,
+            'equipment_label' => $equipmentLabel,
+            'booklet_rate' => $bookletRate,
+            'vat_divisor' => $vatDivisor,
+            'operational_tonnage' => $isTonnage ? $loadedWeight : null,
+            'capacity' => $capacity,
+            'per_ton_rate' => $perTonRate,
+            'calc_method' => $calcMethod,
+            'notes' => $notes,
+            'is_tonnage' => $isTonnage,
+        ];
+    }
 }
