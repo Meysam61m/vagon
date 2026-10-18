@@ -83,7 +83,7 @@
         </div>
     </div>
 
-    <form method="POST" action="{{ route('wagons.update-owner', $wagon) }}" class="card p-4 mb-4">
+    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('wagons.update-owner') ? route('wagons.update-owner', $wagon) : url('/wagons/'.$wagon->id.'/owner') }}" class="card p-4 mb-4">
         @csrf
         @method('PUT')
         @if(request('billing_id') || $billing)

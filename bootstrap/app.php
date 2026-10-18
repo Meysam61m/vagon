@@ -7,6 +7,17 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 
+// اگر کش مسیرها (routes-v7.php) از نسخه قبلی باقی مانده و مسیرهای جدید را ندارد،
+// پیش از راه‌اندازی مسیریاب حذف شود تا routes/web.php بارگذاری گردد.
+$wagonRouteCache = dirname(__DIR__).'/bootstrap/cache/routes-v7.php';
+if (is_file($wagonRouteCache)) {
+    $wagonRouteCacheContent = @file_get_contents($wagonRouteCache);
+    if ($wagonRouteCacheContent === false || ! str_contains($wagonRouteCacheContent, 'wagons.edit-owner')) {
+        @unlink($wagonRouteCache);
+        clearstatcache(true, $wagonRouteCache);
+    }
+}
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',

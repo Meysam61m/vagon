@@ -78,7 +78,7 @@
                     <td class="money">{{ number_format($item->total_amount) }}</td>
                     <td class="text-nowrap">
                         @if($wagon)
-                            <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
                                 ویرایش صاحب کالا
                             </a>
                         @else

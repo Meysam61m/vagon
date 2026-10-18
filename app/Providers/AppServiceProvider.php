@@ -2,14 +2,21 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\CargoController;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Morilog\Jalali\Jalalian;
 
 class AppServiceProvider extends ServiceProvider
 {
+    private static bool $schemaVerified = false;
+
     public function register(): void
     {
         //
@@ -46,5 +53,141 @@ class AppServiceProvider extends ServiceProvider
 
         // اطمینان از اینکه نمونه‌سازی کلاس تاریخ شمسی در زمان اجرا با autoload کامپوزر انجام می‌شود
         class_exists(Jalalian::class);
+
+        $this->ensureWagonOwnerRoutesRegistered();
+        $this->ensureWagonOwnerSchema();
+    }
+
+    /**
+     * اگر کش مسیرها (route:cache) از نسخه قبلی باقی مانده باشد یا فایل routes/web.php
+     * هنوز ری‌لود نشده باشد، مسیرهای ویرایش صاحب کالای واگن را ثبت و جدول نام مسیرها را تازه می‌کند.
+     */
+    private function ensureWagonOwnerRoutesRegistered(): void
+    {
+        $routeCache = base_path('bootstrap/cache/routes-v7.php');
+        if (is_file($routeCache)) {
+            $content = @file_get_contents($routeCache);
+            if ($content === false || ! str_contains($content, 'wagons.edit-owner')) {
+                @unlink($routeCache);
+                clearstatcache(true, $routeCache);
+            }
+        }
+
+        $this->app->booted(function () {
+            if (! Route::has('wagons.edit-owner')) {
+                Route::middleware(['web', 'auth'])->group(function () {
+                    Route::get('/wagons/{wagon}/edit-owner', [CargoController::class, 'editWagonOwner'])
+                        ->name('wagons.edit-owner');
+                    Route::match(['post', 'put'], '/wagons/{wagon}/owner', [CargoController::class, 'updateWagonOwner'])
+                        ->name('wagons.update-owner');
+                });
+
+                $routes = app('router')->getRoutes();
+                $routes->refreshNameLookups();
+                $routes->refreshActionLookups();
+            }
+        });
+
+        // منقضی کردن خودکار فایل‌های کامپایل‌شده قدیمی Blade هنگام ارتقای نسخه
+        // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
+        $compiledViewsDir = storage_path('framework/views');
+        if (is_dir($compiledViewsDir)) {
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v2';
+            $forceExpireAll = ! is_file($versionMarker);
+
+            foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
+                $compiledContent = @file_get_contents($compiledFile);
+                $hasUnprotectedRoute = is_string($compiledContent)
+                    && str_contains($compiledContent, "route('wagons.edit-owner'")
+                    && ! str_contains($compiledContent, "Route::has('wagons.edit-owner')");
+
+                if ($forceExpireAll || $hasUnprotectedRoute) {
+                    @touch($compiledFile, 1);
+                    clearstatcache(true, $compiledFile);
+                }
+            }
+
+            if ($forceExpireAll) {
+                @file_put_contents($versionMarker, 'v2');
+            }
+        }
+    }
+
+    /**
+     * اگر کاربر پس از کپی فایل‌های جدید هنوز دستور php artisan migrate را اجرا نکرده باشد،
+     * ستون‌ها و جدول تاریخچه ویرایش صاحب کالای واگن را به‌صورت خودکار و ایمن ایجاد می‌کند.
+     */
+    private function ensureWagonOwnerSchema(): void
+    {
+        if (self::$schemaVerified) {
+            return;
+        }
+
+        self::$schemaVerified = true;
+
+        try {
+            if (! Schema::hasTable('wagons')) {
+                return;
+            }
+
+            if (! Schema::hasColumn('wagons', 'cargo_description')) {
+                Schema::table('wagons', function (Blueprint $table) {
+                    $table->string('cargo_description', 255)->nullable()->after('wagon_number');
+                });
+            }
+
+            if (! Schema::hasColumn('wagons', 'owner_change_count')) {
+                Schema::table('wagons', function (Blueprint $table) {
+                    if (! Schema::hasColumn('wagons', 'owner_id')) {
+                        $table->foreignId('owner_id')->nullable()->after('cargo_request_id')->constrained('owners')->nullOnDelete();
+                    }
+                    if (! Schema::hasColumn('wagons', 'previous_owner_id')) {
+                        $table->foreignId('previous_owner_id')->nullable()->after('owner_id')->constrained('owners')->nullOnDelete();
+                    }
+                    if (! Schema::hasColumn('wagons', 'owner_change_note')) {
+                        $table->text('owner_change_note')->nullable()->after('is_settled');
+                    }
+                    if (! Schema::hasColumn('wagons', 'owner_changed_at')) {
+                        $table->timestamp('owner_changed_at')->nullable()->after('owner_change_note');
+                        $table->index('owner_changed_at');
+                    }
+                    if (! Schema::hasColumn('wagons', 'owner_changed_by')) {
+                        $table->foreignId('owner_changed_by')->nullable()->after('owner_changed_at')->constrained('users')->nullOnDelete();
+                    }
+                    if (! Schema::hasColumn('wagons', 'owner_change_count')) {
+                        $table->unsignedInteger('owner_change_count')->default(0)->after('owner_changed_by');
+                    }
+                });
+
+                $requests = DB::table('cargo_requests')->pluck('owner_id', 'id');
+
+                foreach ($requests as $requestId => $ownerId) {
+                    DB::table('wagons')
+                        ->where('cargo_request_id', $requestId)
+                        ->whereNull('owner_id')
+                        ->update(['owner_id' => $ownerId]);
+                }
+            }
+
+            if (! Schema::hasTable('wagon_owner_logs')) {
+                Schema::create('wagon_owner_logs', function (Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('wagon_id')->constrained('wagons')->cascadeOnDelete();
+                    $table->foreignId('billing_id')->nullable()->constrained('billings')->nullOnDelete();
+                    $table->foreignId('old_owner_id')->constrained('owners')->restrictOnDelete();
+                    $table->foreignId('new_owner_id')->constrained('owners')->restrictOnDelete();
+                    $table->string('old_owner_name');
+                    $table->string('new_owner_name');
+                    $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->text('note');
+                    $table->timestamps();
+
+                    $table->index(['wagon_id', 'created_at']);
+                    $table->index('created_at');
+                });
+            }
+        } catch (\Throwable) {
+            // اگر اتصال دیتابیس هنوز برقرار نشده باشد (مثلاً قبل از نصب اولیه)، خطایی پرتاب نشود
+        }
     }
 }

@@ -109,7 +109,7 @@
                     @if(! $billing->isCancelled())
                         <td class="text-nowrap">
                             @if($wagon)
-                                <a href="{{ route('wagons.edit-owner', ['wagon' => $wagon, 'billing_id' => $billing->id]) }}"
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', ['wagon' => $wagon, 'billing_id' => $billing->id]) : url('/wagons/'.$wagon->id.'/edit-owner?billing_id='.$billing->id) }}"
                                    class="btn btn-sm btn-outline-primary">
                                     ویرایش صاحب کالا
                                 </a>

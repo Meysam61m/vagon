@@ -456,6 +456,21 @@ try {
 
     require $wagonAutoload;
 
+    // اگر فایل کش مسیرها (routes-v7.php) از قبل مانده باشد و مسیرهای جدید را نداشته باشد،
+    // به‌صورت خودکار پاک می‌شود تا خطای Route not defined رخ ندهد.
+    $wagonRouteCache = $wagonBase.'/bootstrap/cache/routes-v7.php';
+    $wagonWebRoutes = $wagonBase.'/routes/web.php';
+    if (is_file($wagonRouteCache)) {
+        $wagonCacheContent = @file_get_contents($wagonRouteCache);
+        $wagonStaleByTime = is_file($wagonWebRoutes) && @filemtime($wagonRouteCache) < @filemtime($wagonWebRoutes);
+        $wagonMissingOwnerRoute = $wagonCacheContent === false || ! str_contains($wagonCacheContent, 'wagons.edit-owner');
+
+        if ($wagonStaleByTime || $wagonMissingOwnerRoute) {
+            @unlink($wagonRouteCache);
+            clearstatcache(true, $wagonRouteCache);
+        }
+    }
+
     /** @var Application $app */
     $app = require_once $wagonBase.'/bootstrap/app.php';
 

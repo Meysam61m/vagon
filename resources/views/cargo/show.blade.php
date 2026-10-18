@@ -132,7 +132,7 @@
                                 @endif
                             </td>
                             <td class="text-nowrap">
-                                <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
                                     ویرایش صاحب کالا
                                 </a>
                             </td>
@@ -189,7 +189,7 @@
                                 @endif
                             </td>
                             <td class="text-nowrap">
-                                <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
                                     ویرایش صاحب کالا
                                 </a>
                             </td>

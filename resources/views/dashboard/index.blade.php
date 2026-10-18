@@ -175,7 +175,7 @@
                         <td class="text-nowrap">@jdatetime($wagon->owner_changed_at)</td>
                         <td><span class="badge bg-warning text-dark">{{ number_format($wagon->owner_change_count) }}</span></td>
                         <td class="text-nowrap">
-                            <a href="{{ route('wagons.edit-owner', $wagon) }}" class="btn btn-sm btn-outline-primary">
+                            <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
                                 ویرایش / تاریخچه
                             </a>
                         </td>
