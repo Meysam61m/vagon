@@ -14,14 +14,6 @@
                class="btn btn-success">
                 خروجی اکسل تعرفه‌ها (tarefe.xlsx)
             </a>
-            <form method="POST"
-                  action="{{ \Illuminate\Support\Facades\Route::has('tariffs.seed-setad') ? route('tariffs.seed-setad') : url('/tariffs/seed-setad') }}"
-                  class="d-inline">
-                @csrf
-                <button type="submit" class="btn btn-outline-dark">
-                    ثبت تعرفه‌های کتابچه فاز ۲ شهید مطهری
-                </button>
-            </form>
         </div>
     </div>
 

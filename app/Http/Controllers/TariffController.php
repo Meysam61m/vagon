@@ -6,7 +6,6 @@ use App\Models\Tariff;
 use App\Models\TaxSetting;
 use App\Support\ExcelExport;
 use App\Support\ExcelReader;
-use Database\Seeders\TariffSeeder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -122,27 +121,6 @@ class TariffController extends Controller
         return redirect()
             ->route('tariffs.index')
             ->with('success', "تعرفه «{$title}» ({$code}) با موفقیت حذف شد.");
-    }
-
-    /**
-     * ثبت/بروزرسانی تعرفه‌های پیش‌فرض کتابچه عملیات فاز ۲ شهید مطهری (۱۴۰۵ و ۱۴۰۴)
-     */
-    public function seedSetadTariffs()
-    {
-        $defaults = TariffSeeder::defaultTariffs();
-
-        DB::transaction(function () use ($defaults) {
-            foreach ($defaults as $tariff) {
-                Tariff::updateOrCreate(
-                    ['code' => $tariff['code']],
-                    $tariff + ['is_active' => true]
-                );
-            }
-        });
-
-        return redirect()
-            ->route('tariffs.index')
-            ->with('success', count($defaults).' تعرفه کتابچه عملیات فاز ۲ شهید مطهری با موفقیت ثبت و بروزرسانی شد.');
     }
 
     /**

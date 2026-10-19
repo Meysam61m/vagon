@@ -122,12 +122,10 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
-            if (! Route::has('tariffs.import') || ! Route::has('tariffs.seed-setad') || ! Route::has('tariffs.destroy')) {
+            if (! Route::has('tariffs.import') || ! Route::has('tariffs.destroy')) {
                 Route::middleware(['web', 'auth', 'role:admin'])->group(function () {
                     Route::post('/tariffs/import', [TariffController::class, 'importExcel'])
                         ->name('tariffs.import');
-                    Route::post('/tariffs/seed-setad', [TariffController::class, 'seedSetadTariffs'])
-                        ->name('tariffs.seed-setad');
                     Route::delete('/tariffs/{tariff}', [TariffController::class, 'destroy'])
                         ->name('tariffs.destroy');
                     Route::post('/tariffs/{tariff}/delete', [TariffController::class, 'destroy'])
@@ -147,7 +145,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v17';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v18';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -163,7 +161,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v17');
+                @file_put_contents($versionMarker, 'v18');
             }
         }
     }
