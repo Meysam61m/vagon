@@ -183,9 +183,6 @@ class CargoController extends Controller
             'wagons.*.number' => ['nullable', 'string', 'max:50'],
             'wagons.*.description' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'quick_tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
-            'quick_weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
-            'quick_action' => ['nullable', 'string', 'in:save_only,save_and_load,save_load_and_bill,save_load_bill_and_print'],
         ], [
             'representative_id.required' => 'انتخاب نام نماینده الزامی است.',
         ], [
@@ -195,19 +192,9 @@ class CargoController extends Controller
             'wagons' => 'واگن‌ها',
             'wagons.*.number' => 'شماره واگن',
             'wagons.*.description' => 'شرح کالا',
-            'quick_tariff_id' => 'تعرفه بارگیری سریع',
-            'quick_weight' => 'وزن بارگیری',
         ]);
 
         $ownerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
-        $quickAction = $data['quick_action'] ?? 'save_only';
-
-        // هنگام صدور صورتحساب، نام صاحب کالا الزامی است
-        if (in_array($quickAction, ['save_load_and_bill', 'save_load_bill_and_print'], true) && $ownerId === null) {
-            throw ValidationException::withMessages([
-                'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. (اگر نام صاحب کالا در زمان بارگیری مشخص نیست، گزینه «ثبت درخواست + ثبت بارگیری» یا «فقط ثبت درخواست» را انتخاب کنید.)',
-            ]);
-        }
 
         // اگر صاحب کالا انتخاب شده باشد، بررسی الزامی رابطه صاحب کالا و نماینده
         if ($ownerId !== null) {
@@ -249,45 +236,12 @@ class CargoController extends Controller
             ]);
         }
 
-        $quickAction = $data['quick_action'] ?? 'save_only';
-        $quickTariff = ! empty($data['quick_tariff_id']) ? Tariff::find($data['quick_tariff_id']) : null;
-
-        // اگر اپراتور دکمه بارگیری/فاکتور را زده ولی تعرفه را دستی انتخاب نکرده، از روی شرح کالای ردیف اول تعرفه را پیشنهاد می‌دهیم
-        if (! $quickTariff && in_array($quickAction, ['save_and_load', 'save_load_and_bill', 'save_load_bill_and_print'], true)) {
-            $firstDesc = (string) ($wagonRows->first()['description'] ?? '');
-            $suggestedId = $this->suggestTariffId($firstDesc, Tariff::active()->get());
-            if ($suggestedId) {
-                $quickTariff = Tariff::find($suggestedId);
-            }
-        }
-
-        if (in_array($quickAction, ['save_and_load', 'save_load_and_bill', 'save_load_bill_and_print'], true) && ! $quickTariff) {
-            throw ValidationException::withMessages([
-                'quick_tariff_id' => 'برای ثبت یک‌مرحله‌ای بارگیری/صورتحساب، انتخاب تعرفه الزامی است.',
-            ]);
-        }
-
-        $quickWeight = null;
-        if ($quickTariff) {
-            $quickWeight = ! empty($data['quick_weight']) ? (float) $data['quick_weight'] : (float) $quickTariff->capacity;
-            if ($quickWeight > (float) $quickTariff->capacity) {
-                throw ValidationException::withMessages([
-                    'quick_weight' => "وزن واردشده ({$quickWeight} تن) از ظرفیت تعرفه ({$quickTariff->capacity} تن) بیشتر است.",
-                ]);
-            }
-        }
-
-        $shouldLoadImmediately = $quickTariff !== null && ($quickAction !== 'save_only' || $request->filled('quick_tariff_id'));
-
         $cargoRequest = DocumentNumber::withRetry(function () use (
             $data,
             $ownerId,
             $requestDate,
             $normalizedDate,
-            $wagonRows,
-            $shouldLoadImmediately,
-            $quickTariff,
-            $quickWeight
+            $wagonRows
         ) {
             $cargoRequest = CargoRequest::create([
                 'request_number' => CargoRequest::generateRequestNumber(),
@@ -296,7 +250,7 @@ class CargoController extends Controller
                 'operator_id' => auth()->id(),
                 'request_date' => $requestDate->toDateString(),
                 'request_date_shamsi' => $normalizedDate,
-                'status' => $shouldLoadImmediately ? CargoRequest::STATUS_LOADED : CargoRequest::STATUS_PENDING,
+                'status' => CargoRequest::STATUS_PENDING,
                 'notes' => $data['notes'] ?? null,
             ]);
 
@@ -306,32 +260,15 @@ class CargoController extends Controller
                     'owner_id' => $ownerId,
                     'wagon_number' => $wagonRow['number'],
                     'cargo_description' => $wagonRow['description'],
-                    'tariff_id' => $shouldLoadImmediately ? $quickTariff->id : null,
-                    'loaded_weight' => $shouldLoadImmediately ? $quickWeight : null,
-                    'loaded_on' => $shouldLoadImmediately ? $requestDate->toDateString() : null,
                 ]);
             }
 
             return $cargoRequest;
         });
 
-        if (in_array($quickAction, ['save_load_and_bill', 'save_load_bill_and_print'], true) && $shouldLoadImmediately) {
-            $billing = $this->issueInvoiceForCargoRequest($cargoRequest, $normalizedDate);
-
-            if ($quickAction === 'save_load_bill_and_print') {
-                return redirect()->route('billing.print', $billing);
-            }
-
-            return redirect()
-                ->route('billing.show', $billing)
-                ->with('success', "درخواست بارگیری «{$cargoRequest->request_number}»، عملیات بارگیری و صورتحساب «{$billing->billing_number}» به‌صورت یک‌مرحله‌ای صادر شد.");
-        }
-
         return redirect()
             ->route('cargo.show', $cargoRequest)
-            ->with('success', $shouldLoadImmediately
-                ? 'درخواست بارگیری به همراه اطلاعات بارگیری واگن‌ها با موفقیت ثبت شد.'
-                : 'درخواست بارگیری با موفقیت ثبت شد.');
+            ->with('success', 'درخواست بارگیری با موفقیت ثبت شد.');
     }
 
     public function show(CargoRequest $cargo)
@@ -1002,6 +939,58 @@ class CargoController extends Controller
         return redirect()
             ->route(auth()->user()?->isAdmin() ? 'dashboard' : 'cargo.index')
             ->with('success', $message);
+    }
+
+    /**
+     * حذف واگن از درخواست بارگیری (قبل از صدور صورتحساب)
+     */
+    public function destroyWagon(Request $request, Wagon $wagon)
+    {
+        $wagon->load(['cargoRequest.wagons', 'billingItem.billing']);
+
+        if ($wagon->is_settled || $wagon->billingItem !== null) {
+            return back()->with('error', "واگن «{$wagon->wagon_number}» دارای صورتحساب صادرشده است و امکان حذف آن وجود ندارد. (در صورت نیاز ابتدا صورتحساب مربوطه را لغو کنید.)");
+        }
+
+        $wagonNumber = $wagon->wagon_number;
+        $cargoRequest = $wagon->cargoRequest;
+        $requestNumber = $cargoRequest?->request_number ?? '';
+        $requestDeleted = false;
+
+        DB::transaction(function () use ($wagon, $cargoRequest, &$requestDeleted) {
+            $wagon->delete();
+
+            if (! $cargoRequest) {
+                return;
+            }
+
+            $cargoRequest->load('wagons');
+
+            if ($cargoRequest->wagons->isEmpty()) {
+                $cargoRequest->delete();
+                $requestDeleted = true;
+
+                return;
+            }
+
+            if ($cargoRequest->wagons->every(fn (Wagon $w) => $w->is_settled)) {
+                $cargoRequest->update(['status' => CargoRequest::STATUS_BILLED]);
+            } elseif ($cargoRequest->allWagonsLoaded()) {
+                $cargoRequest->update(['status' => CargoRequest::STATUS_LOADED]);
+            } else {
+                $cargoRequest->update(['status' => CargoRequest::STATUS_PENDING]);
+            }
+        });
+
+        if ($requestDeleted || ! $cargoRequest) {
+            return redirect()
+                ->route('cargo.index')
+                ->with('success', "واگن «{$wagonNumber}» حذف شد و از آنجا که تنها واگن درخواست «{$requestNumber}» بود، درخواست خالی نیز حذف گردید.");
+        }
+
+        return redirect()
+            ->route('cargo.show', $cargoRequest)
+            ->with('success', "واگن «{$wagonNumber}» با موفقیت از درخواست بارگیری «{$requestNumber}» حذف شد.");
     }
 
     /**

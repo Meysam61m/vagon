@@ -36,7 +36,6 @@
 
     <form method="POST" action="{{ route('cargo.store') }}" class="card p-4" id="cargo-create-form">
         @csrf
-        <input type="hidden" name="quick_action" id="quick_action_input" value="{{ old('quick_action', 'save_only') }}">
 
         <div class="row g-3">
             <div class="col-md-4">
@@ -182,78 +181,16 @@
 
         <hr class="my-4">
 
-        {{-- بخش بهینه‌سازی عملیات یک‌مرحله‌ای (ثبت هم‌زمان تعرفه/وزن و صدور فوری صورتحساب) --}}
-        <div class="card border-primary bg-light p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                <div>
-                    <h6 class="mb-0 text-primary">
-                        عملیات سریع یک‌مرحله‌ای: تعرفه و وزن بارگیری (پیشنهاد خودکار از روی شرح کالا)
-                    </h6>
-                    <small class="text-muted">
-                        به‌محض وارد کردن شرح کالا، تعرفه کتابچه و ظرفیت کامل قرارداد (۶۵ یا ۷۰ تن) خودکار انتخاب می‌شود تا بتوانید با ۱ کلیک فاکتور را صادر و چاپ کنید.
-                    </small>
-                </div>
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="quick-tariff-suggest-badge" style="display: none;">
-                    ✓ تعرفه و ظرفیت خودکار تنظیم شد
-                </span>
-            </div>
-
-            <div class="row g-3 align-items-end">
-                <div class="col-md-7">
-                    <label class="form-label small fw-bold mb-1" for="quick_tariff_id">تعرفه بارگیری (برای اعمال به همه واگن‌های این درخواست)</label>
-                    <select name="quick_tariff_id" id="quick_tariff_id" class="form-select form-select-sm">
-                        <option value="">— فقط ثبت درخواست (بارگیری در مرحله بعد ثبت شود) —</option>
-                        @foreach($tariffs ?? [] as $tariff)
-                            <option value="{{ $tariff->id }}"
-                                    data-capacity="{{ $tariff->capacity }}"
-                                    data-code="{{ $tariff->code }}"
-                                    data-title="{{ $tariff->title }}"
-                                    @selected(old('quick_tariff_id') == $tariff->id)>
-                                {{ $tariff->title }} — ظرفیت قرارداد: {{ $tariff->capacity }} تن — نرخ کتابچه: {{ number_format($tariff->rate) }} ریال
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-bold mb-1" for="quick_weight">وزن بارگیری هر واگن (تن)</label>
-                    <div class="input-group input-group-sm">
-                        <input type="number" step="0.01" min="0.01" max="200"
-                               name="quick_weight" id="quick_weight"
-                               value="{{ old('quick_weight') }}"
-                               class="form-control"
-                               placeholder="خودکار = ظرفیت قرارداد">
-                        <button type="button" class="btn btn-outline-secondary" id="fill-contract-capacity-btn" title="قرار دادن ظرفیت کامل قرارداد">
-                            ظرفیت کامل
-                        </button>
-                    </div>
-                </div>
-                <div class="col-md-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="clear-quick-tariff">
-                        بدون بارگیری
-                    </button>
-                </div>
-            </div>
-        </div>
-
         <div class="mb-3">
             <label class="form-label" for="notes_input">توضیحات</label>
             <textarea name="notes" id="notes_input" class="form-control" rows="2" placeholder="توضیحات تکمیلی در صورت نیاز…">{{ old('notes') }}</textarea>
         </div>
 
         <div class="d-flex gap-2 flex-wrap align-items-center">
-            <button class="btn btn-success fw-semibold" type="submit" data-submit-action="save_load_bill_and_print">
-                ثبت کامل و چاپ فوری صورتحساب (۱ کلیک)
+            <button class="btn btn-primary fw-semibold px-4" type="submit">
+                ثبت درخواست بارگیری
             </button>
-            <button class="btn btn-outline-success fw-semibold" type="submit" data-submit-action="save_load_and_bill">
-                ثبت کامل و نمایش صورتحساب
-            </button>
-            <button class="btn btn-info text-dark fw-semibold" type="submit" data-submit-action="save_and_load">
-                ثبت درخواست + ثبت بارگیری
-            </button>
-            <button class="btn btn-outline-primary" type="submit" data-submit-action="save_only">
-                فقط ثبت درخواست (بدون وزن)
-            </button>
-            <a href="{{ route('cargo.index') }}" class="btn btn-secondary ms-auto">انصراف</a>
+            <a href="{{ route('cargo.index') }}" class="btn btn-secondary">انصراف</a>
         </div>
     </form>
 @endsection
@@ -668,9 +605,16 @@
 
             container.addEventListener('click', function (e) {
                 if (e.target.classList.contains('remove-wagon')) {
+                    const row = e.target.closest('.wagon-row');
                     const rows = container.querySelectorAll('.wagon-row');
                     if (rows.length > 1) {
-                        e.target.closest('.wagon-row').remove();
+                        row.remove();
+                        validateWagonNumbersRealtime();
+                    } else if (row) {
+                        const numInp = row.querySelector('input[data-wagon-number]');
+                        const descInp = row.querySelector('input[data-wagon-description]');
+                        if (numInp) numInp.value = '';
+                        if (descInp) descInp.value = '';
                         validateWagonNumbersRealtime();
                     }
                 }

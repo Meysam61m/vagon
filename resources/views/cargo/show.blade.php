@@ -169,7 +169,7 @@
                         <th style="min-width: 155px;">وزن بارگیری (تن)</th>
                         <th>وضعیت</th>
                         <th>صورتحساب</th>
-                        <th>ویرایش واگن</th>
+                        <th>عملیات واگن</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -277,9 +277,19 @@
                                 @endif
                             </td>
                             <td class="text-nowrap">
-                                <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
-                                    ویرایش واگن
-                                </a>
+                                <div class="d-inline-flex gap-1 align-items-center">
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('wagons.edit-owner') ? route('wagons.edit-owner', $wagon) : url('/wagons/'.$wagon->id.'/edit-owner') }}" class="btn btn-sm btn-outline-primary">
+                                        ویرایش
+                                    </a>
+                                    @if(! $wagon->is_settled)
+                                        <button type="submit"
+                                                form="delete-wagon-form-{{ $wagon->id }}"
+                                                class="btn btn-sm btn-outline-danger"
+                                                onclick="return confirm('آیا از حذف واگن «{{ $wagon->wagon_number }}» از این درخواست بارگیری مطمئن هستید؟');">
+                                            حذف واگن
+                                        </button>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -299,6 +309,18 @@
                 </button>
             </div>
         </form>
+
+        {{-- فرم‌های مجزای حذف واگن (خارج از فرم اصلی برای رعایت استاندارد HTML) --}}
+        @foreach($cargo->wagons as $wagon)
+            @if(! $wagon->is_settled)
+                <form id="delete-wagon-form-{{ $wagon->id }}"
+                      method="POST"
+                      action="{{ \Illuminate\Support\Facades\Route::has('wagons.delete') ? route('wagons.delete', $wagon) : url('/wagons/'.$wagon->id.'/delete') }}"
+                      class="d-none">
+                    @csrf
+                </form>
+            @endif
+        @endforeach
     @else
         <div class="card p-4 mb-4">
             <h6 class="mb-3">واگن‌های این درخواست (صورتحساب‌شده)</h6>

@@ -74,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
             if (
                 $content === false
                 || ! str_contains($content, 'wagons.edit-owner')
+                || ! str_contains($content, 'wagons.destroy')
                 || ! str_contains($content, 'reports.setad')
                 || ! str_contains($content, 'tariffs.destroy')
                 || ! str_contains($content, 'cargo.quick-bill')
@@ -87,7 +88,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->booted(function () {
             $registered = false;
 
-            if (! Route::has('wagons.edit-owner') || ! Route::has('wagons.edit')) {
+            if (! Route::has('wagons.edit-owner') || ! Route::has('wagons.edit') || ! Route::has('wagons.destroy')) {
                 Route::middleware(['web', 'auth'])->group(function () {
                     Route::get('/wagons/{wagon}/edit-owner', [CargoController::class, 'editWagonOwner'])
                         ->name('wagons.edit-owner');
@@ -97,6 +98,10 @@ class AppServiceProvider extends ServiceProvider
                         ->name('wagons.update-owner');
                     Route::match(['post', 'put'], '/wagons/{wagon}', [CargoController::class, 'updateWagonOwner'])
                         ->name('wagons.update');
+                    Route::delete('/wagons/{wagon}', [CargoController::class, 'destroyWagon'])
+                        ->name('wagons.destroy');
+                    Route::post('/wagons/{wagon}/delete', [CargoController::class, 'destroyWagon'])
+                        ->name('wagons.delete');
                 });
                 $registered = true;
             }
@@ -142,7 +147,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v15';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v16';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -158,7 +163,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v15');
+                @file_put_contents($versionMarker, 'v16');
             }
         }
     }

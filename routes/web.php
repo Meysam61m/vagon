@@ -41,6 +41,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/wagons/{wagon}/edit', [CargoController::class, 'editWagonOwner'])->name('wagons.edit');
     Route::match(['post', 'put'], '/wagons/{wagon}/owner', [CargoController::class, 'updateWagonOwner'])->name('wagons.update-owner');
     Route::match(['post', 'put'], '/wagons/{wagon}', [CargoController::class, 'updateWagonOwner'])->name('wagons.update');
+    Route::delete('/wagons/{wagon}', [CargoController::class, 'destroyWagon'])->name('wagons.destroy');
+    Route::post('/wagons/{wagon}/delete', [CargoController::class, 'destroyWagon'])->name('wagons.delete');
 
     // صورتحساب‌ها
     Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
