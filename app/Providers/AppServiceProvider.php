@@ -77,6 +77,7 @@ class AppServiceProvider extends ServiceProvider
                 || ! str_contains($content, 'reports.setad')
                 || ! str_contains($content, 'tariffs.destroy')
                 || ! str_contains($content, 'cargo.quick-bill')
+                || ! str_contains($content, 'AuthController')
             ) {
                 @unlink($routeCache);
                 clearstatcache(true, $routeCache);
@@ -141,7 +142,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v11';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v12';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -157,7 +158,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v11');
+                @file_put_contents($versionMarker, 'v12');
             }
         }
     }

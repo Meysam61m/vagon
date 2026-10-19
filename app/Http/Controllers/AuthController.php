@@ -9,6 +9,15 @@ use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    public function home()
+    {
+        if (! Auth::check()) {
+            return redirect()->route('login');
+        }
+
+        return redirect()->route(Auth::user()->isAdmin() ? 'dashboard' : 'cargo.index');
+    }
+
     public function showLogin()
     {
         return view('auth.login');

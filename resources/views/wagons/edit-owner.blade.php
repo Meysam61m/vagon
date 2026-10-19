@@ -22,7 +22,7 @@
                     بازگشت به درخواست {{ $wagon->cargoRequest->request_number }}
                 </a>
             @else
-                <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">بازگشت به داشبورد</a>
+                <a href="{{ route(auth()->user()->isAdmin() ? 'dashboard' : 'cargo.index') }}" class="btn btn-outline-secondary">بازگشت</a>
             @endif
         </div>
     </div>

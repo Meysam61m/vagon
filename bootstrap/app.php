@@ -12,7 +12,14 @@ use Illuminate\Foundation\Configuration\Middleware;
 $wagonRouteCache = dirname(__DIR__).'/bootstrap/cache/routes-v7.php';
 if (is_file($wagonRouteCache)) {
     $wagonRouteCacheContent = @file_get_contents($wagonRouteCache);
-    if ($wagonRouteCacheContent === false || ! str_contains($wagonRouteCacheContent, 'wagons.edit-owner')) {
+    if (
+        $wagonRouteCacheContent === false
+        || ! str_contains($wagonRouteCacheContent, 'wagons.edit-owner')
+        || ! str_contains($wagonRouteCacheContent, 'reports.setad')
+        || ! str_contains($wagonRouteCacheContent, 'tariffs.destroy')
+        || ! str_contains($wagonRouteCacheContent, 'cargo.quick-bill')
+        || ! str_contains($wagonRouteCacheContent, 'home')
+    ) {
         @unlink($wagonRouteCache);
         clearstatcache(true, $wagonRouteCache);
     }
@@ -29,6 +36,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => CheckRole::class,
         ]);
+
+        // هدایت کاربران لاگین‌شده (هنگام مراجعه به /login) بر اساس نقش: مدیر به داشبورد، اپراتور به کارتابل بارگیری
+        $middleware->redirectUsersTo(
+            fn () => auth()->user()?->isAdmin() ? route('dashboard') : route('cargo.index')
+        );
 
         /*
          * کاربران غیرفعال حتی با سشن معتبر هم بلافاصله بیرون انداخته می‌شوند.

@@ -879,6 +879,8 @@ class CargoController extends Controller
             return redirect()->route('cargo.show', $wagon->cargoRequest)->with('success', $message);
         }
 
-        return redirect()->route('dashboard')->with('success', $message);
+        return redirect()
+            ->route(auth()->user()?->isAdmin() ? 'dashboard' : 'cargo.index')
+            ->with('success', $message);
     }
 }

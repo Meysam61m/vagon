@@ -12,13 +12,7 @@ use App\Http\Controllers\TaxController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    if (! auth()->check()) {
-        return redirect()->route('login');
-    }
-
-    return redirect()->route(auth()->user()->isAdmin() ? 'dashboard' : 'cargo.index');
-});
+Route::get('/', [AuthController::class, 'home'])->name('home');
 
 // ---------- احراز هویت ----------
 Route::middleware('guest')->group(function () {
