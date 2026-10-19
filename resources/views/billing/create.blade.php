@@ -30,12 +30,34 @@
                         هنگام صدور صورتحساب، مشخص کردن نام صاحب کالا الزامی است. با انتخاب صاحب کالای قطعی از کادر زیر، واگن‌های ناشناس نیز در جدول ظاهر می‌شوند تا با تیک زدن آن‌ها، هم‌زمان صاحب کالا ثبت و فاکتور صادر شود.
                     </div>
                 </div>
-                <div class="d-flex flex-wrap gap-1">
+                <div class="d-flex flex-column gap-2 w-100 mt-2">
                     @foreach($unassignedList->groupBy('cargo_request_id') as $crId => $wGroup)
-                        @php($firstW = $wGroup->first())
-                        <a href="{{ route('cargo.show', $crId) }}" class="btn btn-sm btn-warning text-dark border border-dark-subtle">
-                            {{ $firstW?->cargoRequest?->request_number }} (نماینده: {{ $firstW?->cargoRequest?->representative?->name ?? '—' }} — {{ $wGroup->count() }} واگن)
-                        </a>
+                        @php
+                            $firstW = $wGroup->first();
+                            $repObj = $firstW?->cargoRequest?->representative;
+                            $linkedOwners = ($repObj?->owners ?? collect())->where('is_active', true)->sortBy('name')->values();
+                        @endphp
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 bg-white rounded border p-2">
+                            <div class="small">
+                                <strong>درخواست {{ $firstW?->cargoRequest?->request_number }}</strong>
+                                ({{ $wGroup->count() }} واگن) —
+                                <strong>نماینده: {{ $repObj?->name ?? '—' }}</strong>
+                            </div>
+                            <div class="d-flex align-items-center flex-wrap gap-1">
+                                <span class="small text-muted me-1">انتخاب صاحب کالای مرتبط با این نماینده:</span>
+                                @forelse($linkedOwners as $lo)
+                                    <a href="{{ route('billing.create', ['owner_id' => $lo->id, 'cargo_request_id' => $crId, 'representative_id' => $repObj?->id]) }}"
+                                       class="btn btn-sm btn-success">
+                                        {{ $lo->name }}
+                                    </a>
+                                @empty
+                                    <span class="badge bg-danger">هیچ صاحب کالایی به این نماینده تخصیص نیافته است</span>
+                                @endforelse
+                                <a href="{{ route('cargo.show', $crId) }}" class="btn btn-sm btn-outline-secondary">
+                                    مشاهده درخواست
+                                </a>
+                            </div>
+                        </div>
                     @endforeach
                 </div>
             </div>
@@ -90,14 +112,17 @@
 
             <div class="row g-3 mb-3">
                 <div class="col-md-4">
-                    <label class="form-label" for="representative_id">نماینده (انتخاب خودکار از درخواست بارگیری)</label>
-                    <select name="representative_id" id="representative_id" class="form-select">
-                        <option value="">—</option>
+                    <label class="form-label" for="representative_id">نماینده (مرتبط با صاحب کالا) <span class="text-danger">*</span></label>
+                    <select name="representative_id" id="representative_id" class="form-select @error('representative_id') is-invalid @enderror" required>
+                        <option value="">انتخاب نماینده…</option>
                         @php($selectedRepId = old('representative_id', $defaultRepresentativeId ?? null))
                         @foreach($representatives as $rep)
                             <option value="{{ $rep->id }}" @selected((int) $selectedRepId === (int) $rep->id)>{{ $rep->name }}</option>
                         @endforeach
                     </select>
+                    @error('representative_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                 </div>
                 <div class="col-md-4">
                     <label class="form-label" for="billing_date_shamsi">تاریخ صدور (شمسی) <span class="text-danger">*</span></label>

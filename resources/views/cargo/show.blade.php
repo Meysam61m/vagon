@@ -7,6 +7,7 @@
         $unsettledCount = $cargo->wagons->where('is_settled', false)->count();
         $firstSuggestedTariffId = collect($suggestedTariffs ?? [])->filter()->first()
             ?: $cargo->wagons->whereNotNull('tariff_id')->first()?->tariff_id;
+        $repOwners = ($cargo->representative?->owners ?? collect())->where('is_active', true)->sortBy('name')->values();
     @endphp
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -33,10 +34,10 @@
                 @else
                     <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
                         @csrf
-                        <select name="owner_id" class="form-select form-select-sm" style="min-width: 210px;" required>
-                            <option value="">تعیین صاحب کالا (اجباری برای فاکتور)…</option>
-                            @foreach($owners ?? [] as $owner)
-                                <option value="{{ $owner->id }}">{{ $owner->name }}</option>
+                        <select name="owner_id" class="form-select form-select-sm" style="min-width: 230px;" required>
+                            <option value="">صاحب کالا (مرتبط با {{ $cargo->representative?->name }})…</option>
+                            @foreach($repOwners as $owner)
+                                <option value="{{ $owner->id }}" @selected($repOwners->count() === 1)>{{ $owner->name }}</option>
                             @endforeach
                         </select>
                         <button type="submit" name="print" value="1" class="btn btn-success btn-sm fw-semibold text-nowrap">
@@ -79,19 +80,19 @@
                 <div class="col-md-5">
                     <h6 class="mb-1">ثبت عملیات بارگیری ({{ $cargo->wagons->count() }} واگن)</h6>
                     <div class="text-muted small">
-                        ثبت بارگیری با صاحب کالای «ناشناس» مجاز است؛ اما <strong>هنگام صدور صورتحساب</strong> انتخاب نام صاحب کالا الزامی است.
+                        ثبت بارگیری با صاحب کالای «ناشناس» مجاز است؛ اما <strong>هنگام صدور صورتحساب</strong> انتخاب نام صاحب کالای مرتبط با نماینده الزامی است.
                     </div>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label mb-1" for="loading_owner_id">
-                        صاحب کالا
+                        صاحب کالا (مرتبط با نماینده «{{ $cargo->representative?->name }}»)
                         @if(!$cargo->owner_id)
-                            <span class="badge bg-warning text-dark small">فعلاً ناشناس — اجباری برای صدور فاکتور</span>
+                            <span class="badge bg-warning text-dark small">فعلاً ناشناس — اجباری برای فاکتور</span>
                         @endif
                     </label>
                     <select name="owner_id" id="loading_owner_id" class="form-select @error('owner_id') is-invalid @enderror">
                         <option value="">— ناشناس / نامشخص (فقط ذخیره بارگیری) —</option>
-                        @foreach($owners ?? [] as $owner)
+                        @foreach($repOwners as $owner)
                             <option value="{{ $owner->id }}" @selected((int) old('owner_id', $cargo->owner_id) === (int) $owner->id)>
                                 {{ $owner->name }}
                             </option>
@@ -100,6 +101,11 @@
                     @error('owner_id')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+                    @if($repOwners->isEmpty())
+                        <div class="form-text text-danger small">
+                            به نماینده «{{ $cargo->representative?->name }}» هنوز صاحب کالایی تخصیص داده نشده است.
+                        </div>
+                    @endif
                 </div>
                 <div class="col-md-3">
                     <label class="form-label mb-1" for="loading_date_shamsi">تاریخ بارگیری (شمسی)</label>

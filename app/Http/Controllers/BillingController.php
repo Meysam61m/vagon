@@ -87,7 +87,7 @@ class BillingController extends Controller
             ->loaded()
             ->whereNull('owner_id')
             ->whereHas('cargoRequest', fn ($cr) => $cr->whereNull('owner_id'))
-            ->with(['cargoRequest.representative', 'owner', 'tariff'])
+            ->with(['cargoRequest.representative.owners', 'owner', 'tariff'])
             ->orderBy('wagon_number')
             ->get();
 
@@ -102,7 +102,13 @@ class BillingController extends Controller
                     $q->where('owner_id', $ownerId)
                         ->orWhere(function ($sub) use ($ownerId) {
                             $sub->whereNull('owner_id')
-                                ->whereHas('cargoRequest', fn ($cr) => $cr->where('owner_id', $ownerId)->orWhereNull('owner_id'));
+                                ->whereHas('cargoRequest', function ($cr) use ($ownerId) {
+                                    $cr->where('owner_id', $ownerId)
+                                        ->orWhere(function ($unk) use ($ownerId) {
+                                            $unk->whereNull('owner_id')
+                                                ->whereHas('representative.owners', fn ($oq) => $oq->where('owners.id', $ownerId));
+                                        });
+                                });
                         });
                 })
                 ->with(['cargoRequest.representative', 'owner', 'tariff'])
@@ -110,29 +116,21 @@ class BillingController extends Controller
                 ->orderBy('wagon_number')
                 ->get();
 
-            $wagonRepIds = $wagons->pluck('cargoRequest.representative_id')->filter()->unique()->values()->all();
-
             $representatives = Representative::active()
-                ->where(function ($q) use ($ownerId, $wagonRepIds) {
-                    $q->whereHas('owners', fn ($oq) => $oq->where('owners.id', $ownerId));
-                    if (! empty($wagonRepIds)) {
-                        $q->orWhereIn('id', $wagonRepIds);
-                    }
-                })
+                ->whereHas('owners', fn ($q) => $q->where('owners.id', $ownerId))
                 ->orderBy('name')
                 ->get();
 
             if (! $defaultRepresentativeId) {
-                $ownerWagonsRepIds = $wagons
-                    ->filter(fn (Wagon $w) => (int) $w->effectiveOwnerId() === (int) $ownerId)
+                $validRepIds = $representatives->pluck('id')->all();
+                $wagonRepIds = $wagons
                     ->pluck('cargoRequest.representative_id')
-                    ->filter()
-                    ->unique();
+                    ->filter(fn ($rid) => in_array((int) $rid, $validRepIds, true))
+                    ->unique()
+                    ->values();
 
-                if ($ownerWagonsRepIds->count() === 1) {
-                    $defaultRepresentativeId = (int) $ownerWagonsRepIds->first();
-                } elseif (count($wagonRepIds) === 1) {
-                    $defaultRepresentativeId = (int) $wagonRepIds[0];
+                if ($wagonRepIds->count() === 1) {
+                    $defaultRepresentativeId = (int) $wagonRepIds->first();
                 } elseif ($representatives->count() === 1) {
                     $defaultRepresentativeId = (int) $representatives->first()->id;
                 }
@@ -159,7 +157,7 @@ class BillingController extends Controller
     {
         $data = $request->validate([
             'owner_id' => ['required', 'integer', 'exists:owners,id'],
-            'representative_id' => ['nullable', 'integer', 'exists:representatives,id'],
+            'representative_id' => ['required', 'integer', 'exists:representatives,id'],
             'billing_date_shamsi' => ['required', 'string'],
             'wagons' => ['required', 'array', 'min:1'],
             'wagons.*.id' => ['required', 'integer', 'distinct', 'exists:wagons,id'],
@@ -168,14 +166,23 @@ class BillingController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ], [
             'owner_id.required' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است.',
+            'representative_id.required' => 'هنگام صدور صورتحساب، انتخاب نام نماینده الزامی است.',
         ], [
             'owner_id' => 'صاحب کالا',
+            'representative_id' => 'نماینده',
             'billing_date_shamsi' => 'تاریخ صدور',
             'wagons' => 'واگن‌ها',
         ]);
 
-        if (! empty($data['representative_id'])) {
-            $this->ensureOwnerRepresentativeLinked((int) $data['owner_id'], (int) $data['representative_id']);
+        $linked = DB::table('owner_representative')
+            ->where('owner_id', $data['owner_id'])
+            ->where('representative_id', $data['representative_id'])
+            ->exists();
+
+        if (! $linked) {
+            throw ValidationException::withMessages([
+                'representative_id' => 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.',
+            ]);
         }
 
         $billingDate = JalaliDate::parse($data['billing_date_shamsi'], 'billing_date_shamsi');
@@ -192,7 +199,7 @@ class BillingController extends Controller
 
             // قفل ردیف‌های واگن تا دو درخواست هم‌زمان نتوانند یک واگن را دوبار فاکتور کنند
             /** @var \Illuminate\Support\Collection<int, Wagon> $wagons */
-            $wagons = Wagon::with('cargoRequest')
+            $wagons = Wagon::with('cargoRequest.representative')
                 ->whereIn('id', $ids)
                 ->lockForUpdate()
                 ->get()
@@ -227,6 +234,22 @@ class BillingController extends Controller
                     throw ValidationException::withMessages([
                         'wagons' => "واگن {$wagon->wagon_number} متعلق به صاحب کالای دیگری است.",
                     ]);
+                }
+
+                // بررسی الزامی رابطه صاحب کالا و نماینده ثبت‌شده در درخواست بارگیری واگن
+                $wagonRepId = (int) ($wagon->cargoRequest?->representative_id ?? 0);
+                if ($wagonRepId > 0) {
+                    $wagonRepLinked = DB::table('owner_representative')
+                        ->where('owner_id', $owner->id)
+                        ->where('representative_id', $wagonRepId)
+                        ->exists();
+
+                    if (! $wagonRepLinked) {
+                        $repName = $wagon->cargoRequest?->representative?->name ?? 'نماینده درخواست';
+                        throw ValidationException::withMessages([
+                            'wagons' => "نماینده واگن {$wagon->wagon_number} («{$repName}») به صاحب کالای «{$owner->name}» تخصیص داده نشده است.",
+                        ]);
+                    }
                 }
 
                 if (! $wagon->isLoaded()) {
@@ -315,9 +338,6 @@ class BillingController extends Controller
                     );
                     if ($allHaveSameOrNullOwner) {
                         $cargoUpdates['owner_id'] = $owner->id;
-                    }
-                    if ($cargo->representative_id) {
-                        $this->ensureOwnerRepresentativeLinked((int) $owner->id, (int) $cargo->representative_id);
                     }
                 }
 
@@ -409,33 +429,5 @@ class BillingController extends Controller
         return redirect()
             ->route('billing.show', $billing)
             ->with('success', 'صورتحساب لغو شد و واگن‌ها برای صدور مجدد آزاد شدند.');
-    }
-
-    /**
-     * ثبت ایمن اتصال صاحب کالا و نماینده در جدول واسط owner_representative
-     */
-    private function ensureOwnerRepresentativeLinked(?int $ownerId, ?int $representativeId): void
-    {
-        if (! $ownerId || ! $representativeId) {
-            return;
-        }
-
-        try {
-            $exists = DB::table('owner_representative')
-                ->where('owner_id', $ownerId)
-                ->where('representative_id', $representativeId)
-                ->exists();
-
-            if (! $exists) {
-                DB::table('owner_representative')->insert([
-                    'owner_id' => $ownerId,
-                    'representative_id' => $representativeId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
-        } catch (\Throwable) {
-            // اگر رکورد هم‌زمان ثبت شده باشد، خطایی پرتاب نشود
-        }
     }
 }

@@ -47,7 +47,7 @@ class CargoController extends Controller
 
         $queueFilter = $request->string('queue')->toString();
 
-        $cargoRequests = CargoRequest::with(['owner', 'representative', 'wagons.owner'])
+        $cargoRequests = CargoRequest::with(['owner', 'representative.owners', 'wagons.owner'])
             ->when($queueFilter === 'my_today', function ($q) {
                 $q->where('operator_id', auth()->id())
                     ->whereDate('created_at', today());
@@ -209,8 +209,10 @@ class CargoController extends Controller
             ]);
         }
 
-        // اگر صاحب کالا انتخاب شده باشد، اطمینان از اتصال نماینده به این صاحب کالا
-        $this->ensureOwnerRepresentativeLinked($ownerId, (int) $data['representative_id']);
+        // اگر صاحب کالا انتخاب شده باشد، بررسی الزامی رابطه صاحب کالا و نماینده
+        if ($ownerId !== null) {
+            $this->assertOwnerRepresentativeLinked($ownerId, (int) $data['representative_id'], 'representative_id');
+        }
 
         $requestDate = JalaliDate::parse($data['request_date_shamsi'], 'request_date_shamsi');
         $normalizedDate = JalaliDate::normalize($data['request_date_shamsi']);
@@ -335,7 +337,7 @@ class CargoController extends Controller
     public function show(CargoRequest $cargo)
     {
         $cargo->load([
-            'owner', 'representative', 'operator',
+            'owner', 'representative.owners', 'operator',
             'wagons.owner', 'wagons.previousOwner', 'wagons.ownerChangedBy',
             'wagons.tariff', 'wagons.billingItem.billing',
         ]);
@@ -389,12 +391,21 @@ class CargoController extends Controller
         $selectedOwnerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
         $issueBillingMode = (string) $request->input('issue_billing', '0');
 
-        // هنگام صدور صورتحساب، نام صاحب کالا الزامی است
+        // اگر صاحب کالا انتخاب شده است، بررسی الزامی رابطه صاحب کالا و نماینده این درخواست
+        if ($selectedOwnerId !== null) {
+            $this->assertOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id, 'owner_id');
+        }
+
+        // هنگام صدور صورتحساب، نام صاحب کالا و تطابق آن با نماینده الزامی است
         $effectiveOwnerId = $selectedOwnerId ?? $cargo->owner_id;
-        if (in_array($issueBillingMode, ['1', 'true', 'print'], true) && $effectiveOwnerId === null) {
-            throw ValidationException::withMessages([
-                'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. لطفاً نام صاحب کالا را مشخص کنید.',
-            ]);
+        if (in_array($issueBillingMode, ['1', 'true', 'print'], true)) {
+            if ($effectiveOwnerId === null) {
+                throw ValidationException::withMessages([
+                    'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. لطفاً نام صاحب کالا را مشخص کنید.',
+                ]);
+            }
+
+            $this->assertOwnerRepresentativeLinked((int) $effectiveOwnerId, (int) $cargo->representative_id, 'owner_id');
         }
 
         $loadingDate = JalaliDate::parse($data['loading_date_shamsi'], 'loading_date_shamsi');
@@ -410,7 +421,6 @@ class CargoController extends Controller
         DB::transaction(function () use ($cargo, $data, $selectedOwnerId, $loadingDate, $tariffs) {
             if ($selectedOwnerId !== null && (int) $cargo->owner_id !== $selectedOwnerId) {
                 $cargo->update(['owner_id' => $selectedOwnerId]);
-                $this->ensureOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id);
                 Wagon::where('cargo_request_id', $cargo->id)
                     ->where('is_settled', false)
                     ->whereNull('owner_id')
@@ -528,8 +538,8 @@ class CargoController extends Controller
 
         if (! empty($validated['owner_id'])) {
             $selectedOwnerId = (int) $validated['owner_id'];
+            $this->assertOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id, 'owner_id');
             $cargo->update(['owner_id' => $selectedOwnerId]);
-            $this->ensureOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id);
             Wagon::where('cargo_request_id', $cargo->id)
                 ->where('is_settled', false)
                 ->whereNull('owner_id')
@@ -549,6 +559,8 @@ class CargoController extends Controller
                 ->route('cargo.show', $cargo)
                 ->with('error', 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. لطفاً ابتدا صاحب کالا را مشخص کنید.');
         }
+
+        $this->assertOwnerRepresentativeLinked((int) $effectiveOwnerId, (int) $cargo->representative_id, 'owner_id');
 
         $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
 
@@ -647,9 +659,13 @@ class CargoController extends Controller
 
             $owner = $cargo->owner ?? Owner::findOrFail($resolvedOwnerId);
 
+            // بررسی الزامی رابطه صاحب کالا و نماینده هنگام صدور صورتحساب
+            if ($cargo->representative_id) {
+                $this->assertOwnerRepresentativeLinked((int) $owner->id, (int) $cargo->representative_id, 'owner_id');
+            }
+
             if (! $cargo->owner_id) {
                 $cargo->update(['owner_id' => $owner->id]);
-                $this->ensureOwnerRepresentativeLinked((int) $owner->id, (int) $cargo->representative_id);
             }
 
             $items = [];
@@ -790,8 +806,14 @@ class CargoController extends Controller
             'owner_change_note' => 'علت و توضیحات ویرایش',
         ]);
 
-        if (! empty($data['representative_id']) && ! empty($data['owner_id'])) {
-            $this->ensureOwnerRepresentativeLinked((int) $data['owner_id'], (int) $data['representative_id']);
+        if (! empty($data['owner_id'])) {
+            $repToValidate = ! empty($data['representative_id'])
+                ? (int) $data['representative_id']
+                : (int) ($wagon->cargoRequest?->representative_id ?? 0);
+
+            if (! empty($data['representative_id'])) {
+                $this->assertOwnerRepresentativeLinked((int) $data['owner_id'], (int) $data['representative_id'], 'representative_id');
+            }
         }
 
         $oldWagonNumber = trim((string) $wagon->wagon_number);
@@ -983,30 +1005,30 @@ class CargoController extends Controller
     }
 
     /**
-     * ثبت ایمن اتصال صاحب کالا و نماینده در جدول واسط owner_representative
+     * بررسی الزامی وجود رابطه بین صاحب کالا و نماینده در جدول owner_representative
      */
-    private function ensureOwnerRepresentativeLinked(?int $ownerId, ?int $representativeId): void
+    private function assertOwnerRepresentativeLinked(?int $ownerId, ?int $representativeId, string $errorField = 'representative_id'): void
     {
         if (! $ownerId || ! $representativeId) {
             return;
         }
 
-        try {
-            $exists = DB::table('owner_representative')
-                ->where('owner_id', $ownerId)
-                ->where('representative_id', $representativeId)
-                ->exists();
+        $linked = DB::table('owner_representative')
+            ->where('owner_id', $ownerId)
+            ->where('representative_id', $representativeId)
+            ->exists();
 
-            if (! $exists) {
-                DB::table('owner_representative')->insert([
-                    'owner_id' => $ownerId,
-                    'representative_id' => $representativeId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            }
-        } catch (\Throwable) {
-            // اگر رکورد هم‌زمان ثبت شده باشد، خطایی پرتاب نشود
+        if (! $linked) {
+            $repName = Representative::where('id', $representativeId)->value('name');
+            $ownerName = Owner::where('id', $ownerId)->value('name');
+
+            $message = ($repName && $ownerName)
+                ? "نماینده «{$repName}» به صاحب کالای «{$ownerName}» تخصیص داده نشده است. لطفاً صاحب کالای مرتبط با این نماینده را انتخاب کنید."
+                : 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.';
+
+            throw ValidationException::withMessages([
+                $errorField => $message,
+            ]);
         }
     }
 }

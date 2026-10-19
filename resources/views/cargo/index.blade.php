@@ -196,12 +196,13 @@
                                             </button>
                                         </form>
                                     @else
+                                        @php($reqRepOwners = ($req->representative?->owners ?? collect())->where('is_active', true)->sortBy('name')->values())
                                         <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
                                             @csrf
-                                            <select name="owner_id" class="form-select form-select-sm py-0" style="min-width: 155px; height: 28px; font-size: 0.78rem;" required>
-                                                <option value="">انتخاب صاحب کالا…</option>
-                                                @foreach($owners as $owner)
-                                                    <option value="{{ $owner->id }}">{{ $owner->name }}</option>
+                                            <select name="owner_id" class="form-select form-select-sm py-0" style="min-width: 175px; height: 28px; font-size: 0.78rem;" required>
+                                                <option value="">صاحب کالا (مرتبط با نماینده)…</option>
+                                                @foreach($reqRepOwners as $owner)
+                                                    <option value="{{ $owner->id }}" @selected($reqRepOwners->count() === 1)>{{ $owner->name }}</option>
                                                 @endforeach
                                             </select>
                                             <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="height: 28px; font-size: 0.78rem;" title="تعیین صاحب کالا و صدور صورتحساب">

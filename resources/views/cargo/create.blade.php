@@ -324,8 +324,7 @@
                     ? allRepOptions.filter(r => r.owners.includes(ownerId))
                     : allRepOptions;
 
-                // اگر صاحب کالا انتخاب شده اما نماینده مرتبطی نداشت یا نماینده قبلی انتخاب شده بود، همه نمایندگان هم در دسترس باشند
-                const optionsToShow = (ownerId && linkedToOwner.length > 0) ? linkedToOwner : allRepOptions;
+                const optionsToShow = ownerId ? linkedToOwner : allRepOptions;
 
                 optionsToShow.forEach(r => {
                     const opt = document.createElement('option');
@@ -335,19 +334,7 @@
                     repSelect.appendChild(opt);
                 });
 
-                // اگر نماینده قبلی در لیست فیلترشده نبود ولی انتخاب شده بود، آن را هم اضافه کن تا انتخاب اپراتور نپرد
-                if (currentRep && !optionsToShow.some(r => r.value === currentRep)) {
-                    const prevRepObj = allRepOptions.find(r => r.value === currentRep);
-                    if (prevRepObj) {
-                        const opt = document.createElement('option');
-                        opt.value = prevRepObj.value;
-                        opt.textContent = prevRepObj.label;
-                        opt.setAttribute('data-owners', prevRepObj.owners.join(','));
-                        repSelect.appendChild(opt);
-                    }
-                }
-
-                if (preserveSelected && currentRep) {
+                if (preserveSelected && currentRep && optionsToShow.some(r => r.value === currentRep)) {
                     repSelect.value = currentRep;
                 } else if (ownerId && linkedToOwner.length === 1) {
                     repSelect.value = linkedToOwner[0].value;
@@ -361,11 +348,15 @@
                         repHint.textContent = '✓ آخرین نماینده این صاحب کالا انتخاب شد';
                         repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
                     }
-                } else if (currentRep) {
+                } else if (currentRep && optionsToShow.some(r => r.value === currentRep)) {
                     repSelect.value = currentRep;
                 } else if (ownerId && repHint) {
-                    repHint.textContent = linkedToOwner.length + ' نماینده مرتبط';
-                    repHint.className = 'badge bg-info-subtle text-dark border small';
+                    repHint.textContent = linkedToOwner.length > 0
+                        ? (linkedToOwner.length + ' نماینده مرتبط')
+                        : 'بدون نماینده تخصیص‌یافته';
+                    repHint.className = linkedToOwner.length > 0
+                        ? 'badge bg-info-subtle text-dark border small'
+                        : 'badge bg-danger-subtle text-danger border small';
                 } else if (!ownerId && repHint) {
                     repHint.textContent = 'همه نمایندگان فعال (صاحب کالا: ناشناس)';
                     repHint.className = 'badge bg-warning-subtle text-dark border small';
