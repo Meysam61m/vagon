@@ -11,7 +11,7 @@
         </h4>
         <div class="d-flex gap-2 flex-wrap">
             <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary">
-                چاپ / دریافت PDF
+                چاپ صورتحساب
             </a>
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary">
                 + ثبت درخواست جدید

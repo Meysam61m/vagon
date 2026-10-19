@@ -235,6 +235,12 @@ class ExcelExport
 
         // ردیف‌های داده (از ردیف ۳ به بعد)
         $rowNum = 3;
+        $sumF = 0;
+        $sumG = 0.0;
+        $sumI = 0.0;
+        $sumJ = 0.0;
+        $sumK = 0.0;
+
         foreach ($itemsData as $row) {
             $xml .= '<row r="'.$rowNum.'" ht="19.5" customHeight="1">';
 
@@ -255,45 +261,38 @@ class ExcelExport
             // E: نام صاحب کالا
             $xml .= '<c r="E'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['owner_name'] ?? '')).'</t></is></c>';
 
-            // F: مبلغ با احتساب مالیات بر ارزش افزوده
-            $xml .= '<c r="F'.$rowNum.'" s="4"><v>'.((int) ($row['total_with_vat'] ?? 0)).'</v></c>';
+            $fVal = (int) round((float) ($row['total_with_vat'] ?? 0));
+            $gVal = (float) ($row['customer_payable'] ?? 0);
+            $bookletRate = (float) ($row['booklet_rate'] ?? 0);
+            $tonnageVal = (float) ($row['operational_tonnage'] ?? 0);
+            $perTon = (float) ($row['per_ton_rate'] ?? 0);
+            $cap = (float) ($row['capacity'] ?? 65);
+            $capStr = floor($cap) == $cap ? (string) ((int) $cap) : (string) $cap;
+            $vatDivisor = (float) ($row['vat_divisor'] ?? 1.1);
 
-            // G: مبلغ کل قابل دریافت از مشتری
-            if (! empty($row['is_tonnage'])) {
-                $gVal = (float) ($row['customer_payable'] ?? 0);
-                $xml .= '<c r="G'.$rowNum.'" s="4"><f>J'.$rowNum.'*K'.$rowNum.'</f><v>'.$gVal.'</v></c>';
-            } else {
-                $xml .= '<c r="G'.$rowNum.'" s="4"/>';
-            }
+            $sumF += $fVal;
+            $sumG += $gVal;
+            $sumI += $bookletRate;
+            $sumJ += $tonnageVal;
+            $sumK += $perTon;
+
+            // F: مبلغ با احتساب مالیات بر ارزش افزوده
+            $xml .= '<c r="F'.$rowNum.'" s="4"><f>ROUND(G'.$rowNum.'*'.$vatDivisor.',0)</f><v>'.$fVal.'</v></c>';
+
+            // G: مبلغ کل قابل دریافت از مشتری (J * K) برای تمام واگن‌ها
+            $xml .= '<c r="G'.$rowNum.'" s="4"><f>J'.$rowNum.'*K'.$rowNum.'</f><v>'.$gVal.'</v></c>';
 
             // H: توضیحات/ شماره وسیله حمل
             $xml .= '<c r="H'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['equipment_label'] ?? '')).'</t></is></c>';
 
             // I: مبلغ تعرفه در کتابچه (ستون سبز رنگ #92D050)
-            $bookletRate = (float) ($row['booklet_rate'] ?? 0);
-            if (! empty($row['is_tonnage'])) {
-                $xml .= '<c r="I'.$rowNum.'" s="5"><v>'.round($bookletRate).'</v></c>';
-            } else {
-                $vatDivisor = (float) ($row['vat_divisor'] ?? 1.1);
-                $xml .= '<c r="I'.$rowNum.'" s="5"><f>F'.$rowNum.'/'.$vatDivisor.'</f><v>'.$bookletRate.'</v></c>';
-            }
+            $xml .= '<c r="I'.$rowNum.'" s="5"><v>'.round($bookletRate).'</v></c>';
 
-            // J: تناژ (عملیاتی)
-            if (! empty($row['is_tonnage']) && isset($row['operational_tonnage']) && $row['operational_tonnage'] !== null) {
-                $xml .= '<c r="J'.$rowNum.'" s="4"><v>'.((float) $row['operational_tonnage']).'</v></c>';
-            } else {
-                $xml .= '<c r="J'.$rowNum.'" s="4"/>';
-            }
+            // J: تناژ (عملیاتی) برای تمام واگن‌ها
+            $xml .= '<c r="J'.$rowNum.'" s="4"><v>'.$tonnageVal.'</v></c>';
 
-            // K: محاسبه بر اساس کتابچه تعرفه
-            if (! empty($row['is_tonnage'])) {
-                $cap = (float) ($row['capacity'] ?? 65);
-                $capStr = floor($cap) == $cap ? (string) ((int) $cap) : (string) $cap;
-                $perTon = (float) ($row['per_ton_rate'] ?? 0);
-                $xml .= '<c r="K'.$rowNum.'" s="4"><f>I'.$rowNum.'/'.$capStr.'</f><v>'.$perTon.'</v></c>';
-            } else {
-                $xml .= '<c r="K'.$rowNum.'" s="4"/>';
-            }
+            // K: محاسبه بر اساس کتابچه تعرفه (I / ظرفیت) برای تمام واگن‌ها
+            $xml .= '<c r="K'.$rowNum.'" s="4"><f>I'.$rowNum.'/'.$capStr.'</f><v>'.$perTon.'</v></c>';
 
             // L: نحوه محاسبه
             $xml .= '<c r="L'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['calc_method'] ?? 'طبق قرارداد')).'</t></is></c>';
@@ -310,10 +309,30 @@ class ExcelExport
             $rowNum++;
         }
 
+        // ردیف جمع کل در انتهای جدول (در صورتی که حداقل یک ردیف داده وجود داشته باشد)
+        if ($rowNum > 3) {
+            $lastDataRow = $rowNum - 1;
+            $xml .= '<row r="'.$rowNum.'" ht="22" customHeight="1">'
+                .'<c r="B'.$rowNum.'" s="2" t="inlineStr"><is><t>جمع کل</t></is></c>'
+                .'<c r="C'.$rowNum.'" s="2"/>'
+                .'<c r="D'.$rowNum.'" s="2"/>'
+                .'<c r="E'.$rowNum.'" s="2" t="inlineStr"><is><t>'.($lastDataRow - 2).' واگن</t></is></c>'
+                .'<c r="F'.$rowNum.'" s="4"><f>SUM(F3:F'.$lastDataRow.')</f><v>'.$sumF.'</v></c>'
+                .'<c r="G'.$rowNum.'" s="4"><f>SUM(G3:G'.$lastDataRow.')</f><v>'.round($sumG).'</v></c>'
+                .'<c r="H'.$rowNum.'" s="2"/>'
+                .'<c r="I'.$rowNum.'" s="5"><f>SUM(I3:I'.$lastDataRow.')</f><v>'.round($sumI).'</v></c>'
+                .'<c r="J'.$rowNum.'" s="4"><f>SUM(J3:J'.$lastDataRow.')</f><v>'.round($sumJ, 2).'</v></c>'
+                .'<c r="K'.$rowNum.'" s="4"><f>SUM(K3:K'.$lastDataRow.')</f><v>'.round($sumK).'</v></c>'
+                .'<c r="L'.$rowNum.'" s="2"/>'
+                .'<c r="M'.$rowNum.'" s="2"/>'
+                .'</row>';
+            $rowNum++;
+        }
+
         // ردیف‌های امضا در پایین گزارش (دقیقاً مطابق ساختار فایل نمونه ستاد)
-        $sigRow1 = $rowNum + 4;
-        $sigRow2 = $rowNum + 7;
-        $sigRow3 = $rowNum + 8;
+        $sigRow1 = $rowNum + 3;
+        $sigRow2 = $rowNum + 6;
+        $sigRow3 = $rowNum + 7;
 
         $xml .= '<row r="'.$sigRow1.'" ht="21" customHeight="1">'
             .'<c r="D'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء طرف قرار داد / پیمانکار</t></is></c>'

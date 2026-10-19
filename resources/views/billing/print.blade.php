@@ -1,34 +1,10 @@
-@php
-    // ساخت URL فایل فونت به‌صورت سازگار با ویندوز و لینوکس (file:///C:/... و file:///var/...)
-    $fontUrl = function (string $path): string {
-        $path = str_replace('\\', '/', $path);
-
-        return 'file://'.(str_starts_with($path, '/') ? '' : '/').str_replace(' ', '%20', $path);
-    };
-
-    $regularFont = $fontUrl(storage_path('fonts/Vazirmatn-Regular.ttf'));
-    $boldFont = $fontUrl(storage_path('fonts/Vazirmatn-Bold.ttf'));
-@endphp
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>صورتحساب {{ $billing->billing_number }}</title>
+    <title>چاپ صورتحساب {{ $billing->billing_number }}</title>
+    <link href="{{ asset('vendor/vazirmatn/Vazirmatn-font-face.css') }}" rel="stylesheet">
     <style>
-        @font-face {
-            font-family: 'Vazirmatn';
-            src: url("{{ $regularFont }}") format('truetype');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'Vazirmatn';
-            src: url("{{ $boldFont }}") format('truetype');
-            font-weight: bold;
-            font-style: normal;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -36,12 +12,52 @@
         }
 
         body {
-            font-family: 'Vazirmatn', sans-serif;
+            font-family: 'Vazirmatn', Tahoma, sans-serif;
             font-size: 13px;
             padding: 24px;
             background: #fff;
             color: #111;
             direction: rtl;
+        }
+
+        .print-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px 16px;
+            margin-bottom: 20px;
+        }
+
+        .print-toolbar .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-print {
+            background: #1d4ed8;
+            color: #fff;
+            border: none;
+            padding: 7px 18px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn-back {
+            background: #fff;
+            color: #334155;
+            border: 1px solid #94a3b8;
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 13px;
+            text-decoration: none;
+            cursor: pointer;
         }
 
         .header {
@@ -73,10 +89,10 @@
         }
 
         table.info td {
-            padding: 4px 6px;
-            border: 1px solid #ddd;
+            padding: 6px 8px;
+            border: 1px solid #ccc;
             text-align: right;
-            width: 25%;
+            width: 35%;
         }
 
         table.info td.label {
@@ -112,8 +128,8 @@
         }
 
         table.totals td {
-            border: 1px solid #ddd;
-            padding: 5px 8px;
+            border: 1px solid #ccc;
+            padding: 6px 8px;
             text-align: right;
         }
 
@@ -131,9 +147,10 @@
 
         .notes {
             margin-top: 14px;
-            padding: 8px;
+            padding: 8px 10px;
             background: #f9f9f9;
             border-right: 3px solid #333;
+            line-height: 1.8;
         }
 
         .footer {
@@ -150,35 +167,28 @@
             font-weight: bold;
         }
 
-        .notice {
-            border: 1px solid #f59e0b;
-            background: #fffbeb;
-            color: #92400e;
-            padding: 10px 14px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 12px;
-            line-height: 1.9;
-        }
-
         @media print {
-            .notice {
-                display: none;
+            body {
+                padding: 0;
+            }
+
+            .print-toolbar {
+                display: none !important;
             }
         }
     </style>
 </head>
 <body>
 
-@if($pdfUnavailable ?? false)
-    <div class="notice">
-        تولید فایل PDF روی این سرور ممکن نیست، چون افزونه PHP «dom» فعال نیست.
-        این نسخه قابل چاپ است؛ با Ctrl+P (یا Cmd+P) می‌توانید آن را به PDF ذخیره کنید.
+<div class="print-toolbar">
+    <div>
+        <strong>پیش‌نمایش چاپ صورتحساب {{ $billing->billing_number }}</strong>
     </div>
-    <script>
-        window.addEventListener('load', function () { window.print(); });
-    </script>
-@endif
+    <div class="actions">
+        <button type="button" class="btn-print" onclick="window.print()">چاپ صورتحساب</button>
+        <a href="{{ route('billing.show', $billing) }}" class="btn-back">بازگشت به صورتحساب</a>
+    </div>
+</div>
 
 <div class="header">
     <h1>صورتحساب بارگیری واگن</h1>
@@ -290,5 +300,10 @@
     <div>این سند به صورت خودکار توسط سامانه مدیریت بارگیری واگن صادر شده است.</div>
 </div>
 
+<script>
+    window.addEventListener('load', function () {
+        window.print();
+    });
+</script>
 </body>
 </html>

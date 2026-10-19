@@ -6,6 +6,8 @@ use App\Models\Billing;
 use App\Models\BillingItem;
 use App\Models\CargoRequest;
 use App\Models\Representative;
+use App\Models\TaxSetting;
+use App\Models\Wagon;
 use App\Support\ExcelExport;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
@@ -580,7 +582,13 @@ class ReportController extends Controller
         $baseQuery = BillingItem::query()
             ->select('billing_items.*')
             ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
-            ->whereBetween('billings.billing_date', [$from, $to])
+            ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
+            ->leftJoin('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('billings.billing_date', [$from, $to])
+                    ->orWhereBetween('wagons.loaded_on', [$from->toDateString(), $to->toDateString()])
+                    ->orWhereBetween('cargo_requests.request_date', [$from->toDateString(), $to->toDateString()]);
+            })
             ->where('billings.status', Billing::STATUS_ISSUED)
             ->whereNull('billings.deleted_at')
             ->with([
@@ -594,6 +602,24 @@ class ReportController extends Controller
             ->orderBy('billing_items.id');
 
         $allItems = $baseQuery->get();
+        $billedWagonIds = $allItems->pluck('wagon_id')->filter()->unique()->all();
+
+        // واگن‌های بارگیری‌شده در همین بازه که هنوز صورتحساب نشده‌اند نیز در گزارش ستاد نمایش داده شوند
+        $unbilledWagons = Wagon::query()
+            ->where('is_settled', false)
+            ->whereNotNull('loaded_weight')
+            ->whereNotNull('tariff_id')
+            ->when(! empty($billedWagonIds), fn ($q) => $q->whereNotIn('id', $billedWagonIds))
+            ->where(function ($q) use ($from, $to) {
+                $q->whereBetween('loaded_on', [$from->toDateString(), $to->toDateString()])
+                    ->orWhereHas('cargoRequest', fn ($cr) => $cr->whereBetween('request_date', [$from->toDateString(), $to->toDateString()]));
+            })
+            ->with(['owner', 'previousOwner', 'cargoRequest.owner', 'tariff'])
+            ->orderBy('loaded_on')
+            ->orderBy('id')
+            ->get();
+
+        $defaultTaxPct = (float) TaxSetting::currentPercentage();
 
         $rows = [];
         $totals = [
@@ -603,20 +629,39 @@ class ReportController extends Controller
             'customer_payable' => 0.0,
             'booklet_rate' => 0.0,
             'operational_tonnage' => 0.0,
+            'per_ton_rate' => 0.0,
         ];
 
-        foreach ($allItems as $idx => $item) {
-            $mapped = $this->mapSetadRow($item, $idx + 1);
+        $rowIndex = 1;
+        foreach ($allItems as $item) {
+            $mapped = $this->mapSetadRow($item, $rowIndex++);
             $rows[] = $mapped;
 
             $totals['count']++;
-            $totals['total_with_vat'] += (int) $mapped['total_with_vat'];
+            $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
+            $totals['customer_payable'] += (float) $mapped['customer_payable'];
             $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
+            $totals['operational_tonnage'] += (float) $mapped['operational_tonnage'];
+            $totals['per_ton_rate'] += (float) $mapped['per_ton_rate'];
 
             if ($mapped['is_tonnage']) {
                 $totals['tonnage_count']++;
-                $totals['customer_payable'] += (float) ($mapped['customer_payable'] ?? 0);
-                $totals['operational_tonnage'] += (float) ($mapped['operational_tonnage'] ?? 0);
+            }
+        }
+
+        foreach ($unbilledWagons as $wagon) {
+            $mapped = $this->mapUnbilledWagonSetadRow($wagon, $rowIndex++, $defaultTaxPct);
+            $rows[] = $mapped;
+
+            $totals['count']++;
+            $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
+            $totals['customer_payable'] += (float) $mapped['customer_payable'];
+            $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
+            $totals['operational_tonnage'] += (float) $mapped['operational_tonnage'];
+            $totals['per_ton_rate'] += (float) $mapped['per_ton_rate'];
+
+            if ($mapped['is_tonnage']) {
+                $totals['tonnage_count']++;
             }
         }
 
@@ -638,7 +683,7 @@ class ReportController extends Controller
     }
 
     /**
-     * تبدیل یک ردیف صورتحساب به ساختار ۱۲ ستونی گزارش ستاد
+     * تبدیل یک ردیف صورتحساب به ساختار ۱۲ ستونی گزارش ستاد (محاسبه و نمایش تناژی برای تمام واگن‌ها)
      *
      * @return array<string, mixed>
      */
@@ -651,38 +696,45 @@ class ReportController extends Controller
         $taxPct = (float) ($billing?->tax_percentage ?? 10);
         $vatDivisor = $taxPct > 0 ? round(1 + ($taxPct / 100), 4) : 1.1;
 
-        $loadedWeight = (float) $item->loaded_weight;
         $capacity = (float) ($item->tariff_capacity ?: ($tariff?->capacity ?: 65));
+        if ($capacity <= 0) {
+            $capacity = 65.0;
+        }
 
-        // اگر وزن بارگیری‌شده کمتر از ظرفیت کامل واگن باشد، محاسبه از نوع «طبق قرارداد-محاسبه تناژی» است
-        $isTonnage = $capacity > 0 && $loadedWeight > 0 && ($capacity - $loadedWeight) >= 0.01;
+        $loadedWeight = (float) ($item->loaded_weight ?: $capacity);
+        if ($loadedWeight <= 0) {
+            $loadedWeight = $capacity;
+        }
 
-        $totalWithVat = (int) $item->total_amount;
+        // مبلغ تعرفه در کتابچه (ستون I): نرخ پایه کامل تعرفه برای ظرفیت کامل واگن
+        $bookletRate = (float) ($item->tariff_rate ?: ($tariff?->rate ?: 0));
+        if ($bookletRate <= 0) {
+            $baseCost = (float) ($item->base_cost ?: (($item->total_amount ?? 0) / $vatDivisor));
+            $bookletRate = $loadedWeight > 0 ? round(($baseCost / $loadedWeight) * $capacity) : $baseCost;
+        }
+
+        // محاسبه بر اساس کتابچه تعرفه (ستون K = I ÷ ظرفیت) برای همه واگن‌ها
+        $perTonRate = $bookletRate / $capacity;
+
+        // تناژ عملیاتی (ستون J) برای همه واگن‌ها
+        $operationalTonnage = $loadedWeight;
+
+        // مبلغ کل قابل دریافت از مشتری (ستون G = J × K) برای همه واگن‌ها
+        $customerPayable = $operationalTonnage * $perTonRate;
+
+        // مبلغ با احتساب مالیات بر ارزش افزوده (ستون F = G × ضریب ارزش افزوده)
+        $baseRounded = round($customerPayable);
+        $taxRounded = round($baseRounded * ($taxPct / 100));
+        $totalWithVat = (int) ($item->total_amount ?: ($baseRounded + $taxRounded));
+
+        $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
-
-        $bookletRate = $isTonnage
-            ? (float) ($item->tariff_rate ?: ($tariff?->rate ?: $item->base_cost))
-            : ($totalWithVat / ($vatDivisor > 0 ? $vatDivisor : 1.1));
-
-        $perTonRate = ($isTonnage && $capacity > 0) ? ($bookletRate / $capacity) : null;
-        $customerPayable = ($isTonnage && $perTonRate !== null) ? ($loadedWeight * $perTonRate) : null;
-
         $calcMethod = $isTonnage ? 'طبق قرارداد-محاسبه تناژی' : 'طبق قرارداد';
 
-        $weightClean = floor($loadedWeight) == $loadedWeight
-            ? (string) ((int) $loadedWeight)
-            : (string) $loadedWeight;
-
-        $customNotes = collect([
+        $notes = collect([
             $billing?->notes,
             $wagon?->cargoRequest?->notes,
         ])->map(fn ($n) => trim((string) $n))->filter()->unique()->implode(' - ');
-
-        if ($isTonnage && $customNotes === '') {
-            $notes = "عملیات به صورت ترکیبی توسط کارگر و {$equipmentLabel} انجام شده است ، تناژ اعلامی ({$weightClean} تن) بر اساس مستندات نماینده صاحب کالا می باشد و جهت جلو گیری از اعتراض صاحب کالا محاسبات بر اساس تناژ عملیاتی لیفتراک یا جرثقیل لحاظ شده و مابقی خدماتی که توسط کارگر انجام شده است مستقیما با سرکارگر مربوطه تسویه می گردد";
-        } else {
-            $notes = $customNotes;
-        }
 
         return [
             'index' => $index,
@@ -696,11 +748,64 @@ class ReportController extends Controller
             'equipment_label' => $equipmentLabel,
             'booklet_rate' => $bookletRate,
             'vat_divisor' => $vatDivisor,
-            'operational_tonnage' => $isTonnage ? $loadedWeight : null,
+            'operational_tonnage' => $operationalTonnage,
             'capacity' => $capacity,
             'per_ton_rate' => $perTonRate,
             'calc_method' => $calcMethod,
             'notes' => $notes,
+            'is_tonnage' => $isTonnage,
+        ];
+    }
+
+    /**
+     * تبدیل یک واگن بارگیری‌شده (قبل از صدور صورتحساب) به ساختار ۱۲ ستونی گزارش ستاد
+     *
+     * @return array<string, mixed>
+     */
+    private function mapUnbilledWagonSetadRow(Wagon $wagon, int $index, float $taxPct): array
+    {
+        $tariff = $wagon->tariff;
+        $vatDivisor = $taxPct > 0 ? round(1 + ($taxPct / 100), 4) : 1.1;
+
+        $capacity = (float) ($tariff?->capacity ?: 65);
+        if ($capacity <= 0) {
+            $capacity = 65.0;
+        }
+
+        $operationalTonnage = (float) ($wagon->loaded_weight ?: $capacity);
+        if ($operationalTonnage <= 0) {
+            $operationalTonnage = $capacity;
+        }
+
+        $bookletRate = (float) ($tariff?->rate ?: 0);
+        $perTonRate = $bookletRate / $capacity;
+        $customerPayable = $operationalTonnage * $perTonRate;
+
+        $baseRounded = round($customerPayable);
+        $taxRounded = round($baseRounded * ($taxPct / 100));
+        $totalWithVat = (int) ($baseRounded + $taxRounded);
+
+        $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
+        $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
+        $calcMethod = $isTonnage ? 'طبق قرارداد-محاسبه تناژی' : 'طبق قرارداد';
+
+        return [
+            'index' => $index,
+            'wagon_id' => $wagon->id,
+            'billing_id' => null,
+            'wagon_number' => $wagon->wagon_number ?? '—',
+            'tariff_name' => $wagon->cargo_description ?: ($tariff?->title ?? '—'),
+            'owner_name' => $wagon->ownerName() ?? '—',
+            'total_with_vat' => $totalWithVat,
+            'customer_payable' => $customerPayable,
+            'equipment_label' => $equipmentLabel,
+            'booklet_rate' => $bookletRate,
+            'vat_divisor' => $vatDivisor,
+            'operational_tonnage' => $operationalTonnage,
+            'capacity' => $capacity,
+            'per_ton_rate' => $perTonRate,
+            'calc_method' => $calcMethod,
+            'notes' => trim((string) ($wagon->cargoRequest?->notes ?? '')),
             'is_tonnage' => $isTonnage,
         ];
     }

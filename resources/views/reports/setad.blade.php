@@ -3,19 +3,33 @@
 
 @push('styles')
     <style>
+        .setad-sheet-wrapper {
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .setad-table {
+            border-collapse: collapse !important;
+            width: 100%;
+        }
+
         .setad-table th,
         .setad-table td {
             text-align: center;
             vertical-align: middle;
-            font-size: 0.88rem;
-            border-color: #333 !important;
+            font-size: 0.86rem;
+            border: 1px solid #222 !important;
+            padding: 7px 8px;
+            color: #000;
         }
 
         .setad-table thead .setad-banner th {
             font-size: 1.05rem;
             font-weight: 700;
             background-color: #fff;
-            border-bottom: 2px solid #000 !important;
+            border: 1px solid #222 !important;
             padding: 12px;
         }
 
@@ -28,21 +42,38 @@
         .setad-green-col {
             background-color: #92D050 !important;
             font-weight: 700;
-            color: #000;
+            color: #000 !important;
+        }
+
+        .setad-total-row td {
+            background-color: #f1f5f9;
+            font-weight: 700;
+            border-top: 2px solid #000 !important;
+            border-bottom: 2px solid #000 !important;
+        }
+
+        .setad-total-row td.setad-green-col {
+            background-color: #92D050 !important;
         }
 
         .setad-notes-cell {
-            max-width: 280px;
+            max-width: 240px;
             font-size: 0.8rem;
-            line-height: 1.6;
+            line-height: 1.5;
         }
 
         .setad-signatures {
-            margin-top: 32px;
+            margin-top: 36px;
             font-weight: 700;
+            color: #000;
         }
 
         @media print {
+            @page {
+                size: landscape;
+                margin: 8mm;
+            }
+
             nav.navbar,
             .no-print {
                 display: none !important;
@@ -50,6 +81,11 @@
 
             body {
                 background: #fff !important;
+            }
+
+            .setad-sheet-wrapper {
+                border: none !important;
+                padding: 0 !important;
             }
 
             .setad-green-col {
@@ -68,7 +104,7 @@
             <a href="{{ request()->fullUrlWithQuery(['export' => 'excel']) }}" class="btn btn-success">
                 دانلود فایل اکسل گزارش ستاد (.xlsx)
             </a>
-            <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
+            <button type="button" class="btn btn-primary" onclick="window.print()">
                 چاپ گزارش
             </button>
         </div>
@@ -78,34 +114,7 @@
         @include('reports._date_filter')
     </div>
 
-    <div class="row g-3 mb-3 no-print">
-        <div class="col-md-3">
-            <div class="card p-3 text-center">
-                <div class="kpi-value">{{ number_format($totals['count']) }}</div>
-                <div class="text-muted small">تعداد کل واگن‌ها در بازه</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card p-3 text-center">
-                <div class="kpi-value">{{ number_format($totals['total_with_vat']) }}</div>
-                <div class="text-muted small">جمع مبلغ با احتساب ارزش افزوده (ریال)</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card p-3 text-center" style="border-color: #92D050;">
-                <div class="kpi-value">{{ number_format(round($totals['booklet_rate'])) }}</div>
-                <div class="text-muted small">جمع مبلغ تعرفه در کتابچه (ریال)</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card p-3 text-center">
-                <div class="kpi-value">{{ number_format($totals['tonnage_count']) }}</div>
-                <div class="text-muted small">تعداد واگن‌های محاسبه تناژی</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card p-3">
+    <div class="setad-sheet-wrapper">
         <div class="table-responsive">
             <table class="table table-bordered bg-white setad-table mb-0">
                 <thead>
@@ -133,66 +142,63 @@
                 @forelse($rows as $row)
                     <tr>
                         <td class="fw-bold">{{ $row['index'] }}</td>
-                        <td class="fw-bold">{{ $row['wagon_number'] }}</td>
+                        <td class="fw-bold font-monospace">{{ $row['wagon_number'] }}</td>
                         <td>{{ $row['tariff_name'] }}</td>
                         <td>{{ $row['owner_name'] }}</td>
-                        <td class="money fw-bold">{{ number_format($row['total_with_vat']) }}</td>
-                        <td class="money">
-                            {{ $row['customer_payable'] !== null ? number_format(round($row['customer_payable'])) : '' }}
-                        </td>
+                        <td class="money fw-bold">{{ number_format(round($row['total_with_vat'])) }}</td>
+                        <td class="money fw-bold">{{ number_format(round($row['customer_payable'])) }}</td>
                         <td>{{ $row['equipment_label'] }}</td>
-                        <td class="money setad-green-col">
-                            {{ number_format(round($row['booklet_rate'])) }}
+                        <td class="money setad-green-col">{{ number_format(round($row['booklet_rate'])) }}</td>
+                        <td class="fw-bold">
+                            {{ floor($row['operational_tonnage']) == $row['operational_tonnage'] ? (int) $row['operational_tonnage'] : number_format($row['operational_tonnage'], 2) }}
                         </td>
-                        <td>
-                            @if($row['operational_tonnage'] !== null)
-                                {{ floor($row['operational_tonnage']) == $row['operational_tonnage'] ? (int) $row['operational_tonnage'] : $row['operational_tonnage'] }}
-                            @endif
-                        </td>
-                        <td class="money">
-                            {{ $row['per_ton_rate'] !== null ? number_format(round($row['per_ton_rate'])) : '' }}
-                        </td>
+                        <td class="money">{{ number_format(round($row['per_ton_rate'])) }}</td>
                         <td class="text-nowrap">{{ $row['calc_method'] }}</td>
                         <td class="setad-notes-cell">{{ $row['notes'] }}</td>
                     </tr>
                 @empty
                     <tr>
                         <td colspan="12" class="text-center text-muted py-4">
-                            در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }} صورتحساب فعالی ثبت نشده است.
+                            در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }} واگن بارگیری‌شده یا صورتحساب فعالی ثبت نشده است.
                         </td>
                     </tr>
                 @endforelse
                 </tbody>
                 @if(count($rows) > 0)
                     <tfoot>
-                    <tr class="table-warning fw-bold">
+                    <tr class="setad-total-row">
                         <td colspan="4">جمع کل ({{ number_format($totals['count']) }} واگن)</td>
-                        <td class="money">{{ number_format($totals['total_with_vat']) }}</td>
-                        <td class="money">
-                            {{ $totals['customer_payable'] > 0 ? number_format(round($totals['customer_payable'])) : '' }}
-                        </td>
-                        <td></td>
+                        <td class="money">{{ number_format(round($totals['total_with_vat'])) }}</td>
+                        <td class="money">{{ number_format(round($totals['customer_payable'])) }}</td>
+                        <td>—</td>
                         <td class="money setad-green-col">{{ number_format(round($totals['booklet_rate'])) }}</td>
-                        <td>{{ $totals['operational_tonnage'] > 0 ? number_format($totals['operational_tonnage'], 1) : '' }}</td>
-                        <td colspan="3"></td>
+                        <td>
+                            {{ floor($totals['operational_tonnage']) == $totals['operational_tonnage'] ? number_format((int) $totals['operational_tonnage']) : number_format($totals['operational_tonnage'], 2) }}
+                        </td>
+                        <td class="money">{{ number_format(round($totals['per_ton_rate'] ?? 0)) }}</td>
+                        <td colspan="2"></td>
                     </tr>
                     </tfoot>
                 @endif
             </table>
         </div>
 
-        <div class="row text-center setad-signatures py-4">
-            <div class="col-6 col-md-3 mb-4">
-                <div>امضاء طرف قرار داد / پیمانکار</div>
+        <div class="setad-signatures">
+            <div class="row text-center mb-5">
+                <div class="col-6">
+                    <div>امضاء طرف قرار داد / پیمانکار</div>
+                </div>
+                <div class="col-6">
+                    <div>امضاء مدیر شعبه</div>
+                </div>
             </div>
-            <div class="col-6 col-md-3 mb-4">
-                <div>امضاء مدیر مجتمع</div>
-            </div>
-            <div class="col-6 col-md-3 mb-4">
-                <div>امضاء مدیر شعبه</div>
-            </div>
-            <div class="col-6 col-md-3 mb-4">
-                <div>امضاء رئیس عملیات</div>
+            <div class="row text-center pb-3">
+                <div class="col-6">
+                    <div>امضاء مدیر مجتمع</div>
+                </div>
+                <div class="col-6">
+                    <div>امضاء رئیس عملیات</div>
+                </div>
             </div>
         </div>
     </div>

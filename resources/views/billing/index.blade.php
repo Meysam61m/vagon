@@ -74,7 +74,7 @@
                     <td class="text-nowrap">
                         <a href="{{ route('billing.show', $billing) }}" class="btn btn-sm btn-outline-primary">مشاهده</a>
                         <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener"
-                           class="btn btn-sm btn-outline-secondary">چاپ PDF</a>
+                           class="btn btn-sm btn-outline-secondary">چاپ</a>
                         @if(auth()->user()->isAdmin() && ! $billing->isCancelled())
                             <form action="{{ route('billing.cancel', $billing) }}" method="POST" class="d-inline"
                                   onsubmit="return confirm('صورتحساب لغو شود؟ واگن‌ها آزاد می‌شوند و امکان صدور مجدد فراهم می‌شود.');">

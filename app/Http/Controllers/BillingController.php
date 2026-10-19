@@ -12,7 +12,6 @@ use App\Models\TaxSetting;
 use App\Models\Wagon;
 use App\Support\DocumentNumber;
 use App\Support\JalaliDate;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -323,28 +322,10 @@ class BillingController extends Controller
             'items.wagon.previousOwner',
             'items.wagon.cargoRequest',
             'representative',
+            'operator',
         ]);
 
-        // اگر افزونه dom روی سرور فعال نباشد، Dompdf نمی‌تواند HTML را پارس کند.
-        // به‌جای خطای ۵۰۰، همان فاکتور را به‌صورت HTML قابل چاپ (Ctrl+P → Save as PDF) نشان می‌دهیم.
-        if (! extension_loaded('dom')) {
-            return response()
-                ->view('billing.print', ['billing' => $billing, 'pdfUnavailable' => true])
-                ->header('Content-Type', 'text/html; charset=UTF-8');
-        }
-
-        $pdf = Pdf::loadView('billing.print', ['billing' => $billing])
-            ->setPaper('a4')
-            ->setOptions([
-                'defaultFont' => 'Vazirmatn',
-                'isHtml5ParserEnabled' => true,
-                'isRemoteEnabled' => false,
-                'isPhpEnabled' => false,
-                'enable_font_subsetting' => true,
-                'chroot' => base_path(),
-            ]);
-
-        return $pdf->stream("invoice-{$billing->billing_number}.pdf");
+        return view('billing.print', ['billing' => $billing]);
     }
 
     /**
