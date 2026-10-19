@@ -53,7 +53,9 @@ class AuthController extends Controller
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard'));
+        $defaultHome = Auth::user()->isAdmin() ? route('dashboard') : route('cargo.index');
+
+        return redirect()->intended($defaultHome);
     }
 
     public function logout(Request $request)

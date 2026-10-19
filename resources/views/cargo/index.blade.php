@@ -1,16 +1,86 @@
 @extends('layouts.app')
-@section('title', 'درخواست‌های بارگیری')
+@section('title', 'کارتابل عملیات بارگیری')
 
 @section('content')
+    @php
+        $qs = $queueStats ?? [
+            'pending_loading' => 0,
+            'ready_to_bill' => 0,
+            'my_today_requests' => 0,
+            'my_today_billings' => 0,
+            'total_count' => 0,
+        ];
+        $activeStatus = request('status');
+        $activeQueue = $queueFilter ?? request('queue');
+    @endphp
+
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="mb-0">درخواست‌های بارگیری</h4>
+        <div>
+            <h4 class="mb-0">کارتابل عملیات بارگیری</h4>
+            <div class="text-muted small">مدیریت سریع درخواست‌ها، ثبت بارگیری و صدور یک‌کلیکی صورتحساب</div>
+        </div>
         <div class="d-flex gap-2">
             <a href="{{ route('billing.create') }}" class="btn btn-outline-success">صدور صورتحساب</a>
-            <a href="{{ route('cargo.create') }}" class="btn btn-primary">+ ثبت درخواست جدید</a>
+            <a href="{{ route('cargo.create') }}" class="btn btn-primary fw-semibold">+ ثبت درخواست جدید</a>
+        </div>
+    </div>
+
+    {{-- کارتابل عملیاتی روزانه اپراتور (فیلتر با ۱ کلیک) --}}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <a href="{{ route('cargo.index', ['status' => 'pending']) }}"
+               class="card p-3 text-decoration-none h-100 {{ $activeStatus === 'pending' ? 'border-warning bg-warning-subtle' : 'border-warning' }}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark">در انتظار ثبت بارگیری</div>
+                        <div class="small text-muted">نیازمند ثبت تعرفه و وزن</div>
+                    </div>
+                    <span class="badge bg-warning text-dark fs-5">{{ number_format($qs['pending_loading']) }}</span>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ route('cargo.index', ['status' => 'loaded']) }}"
+               class="card p-3 text-decoration-none h-100 {{ $activeStatus === 'loaded' ? 'border-success bg-success-subtle' : 'border-success' }}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark">آماده صدور صورتحساب</div>
+                        <div class="small text-muted">بارگیری‌شده و تسویه‌نشده</div>
+                    </div>
+                    <span class="badge bg-success fs-5">{{ number_format($qs['ready_to_bill']) }}</span>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ route('cargo.index', ['queue' => 'my_today']) }}"
+               class="card p-3 text-decoration-none h-100 {{ $activeQueue === 'my_today' ? 'border-primary bg-primary-subtle' : 'border-primary' }}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark">ثبت‌شده‌های امروز من</div>
+                        <div class="small text-muted">{{ number_format($qs['my_today_billings']) }} فاکتور صادرشده امروز</div>
+                    </div>
+                    <span class="badge bg-primary fs-5">{{ number_format($qs['my_today_requests']) }}</span>
+                </div>
+            </a>
+        </div>
+        <div class="col-6 col-md-3">
+            <a href="{{ route('cargo.index') }}"
+               class="card p-3 text-decoration-none h-100 {{ !$activeStatus && !$activeQueue ? 'border-secondary bg-light' : '' }}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="fw-bold text-dark">همه درخواست‌ها</div>
+                        <div class="small text-muted">نمایش کل پرونده‌ها</div>
+                    </div>
+                    <span class="badge bg-secondary fs-5">{{ number_format($qs['total_count']) }}</span>
+                </div>
+            </a>
         </div>
     </div>
 
     <form method="GET" class="card p-3 mb-3">
+        @if($activeQueue)
+            <input type="hidden" name="queue" value="{{ $activeQueue }}">
+        @endif
         <div class="row g-2 align-items-end">
             <div class="col-md-4">
                 <label class="form-label" for="cargo_search">جستجو (شماره درخواست، شماره واگن، شرح کالا، صاحب کالا)</label>
@@ -34,8 +104,11 @@
                     @endforeach
                 </select>
             </div>
-            <div class="col-md-2 d-grid">
-                <button class="btn btn-secondary" type="submit">فیلتر</button>
+            <div class="col-md-2 d-flex gap-1">
+                <button class="btn btn-secondary flex-grow-1" type="submit">فیلتر</button>
+                @if(request()->hasAny(['search', 'owner_id', 'status', 'queue']))
+                    <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary" title="پاک کردن فیلترها">×</a>
+                @endif
             </div>
         </div>
     </form>
@@ -107,7 +180,13 @@
                                     <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline">
                                         @csrf
                                         <button type="submit" class="btn btn-sm btn-success" title="صدور مستقیم صورتحساب برای {{ $readyWagonsCount }} واگن بارگیری‌شده">
-                                            صدور فوری صورتحساب
+                                            صدور صورتحساب
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $req, 'print' => 1]) }}" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-outline-dark" title="صدور و باز شدن فوری صفحه چاپ صورتحساب">
+                                            صدور و چاپ
                                         </button>
                                     </form>
                                 @endif

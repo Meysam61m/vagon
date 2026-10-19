@@ -22,6 +22,10 @@ class DashboardController extends Controller
 
     public function index(Request $request)
     {
+        if (! auth()->user()?->isAdmin()) {
+            return redirect()->route('cargo.index');
+        }
+
         [$from, $to] = $this->resolveDateRange($request);
 
         $kpis = [

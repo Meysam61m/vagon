@@ -17,16 +17,18 @@
 
         <div class="d-flex gap-2 flex-wrap">
             @if($readyToBillCount > 0)
-                <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">
+                <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $cargo, 'print' => 1]) }}" class="d-inline">
                     @csrf
                     <button type="submit" class="btn btn-success btn-sm fw-semibold">
-                        صدور فوری صورتحساب ({{ $readyToBillCount }} واگن آماده)
+                        صدور و چاپ فوری صورتحساب ({{ $readyToBillCount }} واگن)
                     </button>
                 </form>
-                <a href="{{ route('billing.create', ['owner_id' => $cargo->owner_id, 'cargo_request_id' => $cargo->id, 'representative_id' => $cargo->representative_id]) }}"
-                   class="btn btn-outline-success btn-sm">
-                    باز کردن در صفحه صدور صورتحساب
-                </a>
+                <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-success btn-sm">
+                        صدور صورتحساب
+                    </button>
+                </form>
             @endif
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary btn-sm">+ درخواست جدید</a>
             <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">لیست درخواست‌ها</a>
@@ -236,15 +238,15 @@
             </div>
 
             <div class="d-flex gap-2 flex-wrap align-items-center">
+                <button class="btn btn-success fw-semibold" type="submit" name="issue_billing" value="print">
+                    ذخیره بارگیری و چاپ فوری صورتحساب (۱ کلیک)
+                </button>
+                <button class="btn btn-outline-success fw-semibold" type="submit" name="issue_billing" value="1">
+                    ذخیره بارگیری و صدور صورتحساب
+                </button>
                 <button class="btn btn-primary" type="submit" name="issue_billing" value="0">
-                    ذخیره بارگیری
+                    فقط ذخیره بارگیری
                 </button>
-                <button class="btn btn-success fw-semibold" type="submit" name="issue_billing" value="1">
-                    ذخیره بارگیری و صدور فوری صورتحساب (۱ کلیک)
-                </button>
-                <span class="text-muted small ms-2">
-                    با دکمه سبز، عملیات بارگیری ذخیره شده و مستقیماً فاکتور نهایی صادر و نمایش داده می‌شود.
-                </span>
             </div>
         </form>
     @else

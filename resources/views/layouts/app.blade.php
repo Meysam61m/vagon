@@ -16,20 +16,22 @@
 @auth
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{{ route('dashboard') }}">سامانه بارگیری واگن</a>
+        <a class="navbar-brand" href="{{ auth()->user()->isAdmin() ? route('dashboard') : route('cargo.index') }}">سامانه بارگیری واگن</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
                 aria-controls="mainNav" aria-expanded="false" aria-label="منو">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                <li class="nav-item">
-                    <a class="nav-link @if(request()->routeIs('dashboard')) active @endif"
-                       href="{{ route('dashboard') }}">داشبورد</a>
-                </li>
+                @if(auth()->user()->isAdmin())
+                    <li class="nav-item">
+                        <a class="nav-link @if(request()->routeIs('dashboard')) active @endif"
+                           href="{{ route('dashboard') }}">داشبورد مدیر</a>
+                    </li>
+                @endif
                 <li class="nav-item">
                     <a class="nav-link @if(request()->routeIs('cargo.*')) active @endif"
-                       href="{{ route('cargo.index') }}">درخواست‌های بارگیری</a>
+                       href="{{ route('cargo.index') }}">عملیات بارگیری</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link @if(request()->routeIs('billing.*')) active @endif"
@@ -43,11 +45,15 @@
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{{ route('reports.daily-loading') }}">گزارش روزانه بارگیری</a></li>
                         <li><a class="dropdown-item" href="{{ route('reports.billings') }}">گزارش صورتحساب‌ها</a></li>
-                        <li><a class="dropdown-item" href="{{ route('reports.operators') }}">عملکرد اپراتورها</a></li>
-                        <li><a class="dropdown-item" href="{{ route('reports.financial') }}">گزارش مالی</a></li>
                         <li><a class="dropdown-item" href="{{ route('reports.wagon-detail') }}">گزارش تفصیلی واگن‌ها</a></li>
-                        <li><a class="dropdown-item" href="{{ route('reports.owners') }}">عملکرد صاحبان کالا</a></li>
-                        <li><a class="dropdown-item" href="{{ route('reports.representatives') }}">عملکرد نمایندگان</a></li>
+                        @if(auth()->user()->isAdmin())
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header text-muted small">گزارش‌های مدیریتی</h6></li>
+                            <li><a class="dropdown-item" href="{{ route('reports.financial') }}">گزارش مالی</a></li>
+                            <li><a class="dropdown-item" href="{{ route('reports.operators') }}">عملکرد اپراتورها</a></li>
+                            <li><a class="dropdown-item" href="{{ route('reports.owners') }}">عملکرد صاحبان کالا</a></li>
+                            <li><a class="dropdown-item" href="{{ route('reports.representatives') }}">عملکرد نمایندگان</a></li>
+                        @endif
                     </ul>
                 </li>
                 @if(auth()->user()->isAdmin())
@@ -64,6 +70,20 @@
                     </li>
                 @endif
             </ul>
+
+            {{-- جستجوی سریع شماره واگن و دکمه ثبت سریع درخواست برای اپراتور در نوار بالا --}}
+            <form method="GET" action="{{ route('cargo.index') }}" class="d-flex align-items-center me-3 my-2 my-lg-0" role="search">
+                <div class="input-group input-group-sm" style="width: 210px;">
+                    <input type="text" name="quick_wagon" class="form-control bg-dark text-light border-secondary"
+                           placeholder="جستجوی سریع شماره واگن…" value="{{ request('quick_wagon') }}" aria-label="جستجوی سریع شماره واگن">
+                    <button class="btn btn-outline-secondary text-light" type="submit" title="پرش به پرونده واگن">برو</button>
+                </div>
+            </form>
+
+            <a href="{{ route('cargo.create') }}" class="btn btn-primary btn-sm me-3 my-1 my-lg-0 fw-semibold">
+                + ثبت درخواست جدید
+            </a>
+
             <span class="navbar-text me-3">
                 {{ auth()->user()->name }}
                 <span class="badge bg-secondary">{{ auth()->user()->roleLabel() }}</span>

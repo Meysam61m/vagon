@@ -6,10 +6,10 @@
         <div>
             <h4 class="mb-1">ثبت درخواست بارگیری جدید</h4>
             <div class="text-muted small">
-                تیپ عملیات ستاد: انتخاب صاحب کالا (نماینده به‌صورت خودکار فیلتر و انتخاب می‌شود) ← ورود تکی یا گروهی واگن‌ها ← ثبت درخواست یا صدور مستقیم صورتحساب در یک مرحله.
+                با انتخاب صاحب کالا، نماینده و آخرین کالای ارسالی او خودکار پیشنهاد می‌شوند. با تایپ شرح کالا، تعرفه و ظرفیت قرارداد نیز خودکار تنظیم می‌گردد.
             </div>
         </div>
-        <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">لیست درخواست‌ها</a>
+        <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">بازگشت به کارتابل</a>
     </div>
 
     <datalist id="common-cargo-descriptions">
@@ -40,7 +40,10 @@
 
         <div class="row g-3">
             <div class="col-md-4">
-                <label class="form-label" for="owner_id_input">صاحب کالا <span class="text-danger">*</span></label>
+                <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-1" for="owner_id_input">صاحب کالا <span class="text-danger">*</span></label>
+                    <span class="badge bg-info-subtle text-dark border small" id="owner-last-cargo-hint" style="display: none;"></span>
+                </div>
                 <select name="owner_id" id="owner_id_input" class="form-select" required>
                     <option value="">انتخاب کنید…</option>
                     @foreach($owners as $owner)
@@ -67,7 +70,7 @@
             </div>
 
             <div class="col-md-4">
-                <label class="form-label" for="request_date_shamsi_input">تاریخ درخواست (شمسی) <span class="text-danger">*</span></label>
+                <label class="form-label mb-1" for="request_date_shamsi_input">تاریخ درخواست (شمسی) <span class="text-danger">*</span></label>
                 <input type="text" name="request_date_shamsi" id="request_date_shamsi_input"
                        value="{{ old('request_date_shamsi', $requestDateShamsi) }}"
                        placeholder="مثلاً ۱۴۰۵/۰۱/۲۰"
@@ -82,6 +85,7 @@
                 <h6 class="mb-0">
                     واگن‌ها و شرح کالا
                     <span class="badge bg-primary ms-1" id="wagon-counter-badge">۱ واگن</span>
+                    <span class="badge bg-danger ms-1 d-none" id="duplicate-warning-badge">شماره واگن تکراری!</span>
                 </h6>
                 <small class="text-muted">
                     شرح کالا از واگن قبلی پیشنهاد می‌شود. با زدن کلید <kbd>Enter</kbd> در آخرین ردیف، واگن بعدی خودکار اضافه می‌شود.
@@ -135,13 +139,14 @@
                         <input type="text"
                                name="wagons[{{ $index }}][number]"
                                value="{{ $w['number'] ?? '' }}"
-                               class="form-control @error('wagons.'.$index.'.number') is-invalid @enderror"
+                               class="form-control font-monospace @error('wagons.'.$index.'.number') is-invalid @enderror"
                                data-wagon-number
                                placeholder="شماره واگن (مثلاً 663532)"
                                required>
-                        @error('wagons.'.$index.'.number')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
+                        <div class="invalid-feedback" data-dup-feedback>
+                            @error('wagons.'.$index.'.number') {{ $message }} @else شماره واگن در همین فرم تکراری است! @enderror
+                        </div>
+                        <div class="small text-warning-emphasis mt-1 d-none" data-unsettled-warning></div>
                     </div>
                     <div class="col-md-5">
                         <input type="text"
@@ -170,14 +175,14 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
                 <div>
                     <h6 class="mb-0 text-primary">
-                        عملیات سریع یک‌مرحله‌ای: ثبت بارگیری و صدور هم‌زمان صورتحساب (اختیاری)
+                        عملیات سریع یک‌مرحله‌ای: تعرفه و وزن بارگیری (پیشنهاد خودکار از روی شرح کالا)
                     </h6>
                     <small class="text-muted">
-                        اگر تعرفه و وزن واگن‌ها مشخص است (مثلاً ۶۵ تن کامل طبق قرارداد)، همین‌جا انتخاب کنید تا بدون نیاز به مراجعه مجدد به صفحات «ثبت بارگیری» و «صدور صورتحساب»، کار در یک مرحله تمام شود.
+                        به‌محض وارد کردن شرح کالا، تعرفه کتابچه و ظرفیت کامل قرارداد (۶۵ یا ۷۰ تن) خودکار انتخاب می‌شود تا بتوانید با ۱ کلیک فاکتور را صادر و چاپ کنید.
                     </small>
                 </div>
                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="quick-tariff-suggest-badge" style="display: none;">
-                    پیشنهاد خودکار از روی شرح کالا
+                    ✓ تعرفه و ظرفیت خودکار تنظیم شد
                 </span>
             </div>
 
@@ -212,7 +217,7 @@
                 </div>
                 <div class="col-md-2">
                     <button type="button" class="btn btn-sm btn-outline-secondary w-100" id="clear-quick-tariff">
-                        پاک کردن تعرفه
+                        بدون بارگیری
                     </button>
                 </div>
             </div>
@@ -224,14 +229,17 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap align-items-center">
-            <button class="btn btn-primary" type="submit" data-submit-action="save_only">
-                ثبت درخواست بارگیری
+            <button class="btn btn-success fw-semibold" type="submit" data-submit-action="save_load_bill_and_print">
+                ثبت کامل و چاپ فوری صورتحساب (۱ کلیک)
             </button>
-            <button class="btn btn-info text-dark fw-semibold" type="submit" data-submit-action="save_and_load" id="btn-save-and-load">
-                ثبت درخواست + ثبت بارگیری هم‌زمان
+            <button class="btn btn-outline-success fw-semibold" type="submit" data-submit-action="save_load_and_bill">
+                ثبت کامل و نمایش صورتحساب
             </button>
-            <button class="btn btn-success fw-semibold" type="submit" data-submit-action="save_load_and_bill" id="btn-save-load-bill">
-                ثبت کامل و صدور فوری صورتحساب (۱ کلیک)
+            <button class="btn btn-info text-dark fw-semibold" type="submit" data-submit-action="save_and_load">
+                ثبت درخواست + ثبت بارگیری
+            </button>
+            <button class="btn btn-outline-primary" type="submit" data-submit-action="save_only">
+                فقط ثبت درخواست (بدون وزن)
             </button>
             <a href="{{ route('cargo.index') }}" class="btn btn-secondary ms-auto">انصراف</a>
         </div>
@@ -246,22 +254,29 @@
             const ownerSelect = document.getElementById('owner_id_input');
             const repSelect = document.getElementById('representative_id');
             const repHint = document.getElementById('rep-auto-hint');
+            const ownerLastHint = document.getElementById('owner-last-cargo-hint');
             const wagonCounterBadge = document.getElementById('wagon-counter-badge');
+            const dupWarningBadge = document.getElementById('duplicate-warning-badge');
             const quickTariffSelect = document.getElementById('quick_tariff_id');
             const quickWeightInput = document.getElementById('quick_weight');
             const quickSuggestBadge = document.getElementById('quick-tariff-suggest-badge');
             const quickActionInput = document.getElementById('quick_action_input');
 
-            // ۱. فیلتر و انتخاب خودکار نماینده بر اساس صاحب کالا
+            // داده‌های پیش‌فرض آخرین درخواست هر صاحب کالا و لیست واگن‌های تسویه‌نشده
+            const ownerDefaults = @json($ownerDefaults ?? []);
+            const unsettledSet = new Set(@json($unsettledWagonNumbers ?? []));
+
+            // ۱. فیلتر و انتخاب خودکار نماینده + پیشنهاد آخرین کالا و تعرفه صاحب کالا
             const allRepOptions = Array.from(repSelect.querySelectorAll('option[data-owners]')).map(opt => ({
                 value: opt.value,
                 label: opt.textContent.trim(),
                 owners: (opt.getAttribute('data-owners') || '').split(',').map(s => s.trim()).filter(Boolean)
             }));
 
-            function syncRepresentatives(preserveSelected) {
+            function syncRepresentativesAndDefaults(preserveSelected) {
                 const ownerId = ownerSelect.value;
                 const currentRep = preserveSelected ? repSelect.value : '';
+                const def = ownerId && ownerDefaults[ownerId] ? ownerDefaults[ownerId] : null;
 
                 while (repSelect.options.length > 1) {
                     repSelect.remove(1);
@@ -284,36 +299,106 @@
                 } else if (ownerId && matching.length === 1) {
                     repSelect.value = matching[0].value;
                     if (repHint) {
-                        repHint.textContent = 'نماینده انحصاری خودکار انتخاب شد';
+                        repHint.textContent = '✓ نماینده خودکار انتخاب شد';
                         repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
                     }
-                } else if (ownerId) {
+                } else if (def && def.representative_id && matching.some(r => r.value === String(def.representative_id))) {
+                    repSelect.value = String(def.representative_id);
                     if (repHint) {
-                        repHint.textContent = matching.length + ' نماینده مرتبط با این صاحب کالا';
-                        repHint.className = 'badge bg-info-subtle text-dark border small';
+                        repHint.textContent = '✓ آخرین نماینده این صاحب کالا انتخاب شد';
+                        repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
                     }
-                } else if (repHint) {
-                    repHint.textContent = 'فیلتر خودکار بر اساس صاحب کالا';
-                    repHint.className = 'badge bg-light text-secondary border small';
+                } else if (ownerId && repHint) {
+                    repHint.textContent = matching.length + ' نماینده مرتبط';
+                    repHint.className = 'badge bg-info-subtle text-dark border small';
+                }
+
+                // پیشنهاد آخرین شرح کالا و تعرفه استفاده‌شده برای این صاحب کالا
+                if (!preserveSelected && def && def.description) {
+                    if (ownerLastHint) {
+                        ownerLastHint.textContent = 'آخرین محموله: ' + def.description;
+                        ownerLastHint.style.display = 'inline-block';
+                    }
+                    const firstDesc = container.querySelector('input[data-wagon-description]');
+                    if (firstDesc && (firstDesc.value.trim() === '' || firstDesc.dataset.autoSuggested === '1')) {
+                        firstDesc.value = def.description;
+                        firstDesc.dataset.autoSuggested = '1';
+                        propagateSuggestionFrom(firstDesc.closest('.wagon-row'));
+                    }
+                    if (def.tariff_id && quickTariffSelect && quickTariffSelect.dataset.userSelected !== '1') {
+                        quickTariffSelect.value = String(def.tariff_id);
+                        const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
+                        if (opt && opt.dataset.capacity) {
+                            quickWeightInput.value = opt.dataset.capacity;
+                            quickWeightInput.dataset.autoCapacity = '1';
+                        }
+                        if (quickSuggestBadge) {
+                            quickSuggestBadge.style.display = 'inline-block';
+                        }
+                    }
+                } else if (!ownerId && ownerLastHint) {
+                    ownerLastHint.style.display = 'none';
                 }
             }
 
             ownerSelect.addEventListener('change', function () {
-                syncRepresentatives(false);
+                syncRepresentativesAndDefaults(false);
             });
-            syncRepresentatives(true);
+            syncRepresentativesAndDefaults(true);
 
-            // ۲. شماره‌گذاری ردیف‌ها و شمارنده واگن‌ها
-            function updateRowNumbersAndCount() {
-                const rows = container.querySelectorAll('.wagon-row');
+            // ۲. شماره‌گذاری ردیف‌ها و بررسی لحظه‌ای شماره‌واگن تکراری یا تسویه‌نشده
+            function validateWagonNumbersRealtime() {
+                const rows = Array.from(container.querySelectorAll('.wagon-row'));
+                const counts = new Map();
+
                 rows.forEach((row, i) => {
                     const numEl = row.querySelector('.wagon-row-num');
                     if (numEl) {
                         numEl.textContent = (i + 1) + '.';
                     }
+                    const inp = row.querySelector('input[data-wagon-number]');
+                    if (inp) {
+                        const val = inp.value.trim();
+                        if (val !== '') {
+                            counts.set(val, (counts.get(val) || 0) + 1);
+                        }
+                    }
                 });
+
+                let hasDuplicate = false;
+                rows.forEach(row => {
+                    const inp = row.querySelector('input[data-wagon-number]');
+                    const unsettledWarn = row.querySelector('[data-unsettled-warning]');
+                    if (!inp) return;
+
+                    const val = inp.value.trim();
+                    const isDup = val !== '' && (counts.get(val) || 0) > 1;
+
+                    if (isDup) {
+                        hasDuplicate = true;
+                        inp.classList.add('is-invalid');
+                        inp.setCustomValidity('شماره واگن تکراری است.');
+                    } else {
+                        inp.classList.remove('is-invalid');
+                        inp.setCustomValidity('');
+                    }
+
+                    if (unsettledWarn) {
+                        if (val !== '' && unsettledSet.has(val)) {
+                            unsettledWarn.textContent = '⚠ این شماره واگن در یک درخواست باز (تسویه‌نشده) دیگر هم وجود دارد.';
+                            unsettledWarn.classList.remove('d-none');
+                        } else {
+                            unsettledWarn.textContent = '';
+                            unsettledWarn.classList.add('d-none');
+                        }
+                    }
+                });
+
                 if (wagonCounterBadge) {
                     wagonCounterBadge.textContent = rows.length + ' واگن';
+                }
+                if (dupWarningBadge) {
+                    dupWarningBadge.classList.toggle('d-none', !hasDuplicate);
                 }
             }
 
@@ -370,11 +455,7 @@
             if (fillCapacityBtn && quickTariffSelect && quickWeightInput) {
                 fillCapacityBtn.addEventListener('click', function () {
                     const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
-                    if (opt && opt.dataset.capacity) {
-                        quickWeightInput.value = opt.dataset.capacity;
-                    } else {
-                        quickWeightInput.value = '65';
-                    }
+                    quickWeightInput.value = (opt && opt.dataset.capacity) ? opt.dataset.capacity : '65';
                 });
             }
 
@@ -403,6 +484,7 @@
             }
 
             function propagateSuggestionFrom(row) {
+                if (!row) return;
                 const sourceInput = row.querySelector('input[data-wagon-description]');
                 if (!sourceInput) {
                     return;
@@ -426,9 +508,13 @@
                 }
             }
 
-            function bindDescriptionInput(row) {
+            function bindRowInputs(row) {
                 const descInput = row.querySelector('input[data-wagon-description]');
                 const numInput = row.querySelector('input[data-wagon-number]');
+
+                if (numInput) {
+                    numInput.addEventListener('input', validateWagonNumbersRealtime);
+                }
 
                 if (descInput) {
                     descInput.addEventListener('input', function () {
@@ -437,7 +523,6 @@
                     });
                 }
 
-                // با زدن Enter در شماره واگن یا شرح کالا، ردیف بعدی خودکار ساخته و فوکوس می‌شود
                 [numInput, descInput].forEach(inp => {
                     if (!inp) return;
                     inp.addEventListener('keydown', function (e) {
@@ -461,8 +546,8 @@
                 });
             }
 
-            container.querySelectorAll('.wagon-row').forEach(bindDescriptionInput);
-            updateRowNumbersAndCount();
+            container.querySelectorAll('.wagon-row').forEach(bindRowInputs);
+            validateWagonNumbersRealtime();
 
             let nextIndex = container.querySelectorAll('.wagon-row').length;
 
@@ -481,12 +566,21 @@
                 const numberInput = document.createElement('input');
                 numberInput.type = 'text';
                 numberInput.name = 'wagons[' + index + '][number]';
-                numberInput.className = 'form-control';
+                numberInput.className = 'form-control font-monospace';
                 numberInput.setAttribute('data-wagon-number', '');
                 numberInput.placeholder = 'شماره واگن (مثلاً 663532)';
                 numberInput.required = true;
                 numberInput.value = wagonNumber || '';
+                const dupFeedback = document.createElement('div');
+                dupFeedback.className = 'invalid-feedback';
+                dupFeedback.setAttribute('data-dup-feedback', '');
+                dupFeedback.textContent = 'شماره واگن در همین فرم تکراری است!';
+                const unsettledWarn = document.createElement('div');
+                unsettledWarn.className = 'small text-warning-emphasis mt-1 d-none';
+                unsettledWarn.setAttribute('data-unsettled-warning', '');
                 colNumber.appendChild(numberInput);
+                colNumber.appendChild(dupFeedback);
+                colNumber.appendChild(unsettledWarn);
 
                 const colDesc = document.createElement('div');
                 colDesc.className = 'col-md-5';
@@ -517,8 +611,8 @@
                 row.appendChild(colBtn);
                 container.appendChild(row);
 
-                bindDescriptionInput(row);
-                updateRowNumbersAndCount();
+                bindRowInputs(row);
+                validateWagonNumbersRealtime();
                 if (suggestedDescription) {
                     suggestQuickTariffFromDescription(suggestedDescription);
                 }
@@ -536,12 +630,11 @@
                     const rows = container.querySelectorAll('.wagon-row');
                     if (rows.length > 1) {
                         e.target.closest('.wagon-row').remove();
-                        updateRowNumbersAndCount();
+                        validateWagonNumbersRealtime();
                     }
                 }
             });
 
-            // ۴. کپی شرح کالای ردیف اول به همه ردیف‌ها با ۱ کلیک
             const applyFirstDescBtn = document.getElementById('apply-first-desc-all');
             if (applyFirstDescBtn) {
                 applyFirstDescBtn.addEventListener('click', function () {
@@ -557,7 +650,6 @@
                 });
             }
 
-            // ۵. ورود گروهی شماره‌واگن‌ها از اکسل یا لیست متنی
             const toggleBulkBtn = document.getElementById('toggle-bulk-paste');
             const bulkPanel = document.getElementById('bulk-paste-panel');
             const applyBulkBtn = document.getElementById('apply-bulk-wagons');
@@ -591,7 +683,6 @@
                         || (firstExistingDesc && firstExistingDesc.value.trim())
                         || '';
 
-                    // اگر ردیف اول خالی است، همان را پر می‌کنیم
                     const existingRows = Array.from(container.querySelectorAll('.wagon-row'));
                     const existingNumbers = new Set();
                     existingRows.forEach(r => {
@@ -628,21 +719,26 @@
                     }
                     bulkNumbersInput.value = '';
                     bulkPanel.classList.add('d-none');
-                    updateRowNumbersAndCount();
+                    validateWagonNumbersRealtime();
                 });
             }
 
-            // ۶. دکمه‌های ثبت چندمنظوره
             document.querySelectorAll('button[data-submit-action]').forEach(btn => {
                 btn.addEventListener('click', function (e) {
                     const action = btn.getAttribute('data-submit-action') || 'save_only';
                     if (quickActionInput) {
                         quickActionInput.value = action;
                     }
-                    if ((action === 'save_and_load' || action === 'save_load_and_bill') && quickTariffSelect && !quickTariffSelect.value) {
-                        e.preventDefault();
-                        quickTariffSelect.focus();
-                        alert('برای ثبت هم‌زمان بارگیری یا صدور فوری صورتحساب، لطفاً ابتدا «تعرفه بارگیری» را از کادر آبی‌رنگ انتخاب کنید.');
+                    if (action !== 'save_only' && quickTariffSelect && !quickTariffSelect.value) {
+                        const firstDesc = container.querySelector('input[data-wagon-description]');
+                        if (firstDesc && firstDesc.value.trim()) {
+                            suggestQuickTariffFromDescription(firstDesc.value.trim());
+                        }
+                        if (!quickTariffSelect.value) {
+                            e.preventDefault();
+                            quickTariffSelect.focus();
+                            alert('برای ثبت هم‌زمان بارگیری یا صدور فوری صورتحساب، لطفاً «تعرفه بارگیری» را از کادر آبی‌رنگ انتخاب کنید.');
+                        }
                     }
                 });
             });

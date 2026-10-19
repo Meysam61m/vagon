@@ -22,7 +22,36 @@ class CargoController extends Controller
 {
     public function index(Request $request)
     {
+        if ($request->filled('quick_wagon')) {
+            $quickTerm = trim($request->string('quick_wagon')->toString());
+            if ($quickTerm !== '') {
+                $matchedWagons = Wagon::query()
+                    ->where('wagon_number', $quickTerm)
+                    ->orWhere('previous_wagon_number', $quickTerm)
+                    ->orderByDesc('id')
+                    ->get(['id', 'cargo_request_id']);
+
+                $distinctCargoIds = $matchedWagons->pluck('cargo_request_id')->filter()->unique()->values();
+                if ($distinctCargoIds->count() === 1) {
+                    return redirect()->route('cargo.show', $distinctCargoIds->first());
+                }
+
+                $exactRequest = CargoRequest::where('request_number', $quickTerm)->first();
+                if ($exactRequest) {
+                    return redirect()->route('cargo.show', $exactRequest);
+                }
+
+                $request->merge(['search' => $quickTerm]);
+            }
+        }
+
+        $queueFilter = $request->string('queue')->toString();
+
         $cargoRequests = CargoRequest::with(['owner', 'representative', 'wagons.owner'])
+            ->when($queueFilter === 'my_today', function ($q) {
+                $q->where('operator_id', auth()->id())
+                    ->whereDate('created_at', today());
+            })
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('owner_id'), function ($q) use ($request) {
                 $ownerId = $request->integer('owner_id');
@@ -50,10 +79,25 @@ class CargoController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        $queueStats = [
+            'pending_loading' => CargoRequest::where('status', CargoRequest::STATUS_PENDING)->count(),
+            'ready_to_bill' => CargoRequest::where('status', CargoRequest::STATUS_LOADED)->count(),
+            'my_today_requests' => CargoRequest::where('operator_id', auth()->id())
+                ->whereDate('created_at', today())
+                ->count(),
+            'my_today_billings' => Billing::where('operator_id', auth()->id())
+                ->where('status', Billing::STATUS_ISSUED)
+                ->whereDate('created_at', today())
+                ->count(),
+            'total_count' => CargoRequest::count(),
+        ];
+
         return view('cargo.index', [
             'cargoRequests' => $cargoRequests,
             'owners' => Owner::orderBy('name')->get(['id', 'name']),
             'statusLabels' => CargoRequest::STATUS_LABELS,
+            'queueStats' => $queueStats,
+            'queueFilter' => $queueFilter,
         ]);
     }
 
@@ -63,10 +107,44 @@ class CargoController extends Controller
         $representatives = Representative::active()->with('owners')->orderBy('name')->get();
         $tariffs = Tariff::active()->orderBy('title')->get();
 
+        // استخراج آخرین درخواست و شرح کالا/تعرفه هر صاحب کالا برای پیشنهاد هوشمند به اپراتور
+        $recentRequests = CargoRequest::with(['wagons' => fn ($q) => $q->latest('id')])
+            ->orderByDesc('id')
+            ->limit(250)
+            ->get();
+
+        $ownerDefaults = [];
+        foreach ($recentRequests as $req) {
+            $oid = (int) $req->owner_id;
+            if (isset($ownerDefaults[$oid])) {
+                continue;
+            }
+            $lastWagon = $req->wagons->first();
+            $desc = trim((string) ($lastWagon?->cargo_description ?? ''));
+            $tariffId = $lastWagon?->tariff_id
+                ?: ($desc !== '' ? $this->suggestTariffId($desc, $tariffs) : null);
+
+            $ownerDefaults[$oid] = [
+                'representative_id' => (int) $req->representative_id,
+                'description' => $desc,
+                'tariff_id' => $tariffId ? (int) $tariffId : null,
+            ];
+        }
+
+        // شماره‌واگن‌های باز (تسویه‌نشده) برای هشدار لحظه‌ای عدم تکرار
+        $unsettledWagonNumbers = Wagon::where('is_settled', false)
+            ->pluck('wagon_number')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
         return view('cargo.create', [
             'owners' => $owners,
             'representatives' => $representatives,
             'tariffs' => $tariffs,
+            'ownerDefaults' => $ownerDefaults,
+            'unsettledWagonNumbers' => $unsettledWagonNumbers,
             'requestDateShamsi' => JalaliDate::today(),
         ]);
     }
@@ -83,7 +161,7 @@ class CargoController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'quick_tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
             'quick_weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
-            'quick_action' => ['nullable', 'string', 'in:save_only,save_and_load,save_load_and_bill'],
+            'quick_action' => ['nullable', 'string', 'in:save_only,save_and_load,save_load_and_bill,save_load_bill_and_print'],
         ], [], [
             'owner_id' => 'صاحب کالا',
             'representative_id' => 'نماینده',
@@ -145,7 +223,16 @@ class CargoController extends Controller
         $quickAction = $data['quick_action'] ?? 'save_only';
         $quickTariff = ! empty($data['quick_tariff_id']) ? Tariff::find($data['quick_tariff_id']) : null;
 
-        if (in_array($quickAction, ['save_and_load', 'save_load_and_bill'], true) && ! $quickTariff) {
+        // اگر اپراتور دکمه بارگیری/فاکتور را زده ولی تعرفه را دستی انتخاب نکرده، از روی شرح کالای ردیف اول تعرفه را پیشنهاد می‌دهیم
+        if (! $quickTariff && in_array($quickAction, ['save_and_load', 'save_load_and_bill', 'save_load_bill_and_print'], true)) {
+            $firstDesc = (string) ($wagonRows->first()['description'] ?? '');
+            $suggestedId = $this->suggestTariffId($firstDesc, Tariff::active()->get());
+            if ($suggestedId) {
+                $quickTariff = Tariff::find($suggestedId);
+            }
+        }
+
+        if (in_array($quickAction, ['save_and_load', 'save_load_and_bill', 'save_load_bill_and_print'], true) && ! $quickTariff) {
             throw ValidationException::withMessages([
                 'quick_tariff_id' => 'برای ثبت یک‌مرحله‌ای بارگیری/صورتحساب، انتخاب تعرفه الزامی است.',
             ]);
@@ -198,8 +285,12 @@ class CargoController extends Controller
             return $cargoRequest;
         });
 
-        if ($quickAction === 'save_load_and_bill' && $shouldLoadImmediately) {
+        if (in_array($quickAction, ['save_load_and_bill', 'save_load_bill_and_print'], true) && $shouldLoadImmediately) {
             $billing = $this->issueInvoiceForCargoRequest($cargoRequest, $normalizedDate);
+
+            if ($quickAction === 'save_load_bill_and_print') {
+                return redirect()->route('billing.print', $billing);
+            }
 
             return redirect()
                 ->route('billing.show', $billing)
@@ -337,7 +428,8 @@ class CargoController extends Controller
             }
         });
 
-        if ($request->boolean('issue_billing')) {
+        $issueBillingMode = (string) $request->input('issue_billing', '0');
+        if (in_array($issueBillingMode, ['1', 'true', 'print'], true)) {
             $cargo->refresh()->load('wagons.tariff');
             $readyWagons = $cargo->wagons->filter(fn (Wagon $w) => ! $w->is_settled && $w->isLoaded() && $w->tariff_id);
 
@@ -348,6 +440,10 @@ class CargoController extends Controller
             }
 
             $billing = $this->issueInvoiceForCargoRequest($cargo, $normalizedDate);
+
+            if ($issueBillingMode === 'print') {
+                return redirect()->route('billing.print', $billing);
+            }
 
             return redirect()
                 ->route('billing.show', $billing)
@@ -372,6 +468,10 @@ class CargoController extends Controller
         }
 
         $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
+
+        if ($request->boolean('print')) {
+            return redirect()->route('billing.print', $billing);
+        }
 
         return redirect()
             ->route('billing.show', $billing)

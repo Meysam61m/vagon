@@ -244,9 +244,13 @@ class ReportController extends Controller
         ]);
     }
 
-    /** گزارش عملکرد اپراتورها */
+    /** گزارش عملکرد اپراتورها (ویژه مدیر سیستم) */
     public function operators(Request $request)
     {
+        if (! auth()->user()?->isAdmin()) {
+            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
+        }
+
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $stats = DB::table('billings')
@@ -289,9 +293,13 @@ class ReportController extends Controller
         return view('reports.operators', compact('stats', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش مالی روزانه */
+    /** گزارش مالی روزانه (ویژه مدیر سیستم) */
     public function financial(Request $request)
     {
+        if (! auth()->user()?->isAdmin()) {
+            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
+        }
+
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $daily = DB::table('billings')
@@ -456,9 +464,13 @@ class ReportController extends Controller
         return view('reports.wagon-detail', compact('items', 'totals', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش عملکرد صاحبان کالا */
+    /** گزارش عملکرد صاحبان کالا (ویژه مدیر سیستم) */
     public function owners(Request $request)
     {
+        if (! auth()->user()?->isAdmin()) {
+            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
+        }
+
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $stats = DB::table('billing_items')
@@ -516,9 +528,13 @@ class ReportController extends Controller
         return view('reports.owners', compact('stats', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش عملکرد نمایندگان: تعداد درخواست و مبلغ صورتحساب */
+    /** گزارش عملکرد نمایندگان: تعداد درخواست و مبلغ صورتحساب (ویژه مدیر سیستم) */
     public function representatives(Request $request)
     {
+        if (! auth()->user()?->isAdmin()) {
+            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
+        }
+
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $requestCount = CargoRequest::query()
