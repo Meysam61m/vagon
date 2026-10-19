@@ -140,7 +140,7 @@
         </div>
 
         <div id="wagon-rows">
-            @php($oldWagons = old('wagons', [['number' => '', 'description' => '']]))
+            @php $oldWagons = old('wagons', [['number' => '', 'description' => '']]); @endphp
             @foreach($oldWagons as $index => $w)
                 <div class="row g-2 mb-2 wagon-row align-items-start">
                     <div class="col-auto pt-2 text-muted small fw-bold wagon-row-num" style="min-width: 28px;">

@@ -166,7 +166,7 @@
                         <td>{{ $req->request_date_shamsi }}</td>
                         <td>{{ $req->wagons->count() }}</td>
                         <td>
-                            @php($badge = ['pending' => 'warning text-dark', 'loaded' => 'info text-dark', 'billed' => 'success', 'cancelled' => 'danger'][$req->status] ?? 'secondary')
+                            @php $badge = ['pending' => 'warning text-dark', 'loaded' => 'info text-dark', 'billed' => 'success', 'cancelled' => 'danger'][$req->status] ?? 'secondary'; @endphp
                             <span class="badge bg-{{ $badge }}">{{ $req->statusLabel() }}</span>
                         </td>
                         <td class="text-nowrap">
@@ -196,7 +196,7 @@
                                             </button>
                                         </form>
                                     @else
-                                        @php($reqRepOwners = ($req->representative?->owners ?? collect())->where('is_active', true)->sortBy('name')->values())
+                                        @php $reqRepOwners = ($req->representative?->owners ?? collect())->where('is_active', true)->sortBy('name')->values(); @endphp
                                         <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
                                             @csrf
                                             <select name="owner_id" class="form-select form-select-sm py-0" style="min-width: 175px; height: 28px; font-size: 0.78rem;" required>

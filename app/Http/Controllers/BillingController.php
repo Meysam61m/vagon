@@ -77,8 +77,8 @@ class BillingController extends Controller
             ->get(['id', 'owner_id', 'cargo_request_id']);
 
         $readyCountsByOwner = $pendingWagonsForCounts
-            ->groupBy(fn (Wagon $w) => (int) ($w->effectiveOwnerId() ?? 0))
-            ->map(fn ($group) => $group->count());
+            ->toBase()
+            ->countBy(fn (Wagon $w) => (int) ($w->effectiveOwnerId() ?? 0));
 
         $unknownOwnerReadyCount = (int) ($readyCountsByOwner->get(0) ?? 0);
 

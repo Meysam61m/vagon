@@ -95,7 +95,7 @@
                 <select name="owner_id" id="billing_owner_filter" class="form-select" onchange="this.form.submit()" required>
                     <option value="">انتخاب صاحب کالا (اجباری)…</option>
                     @foreach($owners as $owner)
-                        @php($rc = $readyCounts[$owner->id] ?? 0)
+                        @php $rc = $readyCounts[$owner->id] ?? 0; @endphp
                         <option value="{{ $owner->id }}" @selected((int) $ownerId === $owner->id)>
                             {{ $owner->name }}{{ $rc > 0 ? " ({$rc} واگن آماده)" : ($unknownReady > 0 ? " (امکان تخصیص {$unknownReady} واگن ناشناس)" : '') }}
                         </option>
@@ -115,7 +115,7 @@
                     <label class="form-label" for="representative_id">نماینده (مرتبط با صاحب کالا) <span class="text-danger">*</span></label>
                     <select name="representative_id" id="representative_id" class="form-select @error('representative_id') is-invalid @enderror" required>
                         <option value="">انتخاب نماینده…</option>
-                        @php($selectedRepId = old('representative_id', $defaultRepresentativeId ?? null))
+                        @php $selectedRepId = old('representative_id', $defaultRepresentativeId ?? null); @endphp
                         @foreach($representatives as $rep)
                             <option value="{{ $rep->id }}" @selected((int) $selectedRepId === (int) $rep->id)>{{ $rep->name }}</option>
                         @endforeach
