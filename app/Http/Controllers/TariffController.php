@@ -238,7 +238,7 @@ class TariffController extends Controller
                     $candidate['title'] = $col;
                     $matchedCols++;
                 } elseif ($candidate['rate'] === null && (
-                    str_contains($norm, 'مبلغ تعرفه در کتابچه')
+                    str_contains($norm, 'مبلغ تعرفه')
                     || str_contains($norm, 'نرخ کامل')
                     || str_contains($norm, 'نرخ تعرفه')
                     || str_contains($norm, 'مبلغ پایه')

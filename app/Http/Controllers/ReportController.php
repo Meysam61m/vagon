@@ -611,6 +611,7 @@ class ReportController extends Controller
                 'wagon.owner',
                 'wagon.previousOwner',
                 'wagon.cargoRequest.owner',
+                'wagon.tariff',
                 'billing.owner',
                 'tariff',
             ])
@@ -641,6 +642,7 @@ class ReportController extends Controller
         $totals = [
             'count' => 0,
             'tonnage_count' => 0,
+            'tariff_rate' => 0.0,
             'total_with_vat' => 0,
             'customer_payable' => 0.0,
             'booklet_rate' => 0.0,
@@ -654,6 +656,7 @@ class ReportController extends Controller
             $rows[] = $mapped;
 
             $totals['count']++;
+            $totals['tariff_rate'] += (float) $mapped['tariff_rate'];
             $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
             $totals['customer_payable'] += (float) $mapped['customer_payable'];
             $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
@@ -670,6 +673,7 @@ class ReportController extends Controller
             $rows[] = $mapped;
 
             $totals['count']++;
+            $totals['tariff_rate'] += (float) $mapped['tariff_rate'];
             $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
             $totals['customer_payable'] += (float) $mapped['customer_payable'];
             $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
@@ -722,30 +726,33 @@ class ReportController extends Controller
             $loadedWeight = $capacity;
         }
 
-        // مبلغ تعرفه در کتابچه (ستون I): نرخ پایه کامل تعرفه برای ظرفیت کامل واگن
-        $bookletRate = (float) ($item->tariff_rate ?: ($tariff?->rate ?: 0));
+        // مبلغ تعرفه در کتابچه: نرخ پایه کامل تعرفه برای ظرفیت کامل واگن
+        $bookletRate = (float) ($item->tariff_rate ?: ($tariff?->rate ?: ($wagon?->tariff?->rate ?: 0)));
         if ($bookletRate <= 0) {
             $baseCost = (float) ($item->base_cost ?: (($item->total_amount ?? 0) / $vatDivisor));
             $bookletRate = $loadedWeight > 0 ? round(($baseCost / $loadedWeight) * $capacity) : $baseCost;
         }
 
-        // محاسبه بر اساس کتابچه تعرفه (ستون K = I ÷ ظرفیت) برای همه واگن‌ها
+        // محاسبه بر اساس کتابچه تعرفه (نرخ هر تن = مبلغ تعرفه در کتابچه ÷ ظرفیت) برای همه واگن‌ها
         $perTonRate = $bookletRate / $capacity;
 
-        // تناژ عملیاتی (ستون J) برای همه واگن‌ها
+        // تناژ عملیاتی برای همه واگن‌ها
         $operationalTonnage = $loadedWeight;
 
-        // مبلغ کل قابل دریافت از مشتری (ستون G = J × K) برای همه واگن‌ها
+        // مبلغ کل قابل دریافت از مشتری (تناژ عملیاتی × نرخ هر تن) برای همه واگن‌ها
         $customerPayable = $operationalTonnage * $perTonRate;
 
-        // مبلغ با احتساب مالیات بر ارزش افزوده (ستون F = G × ضریب ارزش افزوده)
+        // مبلغ با احتساب مالیات بر ارزش افزوده
         $baseRounded = round($customerPayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
         $totalWithVat = (int) ($item->total_amount ?: ($baseRounded + $taxRounded));
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
-        $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
+        $equipmentLabel = $tariff?->equipmentLabel() ?? ($wagon?->tariff?->equipmentLabel() ?? 'جرثقیل');
         $calcMethod = $isTonnage ? 'طبق قرارداد-محاسبه تناژی' : 'طبق قرارداد';
+
+        $usedTariffTitle = $item->tariff_title ?: ($tariff?->title ?: ($wagon?->tariff?->title ?: '—'));
+        $cargoDescription = $wagon?->cargo_description ?: $usedTariffTitle;
 
         $notes = collect([
             $billing?->notes,
@@ -757,7 +764,10 @@ class ReportController extends Controller
             'wagon_id' => $wagon?->id,
             'billing_id' => $billing?->id,
             'wagon_number' => $wagon?->wagon_number ?? '—',
-            'tariff_name' => $wagon?->cargo_description ?: $item->tariff_title,
+            'cargo_description' => $cargoDescription,
+            'used_tariff_title' => $usedTariffTitle,
+            'tariff_rate' => $bookletRate,
+            'tariff_name' => $cargoDescription,
             'owner_name' => $wagon?->ownerName() ?? $billing?->ownerName() ?? '—',
             'total_with_vat' => $totalWithVat,
             'customer_payable' => $customerPayable,
@@ -774,7 +784,7 @@ class ReportController extends Controller
     }
 
     /**
-     * تبدیل یک واگن بارگیری‌شده (قبل از صدور صورتحساب) به ساختار ۱۲ ستونی گزارش ستاد
+     * تبدیل یک واگن بارگیری‌شده (قبل از صدور صورتحساب) به ساختار گزارش ستاد
      *
      * @return array<string, mixed>
      */
@@ -804,13 +814,18 @@ class ReportController extends Controller
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
         $calcMethod = $isTonnage ? 'طبق قرارداد-محاسبه تناژی' : 'طبق قرارداد';
+        $usedTariffTitle = $tariff?->title ?? '—';
+        $cargoDescription = $wagon->cargo_description ?: $usedTariffTitle;
 
         return [
             'index' => $index,
             'wagon_id' => $wagon->id,
             'billing_id' => null,
             'wagon_number' => $wagon->wagon_number ?? '—',
-            'tariff_name' => $wagon->cargo_description ?: ($tariff?->title ?? '—'),
+            'cargo_description' => $cargoDescription,
+            'used_tariff_title' => $usedTariffTitle,
+            'tariff_rate' => $bookletRate,
+            'tariff_name' => $cargoDescription,
             'owner_name' => $wagon->ownerName() ?? '—',
             'total_with_vat' => $totalWithVat,
             'customer_payable' => $customerPayable,

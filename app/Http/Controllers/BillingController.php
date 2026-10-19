@@ -313,12 +313,14 @@ class BillingController extends Controller
 
             foreach ($items as $item) {
                 $billing->items()->create($item);
-            }
 
-            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update([
-                'is_settled' => true,
-                'owner_id' => $owner->id,
-            ]);
+                Wagon::where('id', $item['wagon_id'])->update([
+                    'is_settled' => true,
+                    'owner_id' => $owner->id,
+                    'tariff_id' => $item['tariff_id'],
+                    'loaded_weight' => $item['loaded_weight'],
+                ]);
+            }
 
             // به‌روزرسانی وضعیت درخواست‌های بارگیری متأثر
             $cargoIds = $wagons->pluck('cargoRequest.id')->unique()->filter();
