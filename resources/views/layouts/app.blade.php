@@ -71,15 +71,6 @@
                 @endif
             </ul>
 
-            {{-- جستجوی سریع شماره واگن و دکمه ثبت سریع درخواست برای اپراتور در نوار بالا --}}
-            <form method="GET" action="{{ route('cargo.index') }}" class="d-flex align-items-center me-3 my-2 my-lg-0" role="search">
-                <div class="input-group input-group-sm" style="width: 210px;">
-                    <input type="text" name="quick_wagon" class="form-control bg-dark text-light border-secondary"
-                           placeholder="جستجوی سریع شماره واگن…" value="{{ request('quick_wagon') }}" aria-label="جستجوی سریع شماره واگن">
-                    <button class="btn btn-outline-secondary text-light" type="submit" title="پرش به پرونده واگن">برو</button>
-                </div>
-            </form>
-
             <a href="{{ route('cargo.create') }}" class="btn btn-primary btn-sm me-3 my-1 my-lg-0 fw-semibold">
                 + ثبت درخواست جدید
             </a>
