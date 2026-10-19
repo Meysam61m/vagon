@@ -210,12 +210,7 @@ class CargoController extends Controller
         }
 
         // اگر صاحب کالا انتخاب شده باشد، اطمینان از اتصال نماینده به این صاحب کالا
-        if ($ownerId !== null) {
-            DB::table('owner_representative')->insertOrIgnore([
-                'owner_id' => $ownerId,
-                'representative_id' => (int) $data['representative_id'],
-            ]);
-        }
+        $this->ensureOwnerRepresentativeLinked($ownerId, (int) $data['representative_id']);
 
         $requestDate = JalaliDate::parse($data['request_date_shamsi'], 'request_date_shamsi');
         $normalizedDate = JalaliDate::normalize($data['request_date_shamsi']);
@@ -346,7 +341,7 @@ class CargoController extends Controller
         ]);
 
         $tariffs = Tariff::orderByDesc('is_active')->orderBy('title')->get();
-        $owners = Owner::active()->orderBy('name')->get(['id', 'name', 'national_code']);
+        $owners = Owner::active()->orderBy('name')->get(['id', 'name']);
 
         $suggestedTariffs = [];
         foreach ($cargo->wagons as $wagon) {
@@ -415,10 +410,7 @@ class CargoController extends Controller
         DB::transaction(function () use ($cargo, $data, $selectedOwnerId, $loadingDate, $tariffs) {
             if ($selectedOwnerId !== null && (int) $cargo->owner_id !== $selectedOwnerId) {
                 $cargo->update(['owner_id' => $selectedOwnerId]);
-                DB::table('owner_representative')->insertOrIgnore([
-                    'owner_id' => $selectedOwnerId,
-                    'representative_id' => (int) $cargo->representative_id,
-                ]);
+                $this->ensureOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id);
                 Wagon::where('cargo_request_id', $cargo->id)
                     ->where('is_settled', false)
                     ->whereNull('owner_id')
@@ -537,10 +529,7 @@ class CargoController extends Controller
         if (! empty($validated['owner_id'])) {
             $selectedOwnerId = (int) $validated['owner_id'];
             $cargo->update(['owner_id' => $selectedOwnerId]);
-            DB::table('owner_representative')->insertOrIgnore([
-                'owner_id' => $selectedOwnerId,
-                'representative_id' => (int) $cargo->representative_id,
-            ]);
+            $this->ensureOwnerRepresentativeLinked($selectedOwnerId, (int) $cargo->representative_id);
             Wagon::where('cargo_request_id', $cargo->id)
                 ->where('is_settled', false)
                 ->whereNull('owner_id')
@@ -660,10 +649,7 @@ class CargoController extends Controller
 
             if (! $cargo->owner_id) {
                 $cargo->update(['owner_id' => $owner->id]);
-                DB::table('owner_representative')->insertOrIgnore([
-                    'owner_id' => $owner->id,
-                    'representative_id' => (int) $cargo->representative_id,
-                ]);
+                $this->ensureOwnerRepresentativeLinked((int) $owner->id, (int) $cargo->representative_id);
             }
 
             $items = [];
@@ -805,10 +791,7 @@ class CargoController extends Controller
         ]);
 
         if (! empty($data['representative_id']) && ! empty($data['owner_id'])) {
-            DB::table('owner_representative')->insertOrIgnore([
-                'owner_id' => (int) $data['owner_id'],
-                'representative_id' => (int) $data['representative_id'],
-            ]);
+            $this->ensureOwnerRepresentativeLinked((int) $data['owner_id'], (int) $data['representative_id']);
         }
 
         $oldWagonNumber = trim((string) $wagon->wagon_number);
@@ -997,5 +980,33 @@ class CargoController extends Controller
         return redirect()
             ->route(auth()->user()?->isAdmin() ? 'dashboard' : 'cargo.index')
             ->with('success', $message);
+    }
+
+    /**
+     * ثبت ایمن اتصال صاحب کالا و نماینده در جدول واسط owner_representative
+     */
+    private function ensureOwnerRepresentativeLinked(?int $ownerId, ?int $representativeId): void
+    {
+        if (! $ownerId || ! $representativeId) {
+            return;
+        }
+
+        try {
+            $exists = DB::table('owner_representative')
+                ->where('owner_id', $ownerId)
+                ->where('representative_id', $representativeId)
+                ->exists();
+
+            if (! $exists) {
+                DB::table('owner_representative')->insert([
+                    'owner_id' => $ownerId,
+                    'representative_id' => $representativeId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        } catch (\Throwable) {
+            // اگر رکورد هم‌زمان ثبت شده باشد، خطایی پرتاب نشود
+        }
     }
 }

@@ -196,9 +196,21 @@
                                             </button>
                                         </form>
                                     @else
-                                        <a href="{{ route('cargo.show', $req) }}" class="btn btn-sm btn-warning text-dark fw-semibold" title="برای صدور صورتحساب ابتدا نام صاحب کالا را مشخص کنید">
-                                            تعیین صاحب کالا + فاکتور
-                                        </a>
+                                        <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
+                                            @csrf
+                                            <select name="owner_id" class="form-select form-select-sm py-0" style="min-width: 155px; height: 28px; font-size: 0.78rem;" required>
+                                                <option value="">انتخاب صاحب کالا…</option>
+                                                @foreach($owners as $owner)
+                                                    <option value="{{ $owner->id }}">{{ $owner->name }}</option>
+                                                @endforeach
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="height: 28px; font-size: 0.78rem;" title="تعیین صاحب کالا و صدور صورتحساب">
+                                                تعیین صاحب کالا + صدور فاکتور
+                                            </button>
+                                            <button type="submit" name="print" value="1" class="btn btn-sm btn-outline-dark py-0 px-2" style="height: 28px; font-size: 0.78rem;" title="تعیین صاحب کالا، صدور و چاپ فوری">
+                                                + چاپ
+                                            </button>
+                                        </form>
                                     @endif
                                 @endif
                             </div>

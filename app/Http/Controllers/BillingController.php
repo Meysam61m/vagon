@@ -175,10 +175,7 @@ class BillingController extends Controller
         ]);
 
         if (! empty($data['representative_id'])) {
-            DB::table('owner_representative')->insertOrIgnore([
-                'owner_id' => (int) $data['owner_id'],
-                'representative_id' => (int) $data['representative_id'],
-            ]);
+            $this->ensureOwnerRepresentativeLinked((int) $data['owner_id'], (int) $data['representative_id']);
         }
 
         $billingDate = JalaliDate::parse($data['billing_date_shamsi'], 'billing_date_shamsi');
@@ -320,10 +317,7 @@ class BillingController extends Controller
                         $cargoUpdates['owner_id'] = $owner->id;
                     }
                     if ($cargo->representative_id) {
-                        DB::table('owner_representative')->insertOrIgnore([
-                            'owner_id' => $owner->id,
-                            'representative_id' => (int) $cargo->representative_id,
-                        ]);
+                        $this->ensureOwnerRepresentativeLinked((int) $owner->id, (int) $cargo->representative_id);
                     }
                 }
 
@@ -415,5 +409,33 @@ class BillingController extends Controller
         return redirect()
             ->route('billing.show', $billing)
             ->with('success', 'صورتحساب لغو شد و واگن‌ها برای صدور مجدد آزاد شدند.');
+    }
+
+    /**
+     * ثبت ایمن اتصال صاحب کالا و نماینده در جدول واسط owner_representative
+     */
+    private function ensureOwnerRepresentativeLinked(?int $ownerId, ?int $representativeId): void
+    {
+        if (! $ownerId || ! $representativeId) {
+            return;
+        }
+
+        try {
+            $exists = DB::table('owner_representative')
+                ->where('owner_id', $ownerId)
+                ->where('representative_id', $representativeId)
+                ->exists();
+
+            if (! $exists) {
+                DB::table('owner_representative')->insert([
+                    'owner_id' => $ownerId,
+                    'representative_id' => $representativeId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        } catch (\Throwable) {
+            // اگر رکورد هم‌زمان ثبت شده باشد، خطایی پرتاب نشود
+        }
     }
 }
