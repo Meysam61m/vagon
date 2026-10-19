@@ -15,7 +15,32 @@
     @php
         $readyCounts = $readyCountsByOwner ?? collect();
         $ownersWithReady = $owners->filter(fn($o) => ($readyCounts[$o->id] ?? 0) > 0);
+        $unknownReady = (int) ($unknownOwnerReadyCount ?? 0);
+        $unassignedList = $unassignedWagons ?? collect();
     @endphp
+
+    @if($unknownReady > 0)
+        <div class="card border-warning bg-warning-subtle p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <div class="fw-bold text-dark">
+                        {{ number_format($unknownReady) }} واگن بارگیری‌شده با صاحب کالای «ناشناس» آماده تعیین صاحب کالا و صدور صورتحساب است:
+                    </div>
+                    <div class="small text-dark mt-1">
+                        هنگام صدور صورتحساب، مشخص کردن نام صاحب کالا الزامی است. با انتخاب صاحب کالای قطعی از کادر زیر، واگن‌های ناشناس نیز در جدول ظاهر می‌شوند تا با تیک زدن آن‌ها، هم‌زمان صاحب کالا ثبت و فاکتور صادر شود.
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-1">
+                    @foreach($unassignedList->groupBy('cargo_request_id') as $crId => $wGroup)
+                        @php($firstW = $wGroup->first())
+                        <a href="{{ route('cargo.show', $crId) }}" class="btn btn-sm btn-warning text-dark border border-dark-subtle">
+                            {{ $firstW?->cargoRequest?->request_number }} (نماینده: {{ $firstW?->cargoRequest?->representative?->name ?? '—' }} — {{ $wGroup->count() }} واگن)
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    @endif
 
     @if($ownersWithReady->isNotEmpty())
         <div class="card border-success bg-light p-3 mb-3">
@@ -37,15 +62,20 @@
     @endif
 
     <form method="GET" action="{{ route('billing.create') }}" class="card p-3 mb-4">
+        @if(!empty($selectedCargoRequestId))
+            <input type="hidden" name="cargo_request_id" value="{{ $selectedCargoRequestId }}">
+        @endif
         <div class="row g-2 align-items-end">
             <div class="col-md-6">
-                <label class="form-label" for="billing_owner_filter">انتخاب صاحب کالا برای بارگذاری واگن‌های تسویه‌نشده</label>
-                <select name="owner_id" id="billing_owner_filter" class="form-select" onchange="this.form.submit()">
-                    <option value="">انتخاب کنید…</option>
+                <label class="form-label fw-semibold" for="billing_owner_filter">
+                    انتخاب صاحب کالا برای صدور صورتحساب <span class="text-danger">* (اجباری)</span>
+                </label>
+                <select name="owner_id" id="billing_owner_filter" class="form-select" onchange="this.form.submit()" required>
+                    <option value="">انتخاب صاحب کالا (اجباری)…</option>
                     @foreach($owners as $owner)
                         @php($rc = $readyCounts[$owner->id] ?? 0)
                         <option value="{{ $owner->id }}" @selected((int) $ownerId === $owner->id)>
-                            {{ $owner->name }}{{ $rc > 0 ? " ({$rc} واگن آماده)" : '' }}
+                            {{ $owner->name }}{{ $rc > 0 ? " ({$rc} واگن آماده)" : ($unknownReady > 0 ? " (امکان تخصیص {$unknownReady} واگن ناشناس)" : '') }}
                         </option>
                     @endforeach
                 </select>
@@ -109,11 +139,21 @@
                         </tr>
                         </thead>
                         <tbody>
+                        @php
+                            $hasDirectOwnerWagons = $wagons->contains(fn($w) => (int) $w->effectiveOwnerId() === (int) $ownerId);
+                        @endphp
                         @foreach($wagons as $i => $wagon)
                             @php
-                                $shouldCheck = empty($selectedCargoRequestId) || (int) $wagon->cargo_request_id === (int) $selectedCargoRequestId;
+                                $isUnknownWagon = $wagon->effectiveOwnerId() === null;
+                                if (!empty($selectedCargoRequestId)) {
+                                    $shouldCheck = (int) $wagon->cargo_request_id === (int) $selectedCargoRequestId;
+                                } elseif ($hasDirectOwnerWagons) {
+                                    $shouldCheck = !$isUnknownWagon;
+                                } else {
+                                    $shouldCheck = true;
+                                }
                             @endphp
-                            <tr class="wagon-billing-row">
+                            <tr class="wagon-billing-row {{ $isUnknownWagon ? 'table-warning' : '' }}">
                                 <td>
                                     <input type="checkbox" class="wagon-check" data-index="{{ $i }}"
                                            aria-label="انتخاب واگن {{ $wagon->wagon_number }}"
@@ -121,7 +161,13 @@
                                     <input type="hidden" name="wagons[{{ $i }}][id]" value="{{ $wagon->id }}" {{ $shouldCheck ? '' : 'disabled' }}>
                                 </td>
                                 <td class="fw-bold font-monospace">{{ $wagon->wagon_number }}</td>
-                                <td>{{ $wagon->cargoRequest?->request_number }}</td>
+                                <td>
+                                    <div>{{ $wagon->cargoRequest?->request_number }}</div>
+                                    <div class="small text-muted">نماینده: {{ $wagon->cargoRequest?->representative?->name ?? '—' }}</div>
+                                    @if($isUnknownWagon)
+                                        <span class="badge bg-warning text-dark mt-1">ثبت‌شده به‌صورت ناشناس</span>
+                                    @endif
+                                </td>
                                 <td>{{ $wagon->cargo_description ?: '—' }}</td>
                                 <td>
                                     <select name="wagons[{{ $i }}][tariff_id]" class="form-select form-select-sm tariff-select" {{ $shouldCheck ? '' : 'disabled' }}>

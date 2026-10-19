@@ -142,7 +142,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v12';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v13';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -158,7 +158,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v12');
+                @file_put_contents($versionMarker, 'v13');
             }
         }
     }
@@ -230,7 +230,7 @@ class AppServiceProvider extends ServiceProvider
                     $table->string('change_type', 30)->default('owner');
                     $table->string('old_wagon_number', 50)->nullable();
                     $table->string('new_wagon_number', 50)->nullable();
-                    $table->foreignId('old_owner_id')->constrained('owners')->restrictOnDelete();
+                    $table->foreignId('old_owner_id')->nullable()->constrained('owners')->nullOnDelete();
                     $table->foreignId('new_owner_id')->constrained('owners')->restrictOnDelete();
                     $table->string('old_owner_name');
                     $table->string('new_owner_name');
@@ -253,6 +253,21 @@ class AppServiceProvider extends ServiceProvider
                         $table->string('new_wagon_number', 50)->nullable()->after('old_wagon_number');
                     }
                 });
+            }
+
+            // اختیاری کردن owner_id در جدول cargo_requests و old_owner_id در wagon_owner_logs برای دیتابیس‌های موجود
+            $nullableOwnerMarker = storage_path('framework/.nullable_owner_v1');
+            if (! is_file($nullableOwnerMarker)) {
+                $driver = DB::getDriverName();
+                if ($driver === 'mysql') {
+                    if (Schema::hasTable('cargo_requests') && Schema::hasColumn('cargo_requests', 'owner_id')) {
+                        DB::statement('ALTER TABLE `cargo_requests` MODIFY `owner_id` BIGINT UNSIGNED NULL');
+                    }
+                    if (Schema::hasTable('wagon_owner_logs') && Schema::hasColumn('wagon_owner_logs', 'old_owner_id')) {
+                        DB::statement('ALTER TABLE `wagon_owner_logs` MODIFY `old_owner_id` BIGINT UNSIGNED NULL');
+                    }
+                }
+                @file_put_contents($nullableOwnerMarker, '1');
             }
             $seededMarker = storage_path('framework/.setad_tariffs_seeded_v1');
             if (! is_file($seededMarker) && Schema::hasTable('tariffs') && class_exists(TariffSeeder::class)) {

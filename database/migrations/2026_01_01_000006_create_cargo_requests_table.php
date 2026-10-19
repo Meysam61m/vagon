@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('cargo_requests', function (Blueprint $table) {
             $table->id();
             $table->string('request_number', 30)->unique();
-            $table->foreignId('owner_id')->constrained()->restrictOnDelete();
+            $table->foreignId('owner_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('representative_id')->constrained()->restrictOnDelete();
             $table->foreignId('operator_id')->nullable()->constrained('users')->nullOnDelete();
             $table->date('request_date');

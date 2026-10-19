@@ -54,6 +54,13 @@ class CargoController extends Controller
             })
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('owner_id'), function ($q) use ($request) {
+                if ($request->string('owner_id')->toString() === 'unknown') {
+                    $q->whereNull('owner_id')
+                        ->whereDoesntHave('wagons', fn ($w) => $w->whereNotNull('owner_id'));
+
+                    return;
+                }
+
                 $ownerId = $request->integer('owner_id');
 
                 $q->where(function ($sub) use ($ownerId) {
@@ -82,6 +89,9 @@ class CargoController extends Controller
         $queueStats = [
             'pending_loading' => CargoRequest::where('status', CargoRequest::STATUS_PENDING)->count(),
             'ready_to_bill' => CargoRequest::where('status', CargoRequest::STATUS_LOADED)->count(),
+            'unknown_owner' => CargoRequest::whereNull('owner_id')
+                ->where('status', '!=', CargoRequest::STATUS_BILLED)
+                ->count(),
             'my_today_requests' => CargoRequest::where('operator_id', auth()->id())
                 ->whereDate('created_at', today())
                 ->count(),
@@ -107,28 +117,37 @@ class CargoController extends Controller
         $representatives = Representative::active()->with('owners')->orderBy('name')->get();
         $tariffs = Tariff::active()->orderBy('title')->get();
 
-        // استخراج آخرین درخواست و شرح کالا/تعرفه هر صاحب کالا برای پیشنهاد هوشمند به اپراتور
+        // استخراج آخرین درخواست و شرح کالا/تعرفه هر صاحب کالا و هر نماینده برای پیشنهاد هوشمند به اپراتور
         $recentRequests = CargoRequest::with(['wagons' => fn ($q) => $q->latest('id')])
             ->orderByDesc('id')
             ->limit(250)
             ->get();
 
         $ownerDefaults = [];
+        $repDefaults = [];
         foreach ($recentRequests as $req) {
-            $oid = (int) $req->owner_id;
-            if (isset($ownerDefaults[$oid])) {
-                continue;
-            }
             $lastWagon = $req->wagons->first();
             $desc = trim((string) ($lastWagon?->cargo_description ?? ''));
             $tariffId = $lastWagon?->tariff_id
                 ?: ($desc !== '' ? $this->suggestTariffId($desc, $tariffs) : null);
 
-            $ownerDefaults[$oid] = [
-                'representative_id' => (int) $req->representative_id,
-                'description' => $desc,
-                'tariff_id' => $tariffId ? (int) $tariffId : null,
-            ];
+            $oid = $req->owner_id ? (int) $req->owner_id : 0;
+            if ($oid > 0 && ! isset($ownerDefaults[$oid])) {
+                $ownerDefaults[$oid] = [
+                    'representative_id' => (int) $req->representative_id,
+                    'description' => $desc,
+                    'tariff_id' => $tariffId ? (int) $tariffId : null,
+                ];
+            }
+
+            $rid = (int) $req->representative_id;
+            if ($rid > 0 && ! isset($repDefaults[$rid]) && $desc !== '') {
+                $repDefaults[$rid] = [
+                    'owner_id' => $oid > 0 ? $oid : null,
+                    'description' => $desc,
+                    'tariff_id' => $tariffId ? (int) $tariffId : null,
+                ];
+            }
         }
 
         // شماره‌واگن‌های باز (تسویه‌نشده) برای هشدار لحظه‌ای عدم تکرار
@@ -144,6 +163,7 @@ class CargoController extends Controller
             'representatives' => $representatives,
             'tariffs' => $tariffs,
             'ownerDefaults' => $ownerDefaults,
+            'repDefaults' => $repDefaults,
             'unsettledWagonNumbers' => $unsettledWagonNumbers,
             'requestDateShamsi' => JalaliDate::today(),
         ]);
@@ -151,8 +171,12 @@ class CargoController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->input('owner_id') === '' || $request->input('owner_id') === 'unknown') {
+            $request->merge(['owner_id' => null]);
+        }
+
         $data = $request->validate([
-            'owner_id' => ['required', 'integer', 'exists:owners,id'],
+            'owner_id' => ['nullable', 'integer', 'exists:owners,id'],
             'representative_id' => ['required', 'integer', 'exists:representatives,id'],
             'request_date_shamsi' => ['required', 'string'],
             'wagons' => ['required', 'array', 'min:1'],
@@ -162,7 +186,9 @@ class CargoController extends Controller
             'quick_tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
             'quick_weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
             'quick_action' => ['nullable', 'string', 'in:save_only,save_and_load,save_load_and_bill,save_load_bill_and_print'],
-        ], [], [
+        ], [
+            'representative_id.required' => 'انتخاب نام نماینده الزامی است.',
+        ], [
             'owner_id' => 'صاحب کالا',
             'representative_id' => 'نماینده',
             'request_date_shamsi' => 'تاریخ درخواست',
@@ -173,15 +199,21 @@ class CargoController extends Controller
             'quick_weight' => 'وزن بارگیری',
         ]);
 
-        // نماینده باید به همین صاحب کالا تخصیص داده شده باشد
-        $linked = DB::table('owner_representative')
-            ->where('owner_id', $data['owner_id'])
-            ->where('representative_id', $data['representative_id'])
-            ->exists();
+        $ownerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
+        $quickAction = $data['quick_action'] ?? 'save_only';
 
-        if (! $linked) {
+        // هنگام صدور صورتحساب، نام صاحب کالا الزامی است
+        if (in_array($quickAction, ['save_load_and_bill', 'save_load_bill_and_print'], true) && $ownerId === null) {
             throw ValidationException::withMessages([
-                'representative_id' => 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.',
+                'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. (اگر نام صاحب کالا در زمان بارگیری مشخص نیست، گزینه «ثبت درخواست + ثبت بارگیری» یا «فقط ثبت درخواست» را انتخاب کنید.)',
+            ]);
+        }
+
+        // اگر صاحب کالا انتخاب شده باشد، اطمینان از اتصال نماینده به این صاحب کالا
+        if ($ownerId !== null) {
+            DB::table('owner_representative')->insertOrIgnore([
+                'owner_id' => $ownerId,
+                'representative_id' => (int) $data['representative_id'],
             ]);
         }
 
@@ -252,6 +284,7 @@ class CargoController extends Controller
 
         $cargoRequest = DocumentNumber::withRetry(function () use (
             $data,
+            $ownerId,
             $requestDate,
             $normalizedDate,
             $wagonRows,
@@ -261,7 +294,7 @@ class CargoController extends Controller
         ) {
             $cargoRequest = CargoRequest::create([
                 'request_number' => CargoRequest::generateRequestNumber(),
-                'owner_id' => $data['owner_id'],
+                'owner_id' => $ownerId,
                 'representative_id' => $data['representative_id'],
                 'operator_id' => auth()->id(),
                 'request_date' => $requestDate->toDateString(),
@@ -273,7 +306,7 @@ class CargoController extends Controller
             foreach ($wagonRows as $wagonRow) {
                 Wagon::create([
                     'cargo_request_id' => $cargoRequest->id,
-                    'owner_id' => $data['owner_id'],
+                    'owner_id' => $ownerId,
                     'wagon_number' => $wagonRow['number'],
                     'cargo_description' => $wagonRow['description'],
                     'tariff_id' => $shouldLoadImmediately ? $quickTariff->id : null,
@@ -313,6 +346,7 @@ class CargoController extends Controller
         ]);
 
         $tariffs = Tariff::orderByDesc('is_active')->orderBy('title')->get();
+        $owners = Owner::active()->orderBy('name')->get(['id', 'name', 'national_code']);
 
         $suggestedTariffs = [];
         foreach ($cargo->wagons as $wagon) {
@@ -324,6 +358,7 @@ class CargoController extends Controller
         return view('cargo.show', [
             'cargo' => $cargo,
             'tariffs' => $tariffs,
+            'owners' => $owners,
             'suggestedTariffs' => $suggestedTariffs,
             'loadingDateShamsi' => JalaliDate::today(),
         ]);
@@ -338,17 +373,34 @@ class CargoController extends Controller
             return back()->with('warning', 'برای درخواست صورتحساب‌شده امکان تغییر بارگیری وجود ندارد.');
         }
 
+        if ($request->input('owner_id') === '' || $request->input('owner_id') === 'unknown') {
+            $request->merge(['owner_id' => null]);
+        }
+
         $data = $request->validate([
+            'owner_id' => ['nullable', 'integer', 'exists:owners,id'],
             'loading_date_shamsi' => ['required', 'string'],
             'loading' => ['required', 'array'],
             'loading.*.tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
             'loading.*.weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
             'loading.*.description' => ['nullable', 'string', 'max:255'],
         ], [], [
+            'owner_id' => 'صاحب کالا',
             'loading_date_shamsi' => 'تاریخ بارگیری',
             'loading' => 'ردیف‌های بارگیری',
             'loading.*.description' => 'شرح کالا',
         ]);
+
+        $selectedOwnerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
+        $issueBillingMode = (string) $request->input('issue_billing', '0');
+
+        // هنگام صدور صورتحساب، نام صاحب کالا الزامی است
+        $effectiveOwnerId = $selectedOwnerId ?? $cargo->owner_id;
+        if (in_array($issueBillingMode, ['1', 'true', 'print'], true) && $effectiveOwnerId === null) {
+            throw ValidationException::withMessages([
+                'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. لطفاً نام صاحب کالا را مشخص کنید.',
+            ]);
+        }
 
         $loadingDate = JalaliDate::parse($data['loading_date_shamsi'], 'loading_date_shamsi');
         $normalizedDate = JalaliDate::normalize($data['loading_date_shamsi']);
@@ -360,7 +412,19 @@ class CargoController extends Controller
             collect($data['loading'])->pluck('tariff_id')->filter()->all()
         )->get()->keyBy('id');
 
-        DB::transaction(function () use ($cargo, $data, $loadingDate, $tariffs) {
+        DB::transaction(function () use ($cargo, $data, $selectedOwnerId, $loadingDate, $tariffs) {
+            if ($selectedOwnerId !== null && (int) $cargo->owner_id !== $selectedOwnerId) {
+                $cargo->update(['owner_id' => $selectedOwnerId]);
+                DB::table('owner_representative')->insertOrIgnore([
+                    'owner_id' => $selectedOwnerId,
+                    'representative_id' => (int) $cargo->representative_id,
+                ]);
+                Wagon::where('cargo_request_id', $cargo->id)
+                    ->where('is_settled', false)
+                    ->whereNull('owner_id')
+                    ->update(['owner_id' => $selectedOwnerId]);
+            }
+
             /** @var Wagon $wagon */
             foreach ($cargo->wagons as $wagon) {
                 $row = $data['loading'][$wagon->id] ?? null;
@@ -412,6 +476,7 @@ class CargoController extends Controller
                 }
 
                 $wagon->update([
+                    'owner_id' => $wagon->owner_id ?? $selectedOwnerId ?? $cargo->owner_id,
                     'tariff_id' => $tariff->id,
                     'loaded_weight' => $weight,
                     'loaded_on' => $loadingDate->toDateString(),
@@ -428,7 +493,6 @@ class CargoController extends Controller
             }
         });
 
-        $issueBillingMode = (string) $request->input('issue_billing', '0');
         if (in_array($issueBillingMode, ['1', 'true', 'print'], true)) {
             $cargo->refresh()->load('wagons.tariff');
             $readyWagons = $cargo->wagons->filter(fn (Wagon $w) => ! $w->is_settled && $w->isLoaded() && $w->tariff_id);
@@ -460,11 +524,41 @@ class CargoController extends Controller
      */
     public function quickBill(Request $request, CargoRequest $cargo)
     {
-        $cargo->load('wagons.tariff');
+        if ($request->input('owner_id') === '' || $request->input('owner_id') === 'unknown') {
+            $request->merge(['owner_id' => null]);
+        }
+
+        $validated = $request->validate([
+            'owner_id' => ['nullable', 'integer', 'exists:owners,id'],
+        ], [], [
+            'owner_id' => 'صاحب کالا',
+        ]);
+
+        if (! empty($validated['owner_id'])) {
+            $selectedOwnerId = (int) $validated['owner_id'];
+            $cargo->update(['owner_id' => $selectedOwnerId]);
+            DB::table('owner_representative')->insertOrIgnore([
+                'owner_id' => $selectedOwnerId,
+                'representative_id' => (int) $cargo->representative_id,
+            ]);
+            Wagon::where('cargo_request_id', $cargo->id)
+                ->where('is_settled', false)
+                ->whereNull('owner_id')
+                ->update(['owner_id' => $selectedOwnerId]);
+        }
+
+        $cargo->refresh()->load('wagons.tariff');
         $readyWagons = $cargo->wagons->filter(fn (Wagon $w) => ! $w->is_settled && $w->isLoaded() && $w->tariff_id);
 
         if ($readyWagons->isEmpty()) {
             return back()->with('warning', 'ابتدا تعرفه و وزن بارگیری واگن‌های این درخواست را ثبت کنید.');
+        }
+
+        $effectiveOwnerId = $cargo->owner_id ?? $readyWagons->first(fn (Wagon $w) => $w->effectiveOwnerId() !== null)?->effectiveOwnerId();
+        if (! $effectiveOwnerId) {
+            return redirect()
+                ->route('cargo.show', $cargo)
+                ->with('error', 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است. لطفاً ابتدا صاحب کالا را مشخص کنید.');
         }
 
         $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
@@ -537,7 +631,6 @@ class CargoController extends Controller
         return DocumentNumber::withRetry(function () use ($cargo, $billingDate, $billingDateShamsi) {
             $cargo->load(['owner', 'representative', 'wagons.tariff']);
             $taxPercentage = TaxSetting::currentPercentage();
-            $owner = $cargo->owner ?? Owner::findOrFail($cargo->owner_id);
             $representative = $cargo->representative;
 
             $wagons = Wagon::with('tariff')
@@ -551,6 +644,25 @@ class CargoController extends Controller
             if ($wagons->isEmpty()) {
                 throw ValidationException::withMessages([
                     'loading' => 'هیچ واگن بارگیری‌شده و تسویه‌نشده‌ای برای صدور صورتحساب یافت نشد.',
+                ]);
+            }
+
+            $resolvedOwnerId = $cargo->owner_id
+                ?? $wagons->first(fn (Wagon $w) => $w->effectiveOwnerId() !== null)?->effectiveOwnerId();
+
+            if (! $resolvedOwnerId) {
+                throw ValidationException::withMessages([
+                    'owner_id' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است.',
+                ]);
+            }
+
+            $owner = $cargo->owner ?? Owner::findOrFail($resolvedOwnerId);
+
+            if (! $cargo->owner_id) {
+                $cargo->update(['owner_id' => $owner->id]);
+                DB::table('owner_representative')->insertOrIgnore([
+                    'owner_id' => $owner->id,
+                    'representative_id' => (int) $cargo->representative_id,
                 ]);
             }
 
@@ -605,7 +717,10 @@ class CargoController extends Controller
                 $billing->items()->create($item);
             }
 
-            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update(['is_settled' => true]);
+            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update([
+                'is_settled' => true,
+                'owner_id' => $owner->id,
+            ]);
 
             $cargo->refresh()->load('wagons');
             if ($cargo->wagons->every(fn (Wagon $w) => $w->is_settled)) {
@@ -664,18 +779,22 @@ class CargoController extends Controller
             $request->merge(['wagon_number' => $wagon->wagon_number]);
         }
 
-        if (! $request->filled('owner_id') && $wagon->effectiveOwnerId()) {
+        if ($request->input('owner_id') === '' || $request->input('owner_id') === 'unknown') {
+            $request->merge(['owner_id' => null]);
+        } elseif (! $request->filled('owner_id') && $wagon->effectiveOwnerId()) {
             $request->merge(['owner_id' => $wagon->effectiveOwnerId()]);
         }
 
+        $isBilledOrSettled = $wagon->is_settled || $wagon->billingItem !== null;
+
         $data = $request->validate([
             'wagon_number' => ['required', 'string', 'max:50'],
-            'owner_id' => ['required', 'integer', 'exists:owners,id'],
+            'owner_id' => [$isBilledOrSettled ? 'required' : 'nullable', 'integer', 'exists:owners,id'],
             'representative_id' => ['nullable', 'integer', 'exists:representatives,id'],
             'owner_change_note' => ['required', 'string', 'min:3', 'max:2000'],
         ], [
             'wagon_number.required' => 'وارد کردن شماره واگن الزامی است.',
-            'owner_id.required' => 'انتخاب صاحب کالا الزامی است.',
+            'owner_id.required' => 'برای واگن صورتحساب‌شده، انتخاب صاحب کالا الزامی است.',
             'owner_change_note.required' => 'ثبت علت و توضیح برای ویرایش واگن الزامی است.',
             'owner_change_note.min' => 'علت و توضیح ویرایش واگن باید حداقل ۳ کاراکتر باشد.',
         ], [
@@ -685,17 +804,11 @@ class CargoController extends Controller
             'owner_change_note' => 'علت و توضیحات ویرایش',
         ]);
 
-        if (! empty($data['representative_id'])) {
-            $linked = DB::table('owner_representative')
-                ->where('owner_id', $data['owner_id'])
-                ->where('representative_id', $data['representative_id'])
-                ->exists();
-
-            if (! $linked) {
-                throw ValidationException::withMessages([
-                    'representative_id' => 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.',
-                ]);
-            }
+        if (! empty($data['representative_id']) && ! empty($data['owner_id'])) {
+            DB::table('owner_representative')->insertOrIgnore([
+                'owner_id' => (int) $data['owner_id'],
+                'representative_id' => (int) $data['representative_id'],
+            ]);
         }
 
         $oldWagonNumber = trim((string) $wagon->wagon_number);
@@ -709,10 +822,11 @@ class CargoController extends Controller
 
         $oldOwnerId = $wagon->effectiveOwnerId();
         $oldOwner = $wagon->owner ?? $wagon->cargoRequest?->owner ?? ($oldOwnerId ? Owner::find($oldOwnerId) : null);
-        $newOwner = Owner::findOrFail($data['owner_id']);
+        $newOwner = ! empty($data['owner_id']) ? Owner::findOrFail($data['owner_id']) : null;
+        $newOwnerId = $newOwner?->id;
 
         $numberChanged = $newWagonNumber !== $oldWagonNumber;
-        $ownerChanged = (int) $oldOwnerId !== (int) $newOwner->id;
+        $ownerChanged = (int) ($oldOwnerId ?? 0) !== (int) ($newOwnerId ?? 0);
 
         if (! $numberChanged && ! $ownerChanged) {
             throw ValidationException::withMessages([
@@ -777,12 +891,12 @@ class CargoController extends Controller
 
             if ($ownerChanged) {
                 $updatePayload['previous_owner_id'] = $oldOwnerId;
-                $updatePayload['owner_id'] = $newOwner->id;
+                $updatePayload['owner_id'] = $newOwner?->id;
             }
 
             $wagon->update($updatePayload);
 
-            if ($oldOwnerId) {
+            if ($newOwner || $oldOwnerId) {
                 WagonOwnerLog::create([
                     'wagon_id' => $wagon->id,
                     'billing_id' => $billing?->id,
@@ -790,15 +904,15 @@ class CargoController extends Controller
                     'old_wagon_number' => $oldWagonNumber,
                     'new_wagon_number' => $newWagonNumber,
                     'old_owner_id' => $oldOwnerId,
-                    'new_owner_id' => $newOwner->id,
-                    'old_owner_name' => $oldOwner?->name ?? '—',
-                    'new_owner_name' => $newOwner->name,
+                    'new_owner_id' => $newOwner?->id ?? $oldOwnerId,
+                    'old_owner_name' => $oldOwner?->name ?? 'ناشناس',
+                    'new_owner_name' => $newOwner?->name ?? 'ناشناس',
                     'user_id' => auth()->id(),
                     'note' => $note,
                 ]);
             }
 
-            if ($ownerChanged) {
+            if ($ownerChanged && $newOwner) {
                 // اگر صورتحساب فعالی برای این واگن صادر شده و همه واگن‌های آن صورتحساب اکنون متعلق به صاحب جدید هستند،
                 // مشخصات صاحب کالا در هدر صورتحساب نیز به‌روز می‌شود.
                 if ($billing && ! $billing->isCancelled()) {
@@ -861,10 +975,11 @@ class CargoController extends Controller
             }
         });
 
+        $newOwnerLabel = $newOwner?->name ?? 'ناشناس';
         $message = match ($changeType) {
-            'both' => "شماره واگن از «{$oldWagonNumber}» به «{$newWagonNumber}» و صاحب کالا به «{$newOwner->name}» با موفقیت ویرایش شد و با ذکر علت در داشبورد مدیر ثبت گردید.",
+            'both' => "شماره واگن از «{$oldWagonNumber}» به «{$newWagonNumber}» و صاحب کالا به «{$newOwnerLabel}» با موفقیت ویرایش شد و با ذکر علت در داشبورد مدیر ثبت گردید.",
             'wagon_number' => "شماره واگن از «{$oldWagonNumber}» به «{$newWagonNumber}» با موفقیت اصلاح شد و با ذکر علت در داشبورد مدیر ثبت گردید.",
-            default => "صاحب کالای واگن «{$wagon->wagon_number}» با موفقیت به «{$newOwner->name}» تغییر یافت و در آمار واگن‌های ویرایش‌شده ثبت شد.",
+            default => "صاحب کالای واگن «{$wagon->wagon_number}» با موفقیت به «{$newOwnerLabel}» تغییر یافت و در آمار واگن‌های ویرایش‌شده ثبت شد.",
         };
 
         if ($request->filled('billing_id') && $billing) {

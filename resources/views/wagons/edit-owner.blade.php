@@ -131,15 +131,26 @@
 
             <div class="col-md-4">
                 <label class="form-label" for="owner_id">
-                    صاحب کالا <span class="text-danger">*</span>
+                    صاحب کالا
+                    @if($wagon->is_settled || $billing)
+                        <span class="text-danger">*</span>
+                    @else
+                        <span class="badge bg-warning-subtle text-dark border small fw-normal">اختیاری قبل از فاکتور</span>
+                    @endif
                 </label>
                 <select name="owner_id" id="owner_id"
-                        class="form-select @error('owner_id') is-invalid @enderror" required>
+                        class="form-select @error('owner_id') is-invalid @enderror"
+                        {{ ($wagon->is_settled || $billing) ? 'required' : '' }}>
+                    @if(! $wagon->is_settled && ! $billing)
+                        <option value="" @selected(old('owner_id', $currentOwnerId) === null || old('owner_id', $currentOwnerId) === '')>
+                            — ناشناس / بدون صاحب کالا (تعیین هنگام صدور صورتحساب) —
+                        </option>
+                    @endif
                     @foreach($owners as $owner)
                         <option value="{{ $owner->id }}"
                             @selected((string) old('owner_id', $currentOwnerId) === (string) $owner->id)>
                             {{ $owner->name }}
-                            {{ (int) $owner->id === (int) $currentOwnerId ? '(صاحب فعلی واگن)' : '' }}
+                            {{ $currentOwnerId && (int) $owner->id === (int) $currentOwnerId ? '(صاحب فعلی واگن)' : '' }}
                             {{ ! $owner->is_active ? '(غیرفعال)' : '' }}
                         </option>
                     @endforeach
@@ -148,7 +159,7 @@
                     <div class="invalid-feedback">{{ $message }}</div>
                 @enderror
                 <div class="form-text">
-                    اگر فقط شماره واگن را اصلاح می‌کنید، صاحب کالا را روی همان صاحب فعلی بگذارید.
+                    اگر فقط شماره واگن را اصلاح می‌کنید، صاحب کالا را روی همان وضعیت فعلی بگذارید.
                 </div>
             </div>
 

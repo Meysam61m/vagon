@@ -49,7 +49,7 @@ return new class extends Migration
                 $table->id();
                 $table->foreignId('wagon_id')->constrained('wagons')->cascadeOnDelete();
                 $table->foreignId('billing_id')->nullable()->constrained('billings')->nullOnDelete();
-                $table->foreignId('old_owner_id')->constrained('owners')->restrictOnDelete();
+                $table->foreignId('old_owner_id')->nullable()->constrained('owners')->nullOnDelete();
                 $table->foreignId('new_owner_id')->constrained('owners')->restrictOnDelete();
                 $table->string('old_owner_name');
                 $table->string('new_owner_name');

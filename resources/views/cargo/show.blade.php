@@ -15,20 +15,38 @@
             <span class="badge bg-secondary fs-6">{{ $cargo->statusLabel() }}</span>
         </div>
 
-        <div class="d-flex gap-2 flex-wrap">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
             @if($readyToBillCount > 0)
-                <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $cargo, 'print' => 1]) }}" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-success btn-sm fw-semibold">
-                        صدور و چاپ فوری صورتحساب ({{ $readyToBillCount }} واگن)
-                    </button>
-                </form>
-                <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-outline-success btn-sm">
-                        صدور صورتحساب
-                    </button>
-                </form>
+                @if($cargo->owner_id)
+                    <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $cargo, 'print' => 1]) }}" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-success btn-sm fw-semibold">
+                            صدور و چاپ فوری صورتحساب ({{ $readyToBillCount }} واگن)
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-success btn-sm">
+                            صدور صورتحساب
+                        </button>
+                    </form>
+                @else
+                    <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
+                        @csrf
+                        <select name="owner_id" class="form-select form-select-sm" style="min-width: 210px;" required>
+                            <option value="">تعیین صاحب کالا (اجباری برای فاکتور)…</option>
+                            @foreach($owners ?? [] as $owner)
+                                <option value="{{ $owner->id }}">{{ $owner->name }}</option>
+                            @endforeach
+                        </select>
+                        <button type="submit" name="print" value="1" class="btn btn-success btn-sm fw-semibold text-nowrap">
+                            تعیین صاحب کالا + چاپ فاکتور
+                        </button>
+                        <button type="submit" class="btn btn-outline-success btn-sm text-nowrap">
+                            صدور فاکتور
+                        </button>
+                    </form>
+                @endif
             @endif
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary btn-sm">+ درخواست جدید</a>
             <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">لیست درخواست‌ها</a>
@@ -37,7 +55,14 @@
 
     <div class="card p-4 mb-4">
         <div class="row g-3">
-            <div class="col-md-3"><strong>صاحب کالا:</strong> {{ $cargo->owner?->name ?? '—' }}</div>
+            <div class="col-md-3">
+                <strong>صاحب کالا:</strong>
+                @if($cargo->owner)
+                    {{ $cargo->owner->name }}
+                @else
+                    <span class="badge bg-warning text-dark">ناشناس (تعیین هنگام صدور صورتحساب)</span>
+                @endif
+            </div>
             <div class="col-md-3"><strong>نماینده:</strong> {{ $cargo->representative?->name ?? '—' }}</div>
             <div class="col-md-3"><strong>تاریخ درخواست:</strong> {{ $cargo->request_date_shamsi }}</div>
             <div class="col-md-3"><strong>اپراتور ثبت‌کننده:</strong> {{ $cargo->operator?->name ?? '—' }}</div>
@@ -50,15 +75,34 @@
     @if($cargo->status !== 'billed')
         <form method="POST" action="{{ route('cargo.load', $cargo) }}" class="card p-4 mb-4" id="cargo-loading-form">
             @csrf
-            <div class="d-flex justify-content-between align-items-end mb-3 flex-wrap gap-2">
-                <div>
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-md-5">
                     <h6 class="mb-1">ثبت عملیات بارگیری ({{ $cargo->wagons->count() }} واگن)</h6>
                     <div class="text-muted small">
-                        تعرفه هر واگن به‌صورت هوشمند از روی «شرح کالا» پیشنهاد شده است. می‌توانید با نوار ابزار زیر، تعرفه و وزن کامل قرارداد را یکجا به همه واگن‌ها اعمال کرده و با ۱ کلیک صورتحساب را صادر کنید.
+                        ثبت بارگیری با صاحب کالای «ناشناس» مجاز است؛ اما <strong>هنگام صدور صورتحساب</strong> انتخاب نام صاحب کالا الزامی است.
                     </div>
                 </div>
-                <div style="min-width: 200px;">
-                    <label class="form-label" for="loading_date_shamsi">تاریخ بارگیری (شمسی)</label>
+                <div class="col-md-4">
+                    <label class="form-label mb-1" for="loading_owner_id">
+                        صاحب کالا
+                        @if(!$cargo->owner_id)
+                            <span class="badge bg-warning text-dark small">فعلاً ناشناس — اجباری برای صدور فاکتور</span>
+                        @endif
+                    </label>
+                    <select name="owner_id" id="loading_owner_id" class="form-select @error('owner_id') is-invalid @enderror">
+                        <option value="">— ناشناس / نامشخص (فقط ذخیره بارگیری) —</option>
+                        @foreach($owners ?? [] as $owner)
+                            <option value="{{ $owner->id }}" @selected((int) old('owner_id', $cargo->owner_id) === (int) $owner->id)>
+                                {{ $owner->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('owner_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1" for="loading_date_shamsi">تاریخ بارگیری (شمسی)</label>
                     <input type="text" name="loading_date_shamsi" id="loading_date_shamsi"
                            value="{{ old('loading_date_shamsi', $loadingDateShamsi) }}"
                            class="form-control jalali-datepicker" autocomplete="off" required>
@@ -463,6 +507,17 @@
                         }
 
                         nextRow = nextRow.nextElementSibling;
+                    }
+                });
+            });
+            const loadingOwnerSelect = document.getElementById('loading_owner_id');
+            document.querySelectorAll('#cargo-loading-form button[name="issue_billing"]').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    const val = btn.value;
+                    if ((val === '1' || val === 'print') && loadingOwnerSelect && !loadingOwnerSelect.value) {
+                        e.preventDefault();
+                        loadingOwnerSelect.focus();
+                        alert('هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است.\n\nلطفاً از کادر «صاحب کالا» در بالای جدول، نام صاحب کالا را انتخاب کنید (یا اگر هنوز صاحب کالا مشخص نیست، دکمه «فقط ذخیره بارگیری» را بزنید).');
                     }
                 });
             });

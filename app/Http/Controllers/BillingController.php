@@ -64,7 +64,7 @@ class BillingController extends Controller
         if ($selectedCargoRequestId && ! $ownerId) {
             $cr = CargoRequest::find($selectedCargoRequestId);
             if ($cr) {
-                $ownerId = (int) $cr->owner_id;
+                $ownerId = $cr->owner_id ? (int) $cr->owner_id : null;
                 $defaultRepresentativeId = $defaultRepresentativeId ?: (int) $cr->representative_id;
             }
         }
@@ -77,8 +77,19 @@ class BillingController extends Controller
             ->get(['id', 'owner_id', 'cargo_request_id']);
 
         $readyCountsByOwner = $pendingWagonsForCounts
-            ->groupBy(fn (Wagon $w) => (int) $w->effectiveOwnerId())
+            ->groupBy(fn (Wagon $w) => (int) ($w->effectiveOwnerId() ?? 0))
             ->map(fn ($group) => $group->count());
+
+        $unknownOwnerReadyCount = (int) ($readyCountsByOwner->get(0) ?? 0);
+
+        $unassignedWagons = Wagon::query()
+            ->pendingSettlement()
+            ->loaded()
+            ->whereNull('owner_id')
+            ->whereHas('cargoRequest', fn ($cr) => $cr->whereNull('owner_id'))
+            ->with(['cargoRequest.representative', 'owner', 'tariff'])
+            ->orderBy('wagon_number')
+            ->get();
 
         $wagons = collect();
         $representatives = collect();
@@ -91,26 +102,37 @@ class BillingController extends Controller
                     $q->where('owner_id', $ownerId)
                         ->orWhere(function ($sub) use ($ownerId) {
                             $sub->whereNull('owner_id')
-                                ->whereHas('cargoRequest', fn ($cr) => $cr->where('owner_id', $ownerId));
+                                ->whereHas('cargoRequest', fn ($cr) => $cr->where('owner_id', $ownerId)->orWhereNull('owner_id'));
                         });
                 })
                 ->with(['cargoRequest.representative', 'owner', 'tariff'])
+                ->orderByRaw('CASE WHEN owner_id = ? THEN 0 ELSE 1 END', [$ownerId])
                 ->orderBy('wagon_number')
                 ->get();
 
+            $wagonRepIds = $wagons->pluck('cargoRequest.representative_id')->filter()->unique()->values()->all();
+
             $representatives = Representative::active()
-                ->whereHas('owners', fn ($q) => $q->where('owners.id', $ownerId))
+                ->where(function ($q) use ($ownerId, $wagonRepIds) {
+                    $q->whereHas('owners', fn ($oq) => $oq->where('owners.id', $ownerId));
+                    if (! empty($wagonRepIds)) {
+                        $q->orWhereIn('id', $wagonRepIds);
+                    }
+                })
                 ->orderBy('name')
                 ->get();
 
             if (! $defaultRepresentativeId) {
-                $repIdsFromWagons = $wagons
+                $ownerWagonsRepIds = $wagons
+                    ->filter(fn (Wagon $w) => (int) $w->effectiveOwnerId() === (int) $ownerId)
                     ->pluck('cargoRequest.representative_id')
                     ->filter()
                     ->unique();
 
-                if ($repIdsFromWagons->count() === 1) {
-                    $defaultRepresentativeId = (int) $repIdsFromWagons->first();
+                if ($ownerWagonsRepIds->count() === 1) {
+                    $defaultRepresentativeId = (int) $ownerWagonsRepIds->first();
+                } elseif (count($wagonRepIds) === 1) {
+                    $defaultRepresentativeId = (int) $wagonRepIds[0];
                 } elseif ($representatives->count() === 1) {
                     $defaultRepresentativeId = (int) $representatives->first()->id;
                 }
@@ -120,6 +142,8 @@ class BillingController extends Controller
         return view('billing.create', [
             'owners' => $owners,
             'readyCountsByOwner' => $readyCountsByOwner,
+            'unknownOwnerReadyCount' => $unknownOwnerReadyCount,
+            'unassignedWagons' => $unassignedWagons,
             'ownerId' => $ownerId,
             'selectedCargoRequestId' => $selectedCargoRequestId,
             'defaultRepresentativeId' => $defaultRepresentativeId,
@@ -142,23 +166,19 @@ class BillingController extends Controller
             'wagons.*.tariff_id' => ['required', 'integer', 'exists:tariffs,id'],
             'wagons.*.weight' => ['required', 'numeric', 'min:0.01', 'max:200'],
             'notes' => ['nullable', 'string', 'max:2000'],
-        ], [], [
+        ], [
+            'owner_id.required' => 'هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است.',
+        ], [
             'owner_id' => 'صاحب کالا',
             'billing_date_shamsi' => 'تاریخ صدور',
             'wagons' => 'واگن‌ها',
         ]);
 
         if (! empty($data['representative_id'])) {
-            $linked = DB::table('owner_representative')
-                ->where('owner_id', $data['owner_id'])
-                ->where('representative_id', $data['representative_id'])
-                ->exists();
-
-            if (! $linked) {
-                throw ValidationException::withMessages([
-                    'representative_id' => 'این نماینده به صاحب کالای انتخاب‌شده تخصیص داده نشده است.',
-                ]);
-            }
+            DB::table('owner_representative')->insertOrIgnore([
+                'owner_id' => (int) $data['owner_id'],
+                'representative_id' => (int) $data['representative_id'],
+            ]);
         }
 
         $billingDate = JalaliDate::parse($data['billing_date_shamsi'], 'billing_date_shamsi');
@@ -205,9 +225,10 @@ class BillingController extends Controller
                     ]);
                 }
 
-                if ((int) $wagon->effectiveOwnerId() !== (int) $owner->id) {
+                $effectiveOwnerId = $wagon->effectiveOwnerId();
+                if ($effectiveOwnerId !== null && (int) $effectiveOwnerId !== (int) $owner->id) {
                     throw ValidationException::withMessages([
-                        'wagons' => "واگن {$wagon->wagon_number} متعلق به صاحب کالای انتخاب‌شده نیست.",
+                        'wagons' => "واگن {$wagon->wagon_number} متعلق به صاحب کالای دیگری است.",
                     ]);
                 }
 
@@ -274,7 +295,10 @@ class BillingController extends Controller
                 $billing->items()->create($item);
             }
 
-            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update(['is_settled' => true]);
+            Wagon::whereIn('id', array_column($items, 'wagon_id'))->update([
+                'is_settled' => true,
+                'owner_id' => $owner->id,
+            ]);
 
             // به‌روزرسانی وضعیت درخواست‌های بارگیری متأثر
             $cargoIds = $wagons->pluck('cargoRequest.id')->unique()->filter();
@@ -286,10 +310,31 @@ class BillingController extends Controller
                     continue;
                 }
 
+                $cargoUpdates = [];
+
+                if (! $cargo->owner_id) {
+                    $allHaveSameOrNullOwner = $cargo->wagons->every(
+                        fn (Wagon $w) => $w->owner_id === null || (int) $w->owner_id === (int) $owner->id
+                    );
+                    if ($allHaveSameOrNullOwner) {
+                        $cargoUpdates['owner_id'] = $owner->id;
+                    }
+                    if ($cargo->representative_id) {
+                        DB::table('owner_representative')->insertOrIgnore([
+                            'owner_id' => $owner->id,
+                            'representative_id' => (int) $cargo->representative_id,
+                        ]);
+                    }
+                }
+
                 if ($cargo->wagons->every(fn (Wagon $wagon) => $wagon->is_settled)) {
-                    $cargo->update(['status' => CargoRequest::STATUS_BILLED]);
+                    $cargoUpdates['status'] = CargoRequest::STATUS_BILLED;
                 } elseif ($cargo->allWagonsLoaded()) {
-                    $cargo->update(['status' => CargoRequest::STATUS_LOADED]);
+                    $cargoUpdates['status'] = CargoRequest::STATUS_LOADED;
+                }
+
+                if (! empty($cargoUpdates)) {
+                    $cargo->update($cargoUpdates);
                 }
             }
 

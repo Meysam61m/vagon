@@ -90,8 +90,9 @@
                 <label class="form-label" for="cargo_owner_id">صاحب کالا</label>
                 <select name="owner_id" id="cargo_owner_id" class="form-select">
                     <option value="">همه</option>
+                    <option value="unknown" @selected(request('owner_id') === 'unknown')>— ناشناس (بدون صاحب کالا) —</option>
                     @foreach($owners as $owner)
-                        <option value="{{ $owner->id }}" @selected((int) request('owner_id') === $owner->id)>{{ $owner->name }}</option>
+                        <option value="{{ $owner->id }}" @selected(request('owner_id') !== 'unknown' && (int) request('owner_id') === $owner->id)>{{ $owner->name }}</option>
                     @endforeach
                 </select>
             </div>
@@ -142,7 +143,11 @@
                             <a href="{{ route('cargo.show', $req) }}" class="text-decoration-none">{{ $req->request_number }}</a>
                         </td>
                         <td>
-                            <div>{{ $req->owner?->name ?? '—' }}</div>
+                            @if($req->owner)
+                                <div>{{ $req->owner->name }}</div>
+                            @else
+                                <span class="badge bg-warning text-dark">ناشناس (تعیین هنگام صدور فاکتور)</span>
+                            @endif
                             @if($hasOwnerTransfer)
                                 <span class="badge bg-warning text-dark mt-1">دارای ویرایش صاحب کالا</span>
                                 <div class="small text-muted">{{ $distinctOwners->implode('، ') }}</div>
@@ -177,18 +182,24 @@
                                 @endif
 
                                 @if($readyWagonsCount > 0)
-                                    <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-success" title="صدور مستقیم صورتحساب برای {{ $readyWagonsCount }} واگن بارگیری‌شده">
-                                            صدور صورتحساب
-                                        </button>
-                                    </form>
-                                    <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $req, 'print' => 1]) }}" class="d-inline">
-                                        @csrf
-                                        <button type="submit" class="btn btn-sm btn-outline-dark" title="صدور و باز شدن فوری صفحه چاپ صورتحساب">
-                                            صدور و چاپ
-                                        </button>
-                                    </form>
+                                    @if($req->owner_id)
+                                        <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success" title="صدور مستقیم صورتحساب برای {{ $readyWagonsCount }} واگن بارگیری‌شده">
+                                                صدور صورتحساب
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $req, 'print' => 1]) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-dark" title="صدور و باز شدن فوری صفحه چاپ صورتحساب">
+                                                صدور و چاپ
+                                            </button>
+                                        </form>
+                                    @else
+                                        <a href="{{ route('cargo.show', $req) }}" class="btn btn-sm btn-warning text-dark fw-semibold" title="برای صدور صورتحساب ابتدا نام صاحب کالا را مشخص کنید">
+                                            تعیین صاحب کالا + فاکتور
+                                        </a>
+                                    @endif
                                 @endif
                             </div>
                         </td>

@@ -6,7 +6,7 @@
         <div>
             <h4 class="mb-1">ثبت درخواست بارگیری جدید</h4>
             <div class="text-muted small">
-                با انتخاب صاحب کالا، نماینده و آخرین کالای ارسالی او خودکار پیشنهاد می‌شوند. با تایپ شرح کالا، تعرفه و ظرفیت قرارداد نیز خودکار تنظیم می‌گردد.
+                در زمان بارگیری ثبت <strong>صاحب کالا اختیاری است (می‌توانید «ناشناس» بگذارید)</strong> و فقط انتخاب <strong>نماینده</strong> الزامی است. نام صاحب کالا هنگام صدور صورتحساب الزامی خواهد بود.
             </div>
         </div>
         <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">بازگشت به کارتابل</a>
@@ -41,24 +41,33 @@
         <div class="row g-3">
             <div class="col-md-4">
                 <div class="d-flex justify-content-between align-items-center">
-                    <label class="form-label mb-1" for="owner_id_input">صاحب کالا <span class="text-danger">*</span></label>
+                    <label class="form-label mb-1" for="owner_id_input">
+                        صاحب کالا
+                        <span class="badge bg-warning-subtle text-dark border small fw-normal">اختیاری هنگام بارگیری</span>
+                    </label>
                     <span class="badge bg-info-subtle text-dark border small" id="owner-last-cargo-hint" style="display: none;"></span>
                 </div>
-                <select name="owner_id" id="owner_id_input" class="form-select" required>
-                    <option value="">انتخاب کنید…</option>
+                <select name="owner_id" id="owner_id_input" class="form-select @error('owner_id') is-invalid @enderror">
+                    <option value="">— ناشناس / نامشخص (تعیین در زمان صدور صورتحساب) —</option>
                     @foreach($owners as $owner)
                         <option value="{{ $owner->id }}" @selected(old('owner_id') == $owner->id)>{{ $owner->name }}</option>
                     @endforeach
                 </select>
+                @error('owner_id')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text small text-muted">
+                    اگر نام صاحب کالا هنوز مشخص نیست، گزینه «ناشناس» را انتخاب کنید.
+                </div>
             </div>
 
             <div class="col-md-4">
                 <div class="d-flex justify-content-between align-items-center">
                     <label class="form-label mb-1" for="representative_id">نماینده <span class="text-danger">*</span></label>
-                    <span class="badge bg-light text-secondary border small" id="rep-auto-hint">فیلتر خودکار بر اساس صاحب کالا</span>
+                    <span class="badge bg-light text-secondary border small" id="rep-auto-hint">همه نمایندگان فعال</span>
                 </div>
-                <select name="representative_id" id="representative_id" class="form-select" required>
-                    <option value="">انتخاب کنید…</option>
+                <select name="representative_id" id="representative_id" class="form-select @error('representative_id') is-invalid @enderror" required>
+                    <option value="">انتخاب نماینده (اجباری)…</option>
                     @foreach($representatives as $rep)
                         <option value="{{ $rep->id }}"
                                 data-owners="{{ $rep->owners->pluck('id')->implode(',') }}"
@@ -67,6 +76,9 @@
                         </option>
                     @endforeach
                 </select>
+                @error('representative_id')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
             </div>
 
             <div class="col-md-4">
@@ -262,31 +274,60 @@
             const quickSuggestBadge = document.getElementById('quick-tariff-suggest-badge');
             const quickActionInput = document.getElementById('quick_action_input');
 
-            // داده‌های پیش‌فرض آخرین درخواست هر صاحب کالا و لیست واگن‌های تسویه‌نشده
+            // داده‌های پیش‌فرض آخرین درخواست هر صاحب کالا، هر نماینده و لیست واگن‌های تسویه‌نشده
             const ownerDefaults = @json($ownerDefaults ?? []);
+            const repDefaults = @json($repDefaults ?? []);
             const unsettledSet = new Set(@json($unsettledWagonNumbers ?? []));
 
-            // ۱. فیلتر و انتخاب خودکار نماینده + پیشنهاد آخرین کالا و تعرفه صاحب کالا
+            // ۱. فیلتر و انتخاب خودکار نماینده + پیشنهاد آخرین کالا و تعرفه صاحب کالا/نماینده
             const allRepOptions = Array.from(repSelect.querySelectorAll('option[data-owners]')).map(opt => ({
                 value: opt.value,
                 label: opt.textContent.trim(),
                 owners: (opt.getAttribute('data-owners') || '').split(',').map(s => s.trim()).filter(Boolean)
             }));
 
+            function applySuggestedCargoAndTariff(def) {
+                if (!def || !def.description) return;
+                if (ownerLastHint) {
+                    ownerLastHint.textContent = 'آخرین محموله: ' + def.description;
+                    ownerLastHint.style.display = 'inline-block';
+                }
+                const firstDesc = container.querySelector('input[data-wagon-description]');
+                if (firstDesc && (firstDesc.value.trim() === '' || firstDesc.dataset.autoSuggested === '1')) {
+                    firstDesc.value = def.description;
+                    firstDesc.dataset.autoSuggested = '1';
+                    propagateSuggestionFrom(firstDesc.closest('.wagon-row'));
+                }
+                if (def.tariff_id && quickTariffSelect && quickTariffSelect.dataset.userSelected !== '1') {
+                    quickTariffSelect.value = String(def.tariff_id);
+                    const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
+                    if (opt && opt.dataset.capacity) {
+                        quickWeightInput.value = opt.dataset.capacity;
+                        quickWeightInput.dataset.autoCapacity = '1';
+                    }
+                    if (quickSuggestBadge) {
+                        quickSuggestBadge.style.display = 'inline-block';
+                    }
+                }
+            }
+
             function syncRepresentativesAndDefaults(preserveSelected) {
                 const ownerId = ownerSelect.value;
-                const currentRep = preserveSelected ? repSelect.value : '';
+                const currentRep = repSelect.value;
                 const def = ownerId && ownerDefaults[ownerId] ? ownerDefaults[ownerId] : null;
 
                 while (repSelect.options.length > 1) {
                     repSelect.remove(1);
                 }
 
-                const matching = ownerId
+                const linkedToOwner = ownerId
                     ? allRepOptions.filter(r => r.owners.includes(ownerId))
                     : allRepOptions;
 
-                matching.forEach(r => {
+                // اگر صاحب کالا انتخاب شده اما نماینده مرتبطی نداشت یا نماینده قبلی انتخاب شده بود، همه نمایندگان هم در دسترس باشند
+                const optionsToShow = (ownerId && linkedToOwner.length > 0) ? linkedToOwner : allRepOptions;
+
+                optionsToShow.forEach(r => {
                     const opt = document.createElement('option');
                     opt.value = r.value;
                     opt.textContent = r.label;
@@ -294,56 +335,65 @@
                     repSelect.appendChild(opt);
                 });
 
-                if (currentRep && matching.some(r => r.value === currentRep)) {
+                // اگر نماینده قبلی در لیست فیلترشده نبود ولی انتخاب شده بود، آن را هم اضافه کن تا انتخاب اپراتور نپرد
+                if (currentRep && !optionsToShow.some(r => r.value === currentRep)) {
+                    const prevRepObj = allRepOptions.find(r => r.value === currentRep);
+                    if (prevRepObj) {
+                        const opt = document.createElement('option');
+                        opt.value = prevRepObj.value;
+                        opt.textContent = prevRepObj.label;
+                        opt.setAttribute('data-owners', prevRepObj.owners.join(','));
+                        repSelect.appendChild(opt);
+                    }
+                }
+
+                if (preserveSelected && currentRep) {
                     repSelect.value = currentRep;
-                } else if (ownerId && matching.length === 1) {
-                    repSelect.value = matching[0].value;
+                } else if (ownerId && linkedToOwner.length === 1) {
+                    repSelect.value = linkedToOwner[0].value;
                     if (repHint) {
                         repHint.textContent = '✓ نماینده خودکار انتخاب شد';
                         repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
                     }
-                } else if (def && def.representative_id && matching.some(r => r.value === String(def.representative_id))) {
+                } else if (def && def.representative_id && optionsToShow.some(r => r.value === String(def.representative_id))) {
                     repSelect.value = String(def.representative_id);
                     if (repHint) {
                         repHint.textContent = '✓ آخرین نماینده این صاحب کالا انتخاب شد';
                         repHint.className = 'badge bg-success-subtle text-success border border-success-subtle small';
                     }
+                } else if (currentRep) {
+                    repSelect.value = currentRep;
                 } else if (ownerId && repHint) {
-                    repHint.textContent = matching.length + ' نماینده مرتبط';
+                    repHint.textContent = linkedToOwner.length + ' نماینده مرتبط';
                     repHint.className = 'badge bg-info-subtle text-dark border small';
+                } else if (!ownerId && repHint) {
+                    repHint.textContent = 'همه نمایندگان فعال (صاحب کالا: ناشناس)';
+                    repHint.className = 'badge bg-warning-subtle text-dark border small';
                 }
 
-                // پیشنهاد آخرین شرح کالا و تعرفه استفاده‌شده برای این صاحب کالا
                 if (!preserveSelected && def && def.description) {
-                    if (ownerLastHint) {
-                        ownerLastHint.textContent = 'آخرین محموله: ' + def.description;
-                        ownerLastHint.style.display = 'inline-block';
+                    applySuggestedCargoAndTariff(def);
+                } else if (!ownerId) {
+                    const rDef = repSelect.value && repDefaults[repSelect.value] ? repDefaults[repSelect.value] : null;
+                    if (rDef && rDef.description) {
+                        applySuggestedCargoAndTariff(rDef);
+                    } else if (ownerLastHint) {
+                        ownerLastHint.style.display = 'none';
                     }
-                    const firstDesc = container.querySelector('input[data-wagon-description]');
-                    if (firstDesc && (firstDesc.value.trim() === '' || firstDesc.dataset.autoSuggested === '1')) {
-                        firstDesc.value = def.description;
-                        firstDesc.dataset.autoSuggested = '1';
-                        propagateSuggestionFrom(firstDesc.closest('.wagon-row'));
-                    }
-                    if (def.tariff_id && quickTariffSelect && quickTariffSelect.dataset.userSelected !== '1') {
-                        quickTariffSelect.value = String(def.tariff_id);
-                        const opt = quickTariffSelect.options[quickTariffSelect.selectedIndex];
-                        if (opt && opt.dataset.capacity) {
-                            quickWeightInput.value = opt.dataset.capacity;
-                            quickWeightInput.dataset.autoCapacity = '1';
-                        }
-                        if (quickSuggestBadge) {
-                            quickSuggestBadge.style.display = 'inline-block';
-                        }
-                    }
-                } else if (!ownerId && ownerLastHint) {
-                    ownerLastHint.style.display = 'none';
                 }
             }
 
             ownerSelect.addEventListener('change', function () {
                 syncRepresentativesAndDefaults(false);
             });
+
+            repSelect.addEventListener('change', function () {
+                const rId = repSelect.value;
+                if (!ownerSelect.value && rId && repDefaults[rId]) {
+                    applySuggestedCargoAndTariff(repDefaults[rId]);
+                }
+            });
+
             syncRepresentativesAndDefaults(true);
 
             // ۲. شماره‌گذاری ردیف‌ها و بررسی لحظه‌ای شماره‌واگن تکراری یا تسویه‌نشده
@@ -728,6 +778,12 @@
                     const action = btn.getAttribute('data-submit-action') || 'save_only';
                     if (quickActionInput) {
                         quickActionInput.value = action;
+                    }
+                    if ((action === 'save_load_and_bill' || action === 'save_load_bill_and_print') && ownerSelect && !ownerSelect.value) {
+                        e.preventDefault();
+                        ownerSelect.focus();
+                        alert('هنگام صدور صورتحساب، انتخاب نام صاحب کالا الزامی است.\n\nاگر نام صاحب کالا در حال حاضر مشخص نیست (ناشناس)، لطفاً دکمه «ثبت درخواست + ثبت بارگیری» یا «فقط ثبت درخواست» را بزنید تا بعداً در زمان صدور صورتحساب، نام صاحب کالا را مشخص کنید.');
+                        return;
                     }
                     if (action !== 'save_only' && quickTariffSelect && !quickTariffSelect.value) {
                         const firstDesc = container.querySelector('input[data-wagon-description]');

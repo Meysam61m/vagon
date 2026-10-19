@@ -125,10 +125,16 @@ class Wagon extends Model
         return $this->owner_id ?? $this->cargoRequest?->owner_id;
     }
 
+    /** آیا صاحب کالای این واگن مشخص شده است؟ */
+    public function hasKnownOwner(): bool
+    {
+        return $this->effectiveOwnerId() !== null;
+    }
+
     /** نام صاحب کالای فعلی واگن */
     public function ownerName(): string
     {
-        return $this->owner?->name ?? $this->cargoRequest?->owner?->name ?? '—';
+        return $this->owner?->name ?? $this->cargoRequest?->owner?->name ?? 'ناشناس';
     }
 
     public function scopePendingSettlement($query)

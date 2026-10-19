@@ -52,6 +52,18 @@ class CargoRequest extends Model
         return self::STATUS_LABELS[$this->status] ?? $this->status;
     }
 
+    /** آیا صاحب کالای این درخواست مشخص شده است؟ */
+    public function hasKnownOwner(): bool
+    {
+        return $this->owner_id !== null;
+    }
+
+    /** نام صاحب کالا (یا «ناشناس» در صورت عدم تعیین) */
+    public function ownerName(): string
+    {
+        return $this->owner?->name ?? 'ناشناس';
+    }
+
     public static function generateRequestNumber(): string
     {
         return DocumentNumber::next(self::class, 'request_number', 'CR');
