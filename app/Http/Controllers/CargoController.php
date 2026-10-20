@@ -193,6 +193,7 @@ class CargoController extends Controller
             'wagons' => ['required', 'array', 'min:1'],
             'wagons.*.number' => ['nullable', 'string', 'max:50'],
             'wagons.*.description' => ['nullable', 'string', 'max:255'],
+            'wagons.*.line_number' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ], [
             'representative_id.required' => 'انتخاب نام نماینده الزامی است.',
@@ -203,6 +204,7 @@ class CargoController extends Controller
             'wagons' => 'واگن‌ها',
             'wagons.*.number' => 'شماره واگن',
             'wagons.*.description' => 'شرح کالا',
+            'wagons.*.line_number' => 'شماره خط',
         ]);
 
         $ownerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
@@ -221,6 +223,7 @@ class CargoController extends Controller
                 'index' => $index,
                 'number' => trim((string) ($row['number'] ?? '')),
                 'description' => trim((string) ($row['description'] ?? '')),
+                'line_number' => trim((string) ($row['line_number'] ?? '')),
             ])
             ->filter(fn ($row) => $row['number'] !== '')
             ->values();
@@ -271,6 +274,7 @@ class CargoController extends Controller
                     'owner_id' => $ownerId,
                     'wagon_number' => $wagonRow['number'],
                     'cargo_description' => $wagonRow['description'],
+                    'line_number' => $wagonRow['line_number'] !== '' ? $wagonRow['line_number'] : null,
                 ]);
             }
 
@@ -329,11 +333,13 @@ class CargoController extends Controller
             'loading.*.tariff_id' => ['nullable', 'integer', 'exists:tariffs,id'],
             'loading.*.weight' => ['nullable', 'numeric', 'min:0.01', 'max:200'],
             'loading.*.description' => ['nullable', 'string', 'max:255'],
+            'loading.*.line_number' => ['nullable', 'string', 'max:50'],
         ], [], [
             'owner_id' => 'صاحب کالا',
             'loading_date_shamsi' => 'تاریخ بارگیری',
             'loading' => 'ردیف‌های بارگیری',
             'loading.*.description' => 'شرح کالا',
+            'loading.*.line_number' => 'شماره خط',
         ]);
 
         $selectedOwnerId = ! empty($data['owner_id']) ? (int) $data['owner_id'] : null;
@@ -387,16 +393,19 @@ class CargoController extends Controller
                 $weight = isset($row['weight']) && $row['weight'] !== '' ? (float) $row['weight'] : null;
                 $tariffId = $row['tariff_id'] ?? null;
 
-                // شرح کالا از همین فرم هم قابل ویرایش است؛ اگر کلید ارسال نشده باشد
-                // مقدار قبلی حفظ می‌شود (سازگاری با فرم‌های قدیمی).
+                // شرح کالا و شماره خط از همین فرم هم قابل ویرایش هستند
                 $description = array_key_exists('description', $row)
                     ? trim((string) $row['description'])
                     : (string) $wagon->cargo_description;
+                $lineNumber = array_key_exists('line_number', $row)
+                    ? trim((string) $row['line_number'])
+                    : (string) ($wagon->line_number ?? '');
 
                 if ($weight === null) {
-                    if ($description !== (string) $wagon->cargo_description) {
+                    if ($description !== (string) $wagon->cargo_description || $lineNumber !== (string) ($wagon->line_number ?? '')) {
                         $wagon->update([
                             'cargo_description' => $description !== '' ? $description : null,
+                            'line_number' => $lineNumber !== '' ? $lineNumber : null,
                         ]);
                     }
 
@@ -431,6 +440,7 @@ class CargoController extends Controller
                     'loaded_weight' => $weight,
                     'loaded_on' => $loadingDate->toDateString(),
                     'cargo_description' => $description !== '' ? $description : null,
+                    'line_number' => $lineNumber !== '' ? $lineNumber : null,
                 ]);
             }
 
@@ -737,6 +747,7 @@ class CargoController extends Controller
 
         $data = $request->validate([
             'wagon_number' => ['required', 'string', 'max:50'],
+            'line_number' => ['nullable', 'string', 'max:50'],
             'owner_id' => [$isBilledOrSettled ? 'required' : 'nullable', 'integer', 'exists:owners,id'],
             'representative_id' => ['nullable', 'integer', 'exists:representatives,id'],
             'owner_change_note' => ['required', 'string', 'min:3', 'max:2000'],
@@ -747,6 +758,7 @@ class CargoController extends Controller
             'owner_change_note.min' => 'علت و توضیح ویرایش واگن باید حداقل ۳ کاراکتر باشد.',
         ], [
             'wagon_number' => 'شماره واگن',
+            'line_number' => 'شماره خط',
             'owner_id' => 'صاحب کالا',
             'representative_id' => 'نماینده',
             'owner_change_note' => 'علت و توضیحات ویرایش',
@@ -776,12 +788,18 @@ class CargoController extends Controller
         $newOwner = ! empty($data['owner_id']) ? Owner::findOrFail($data['owner_id']) : null;
         $newOwnerId = $newOwner?->id;
 
+        $oldLineNumber = trim((string) ($wagon->line_number ?? ''));
+        $newLineNumber = array_key_exists('line_number', $data)
+            ? trim((string) ($data['line_number'] ?? ''))
+            : $oldLineNumber;
+        $lineChanged = $newLineNumber !== $oldLineNumber;
+
         $numberChanged = $newWagonNumber !== $oldWagonNumber;
         $ownerChanged = (int) ($oldOwnerId ?? 0) !== (int) ($newOwnerId ?? 0);
 
-        if (! $numberChanged && ! $ownerChanged) {
+        if (! $numberChanged && ! $ownerChanged && ! $lineChanged) {
             throw ValidationException::withMessages([
-                'wagon_number' => 'هیچ تغییری در شماره واگن یا صاحب کالا اعمال نشده است. لطفاً شماره واگن صحیح یا صاحب کالای جدید را وارد کنید.',
+                'wagon_number' => 'هیچ تغییری در مشخصات واگن اعمال نشده است.',
             ]);
         }
 
@@ -819,6 +837,8 @@ class CargoController extends Controller
             $oldWagonNumber,
             $newWagonNumber,
             $numberChanged,
+            $newLineNumber,
+            $lineChanged,
             $oldOwnerId,
             $oldOwner,
             $newOwner,
@@ -834,6 +854,10 @@ class CargoController extends Controller
                 'owner_changed_by' => auth()->id(),
                 'owner_change_count' => (int) $wagon->owner_change_count + 1,
             ];
+
+            if ($lineChanged) {
+                $updatePayload['line_number'] = $newLineNumber !== '' ? $newLineNumber : null;
+            }
 
             if ($numberChanged) {
                 $updatePayload['previous_wagon_number'] = $oldWagonNumber;
@@ -967,12 +991,14 @@ class CargoController extends Controller
             $rawWagons = [[
                 'number' => (string) $request->input('wagon_number', ''),
                 'description' => (string) $request->input('cargo_description', ''),
+                'line_number' => (string) $request->input('line_number', ''),
             ]];
         }
 
         $normalizedWagons = collect($rawWagons)->map(fn ($row) => [
             'number' => is_array($row) ? trim($normalizeDigits((string) ($row['number'] ?? ''))) : '',
             'description' => is_array($row) ? trim((string) ($row['description'] ?? '')) : '',
+            'line_number' => is_array($row) ? trim((string) ($row['line_number'] ?? '')) : '',
         ])->values()->all();
 
         $request->merge(['new_wagons' => $normalizedWagons]);
@@ -987,6 +1013,7 @@ class CargoController extends Controller
                 'distinct',
             ],
             'new_wagons.*.description' => ['required', 'string', 'max:255'],
+            'new_wagons.*.line_number' => ['nullable', 'string', 'max:50'],
         ], [
             'new_wagons.required' => 'حداقل یک واگن باید برای افزودن وارد شود.',
             'new_wagons.*.number.required' => 'شماره واگن الزامی است.',
@@ -996,6 +1023,7 @@ class CargoController extends Controller
         ], [
             'new_wagons.*.number' => 'شماره واگن',
             'new_wagons.*.description' => 'شرح کالا',
+            'new_wagons.*.line_number' => 'شماره خط',
         ]);
 
         $existingNumbers = $cargo->wagons()->pluck('wagon_number')->all();
@@ -1009,11 +1037,13 @@ class CargoController extends Controller
 
         DB::transaction(function () use ($cargo, $data) {
             foreach ($data['new_wagons'] as $row) {
+                $lineNum = trim((string) ($row['line_number'] ?? ''));
                 Wagon::create([
                     'cargo_request_id' => $cargo->id,
                     'owner_id' => $cargo->owner_id,
                     'wagon_number' => $row['number'],
                     'cargo_description' => $row['description'],
+                    'line_number' => $lineNum !== '' ? $lineNum : null,
                 ]);
             }
 

@@ -156,6 +156,7 @@
                             <th>شماره واگن</th>
                             <th>درخواست</th>
                             <th>شرح کالا</th>
+                            <th>شماره خط</th>
                             <th style="min-width: 240px;">تعرفه</th>
                             <th style="min-width: 120px;">وزن (تن)</th>
                             <th>هزینه پایه (ریال)</th>
@@ -194,6 +195,7 @@
                                     @endif
                                 </td>
                                 <td>{{ $wagon->cargo_description ?: '—' }}</td>
+                                <td>{{ $wagon->line_number ?: '—' }}</td>
                                 <td>
                                     <select name="wagons[{{ $i }}][tariff_id]" class="form-select form-select-sm tariff-select" {{ $shouldCheck ? '' : 'disabled' }}>
                                         @foreach($tariffs as $tariff)
@@ -220,7 +222,7 @@
                         </tbody>
                         <tfoot class="table-light fw-bold">
                         <tr>
-                            <td colspan="6" class="text-end">جمع کل صورتحساب:</td>
+                            <td colspan="7" class="text-end">جمع کل صورتحساب:</td>
                             <td id="sum-base">0</td>
                             <td id="sum-tax">0</td>
                             <td id="sum-total" class="text-success fs-6">0</td>

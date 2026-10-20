@@ -41,6 +41,9 @@
                 <strong>شرح کالا:</strong> {{ $wagon->cargo_description ?: '—' }}
             </div>
             <div class="col-md-3">
+                <strong>شماره خط:</strong> {{ $wagon->line_number ?: '—' }}
+            </div>
+            <div class="col-md-3">
                 <strong>صاحب کالای فعلی:</strong>
                 <span class="badge bg-primary">{{ $wagon->ownerName() }}</span>
                 @if($wagon->previousOwner && (int) $wagon->previous_owner_id !== (int) $currentOwnerId)
@@ -109,7 +112,7 @@
         </p>
 
         <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label" for="wagon_number">
                     شماره واگن (صحیح) <span class="text-danger">*</span>
                 </label>
@@ -129,7 +132,26 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label class="form-label" for="line_number">
+                    شماره خط
+                </label>
+                <input type="text"
+                       name="line_number"
+                       id="line_number"
+                       maxlength="50"
+                       value="{{ old('line_number', $wagon->line_number) }}"
+                       class="form-control @error('line_number') is-invalid @enderror"
+                       placeholder="مثلاً خط ۲">
+                @error('line_number')
+                    <div class="invalid-feedback">{{ $message }}</div>
+                @enderror
+                <div class="form-text">
+                    شرح کالا: <strong>{{ $wagon->cargo_description ?: '—' }}</strong>
+                </div>
+            </div>
+
+            <div class="col-md-3">
                 <label class="form-label" for="owner_id">
                     صاحب کالا
                     @if($wagon->is_settled || $billing)
@@ -163,7 +185,7 @@
                 </div>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label" for="representative_id">نماینده صاحب کالا (اختیاری)</label>
                 <select name="representative_id" id="representative_id"
                         class="form-select @error('representative_id') is-invalid @enderror">

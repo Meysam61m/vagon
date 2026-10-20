@@ -330,6 +330,11 @@
                 ->unique()
                 ->values()
                 ->implode('، ');
+            $lineNumbers = $group->map(fn ($i) => trim((string) ($i->wagon?->line_number ?? '')))
+                ->filter()
+                ->unique()
+                ->values()
+                ->implode('، ');
 
             $unitWeight = (float) $first->loaded_weight;
             $totalWeight = (float) $group->sum('loaded_weight');
@@ -340,6 +345,7 @@
                 'wagon_count' => $group->count(),
                 'wagon_numbers' => implode(' ، ', $wagonNumbers),
                 'cargo_description' => $cargoDescriptions !== '' ? $cargoDescriptions : '—',
+                'line_number' => $lineNumbers !== '' ? $lineNumbers : '—',
                 'tariff_title' => $first->tariff_title ?: ($first->tariff?->title ?? '—'),
                 'tariff_rate' => $tariffRate,
                 'tariff_capacity' => $tariffCapacity,
@@ -480,12 +486,13 @@
                 <thead>
                 <tr>
                     <th style="width: 4%;">ردیف</th>
-                    <th style="width: 6%;">تعداد واگن</th>
-                    <th style="width: 22%;">شماره واگن‌ها (دسته‌بندی‌شده)</th>
-                    <th style="width: 11%;">شرح کالا</th>
-                    <th style="width: 18%;">عنوان تعرفه استفاده شده</th>
+                    <th style="width: 5%;">تعداد واگن</th>
+                    <th style="width: 20%;">شماره واگن‌ها (دسته‌بندی‌شده)</th>
+                    <th style="width: 10%;">شرح کالا</th>
+                    <th style="width: 6%;">شماره خط</th>
+                    <th style="width: 17%;">عنوان تعرفه استفاده شده</th>
                     <th style="width: 9%;">مبلغ تعرفه (ریال)</th>
-                    <th style="width: 9%;">تناژ (واحد / کل)</th>
+                    <th style="width: 8%;">تناژ (واحد / کل)</th>
                     <th style="width: 7%;">مبلغ پایه</th>
                     <th style="width: 6%;">مالیات ({{ (float) $billing->tax_percentage }}٪)</th>
                     <th style="width: 8%;">جمع کل (ریال)</th>
@@ -506,6 +513,7 @@
                         <td><strong>{{ $gRow['wagon_count'] }}</strong></td>
                         <td class="wagon-numbers-cell">{{ $gRow['wagon_numbers'] }}</td>
                         <td>{{ $gRow['cargo_description'] }}</td>
+                        <td>{{ $gRow['line_number'] }}</td>
                         <td>{{ $gRow['tariff_title'] }}</td>
                         <td class="money-cell">{{ number_format($gRow['tariff_rate']) }}</td>
                         <td>
@@ -521,7 +529,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="10">ردیفی ثبت نشده است.</td>
+                        <td colspan="11">ردیفی ثبت نشده است.</td>
                     </tr>
                 @endforelse
                 </tbody>
@@ -529,7 +537,7 @@
                 <tr>
                     <td colspan="2">جمع کل تسویه:</td>
                     <td>{{ $totalWagonCount }} واگن</td>
-                    <td colspan="3" style="text-align: left; padding-left: 6px;">مجموع تناژ و مبالغ تسویه حساب (ریال):</td>
+                    <td colspan="4" style="text-align: left; padding-left: 6px;">مجموع تناژ و مبالغ تسویه حساب (ریال):</td>
                     <td>{{ $totalWeightFormatted }} تن</td>
                     <td class="money-cell">{{ number_format($billing->base_amount) }}</td>
                     <td class="money-cell">{{ number_format($billing->tax_amount) }}</td>

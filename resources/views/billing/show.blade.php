@@ -268,6 +268,7 @@
                     'wagon_count' => $group->count(),
                     'wagon_numbers' => $group->map(fn ($i) => $i->wagon?->wagon_number ?? '—')->implode(' ، '),
                     'cargo_description' => $group->map(fn ($i) => trim((string) ($i->wagon?->cargo_description ?? '')))->filter()->unique()->implode('، ') ?: '—',
+                    'line_numbers' => $group->map(fn ($i) => trim((string) ($i->wagon?->line_number ?? '')))->filter()->unique()->implode('، ') ?: '—',
                     'tariff_title' => $first->tariff_title ?: ($first->tariff?->title ?? '—'),
                     'tariff_rate' => (int) ($first->tariff_rate ?: ($first->tariff?->rate ?? 0)),
                     'unit_weight' => (float) $first->loaded_weight,
@@ -293,6 +294,7 @@
                         <th>تعداد واگن</th>
                         <th>شماره واگن‌ها</th>
                         <th>شرح کالا</th>
+                        <th>شماره خط</th>
                         <th>عنوان تعرفه استفاده شده</th>
                         <th>مبلغ تعرفه (ریال)</th>
                         <th>تناژ (واحد / کل)</th>
@@ -308,6 +310,7 @@
                             <td class="fw-bold">{{ $gRow['wagon_count'] }}</td>
                             <td class="font-monospace fw-bold">{{ $gRow['wagon_numbers'] }}</td>
                             <td>{{ $gRow['cargo_description'] }}</td>
+                            <td>{{ $gRow['line_numbers'] }}</td>
                             <td>{{ $gRow['tariff_title'] }}</td>
                             <td class="money">{{ number_format($gRow['tariff_rate']) }}</td>
                             <td>
@@ -334,6 +337,7 @@
                 <th>#</th>
                 <th>شماره واگن</th>
                 <th>شرح کالا</th>
+                <th>شماره خط</th>
                 <th>صاحب کالا</th>
                 <th>تعرفه</th>
                 <th>ظرفیت (تن)</th>
@@ -366,6 +370,7 @@
                         @endif
                     </td>
                     <td>{{ $wagon?->cargo_description ?: '—' }}</td>
+                    <td>{{ $wagon?->line_number ?: '—' }}</td>
                     <td>
                         <div>{{ $wagon?->ownerName() ?? $billing->ownerName() }}</div>
                         @if($wagon?->isOwnerChanged())
@@ -399,7 +404,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="{{ $billing->isCancelled() ? 10 : 11 }}" class="text-center text-muted py-3">
+                    <td colspan="{{ $billing->isCancelled() ? 11 : 12 }}" class="text-center text-muted py-3">
                         ردیفی برای این صورتحساب ثبت نشده است (صورتحساب لغو شده).
                     </td>
                 </tr>

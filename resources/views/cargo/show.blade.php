@@ -67,7 +67,8 @@
     {{-- فرم افزودن واگن جدید به همین درخواست بارگیری --}}
     @php
         $lastCargoDescription = $cargo->wagons->last()?->cargo_description ?? '';
-        $oldNewWagons = old('new_wagons', [['number' => '', 'description' => $lastCargoDescription]]);
+        $lastLineNumber = $cargo->wagons->last()?->line_number ?? '';
+        $oldNewWagons = old('new_wagons', [['number' => '', 'description' => $lastCargoDescription, 'line_number' => $lastLineNumber]]);
     @endphp
     <div class="card p-3 mb-4 border-primary">
         <form method="POST"
@@ -85,7 +86,7 @@
             <div id="new-wagon-rows-container">
                 @foreach($oldNewWagons as $nwIdx => $nw)
                     <div class="row g-2 align-items-start mb-2 new-wagon-row">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <input type="text"
                                    name="new_wagons[{{ $nwIdx }}][number]"
                                    value="{{ $nw['number'] ?? '' }}"
@@ -97,7 +98,7 @@
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <input type="text"
                                    name="new_wagons[{{ $nwIdx }}][description]"
                                    value="{{ $nw['description'] ?? $lastCargoDescription }}"
@@ -106,6 +107,17 @@
                                    placeholder="شرح کالا (اجباری — پیشنهاد خودکار از واگن قبلی)"
                                    required>
                             @error('new_wagons.'.$nwIdx.'.description')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-2">
+                            <input type="text"
+                                   name="new_wagons[{{ $nwIdx }}][line_number]"
+                                   value="{{ $nw['line_number'] ?? $lastLineNumber }}"
+                                   class="form-control form-control-sm @error('new_wagons.'.$nwIdx.'.line_number') is-invalid @enderror"
+                                   data-new-wagon-line
+                                   placeholder="شماره خط (مثلاً خط ۲)">
+                            @error('new_wagons.'.$nwIdx.'.line_number')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -216,7 +228,8 @@
                     <tr>
                         <th>#</th>
                         <th>شماره واگن</th>
-                        <th style="min-width: 190px;">شرح کالا <span class="text-danger">*</span></th>
+                        <th style="min-width: 170px;">شرح کالا <span class="text-danger">*</span></th>
+                        <th style="min-width: 110px;">شماره خط</th>
                         <th>صاحب کالا</th>
                         <th style="min-width: 260px;">تعرفه</th>
                         <th style="min-width: 155px;">وزن بارگیری (تن)</th>
@@ -256,6 +269,20 @@
                                            data-loading-description
                                            placeholder="مثلاً میلگرد، کاشی">
                                     @error('loading.'.$wagon->id.'.description')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                @endif
+                            </td>
+                            <td>
+                                @if($wagon->is_settled)
+                                    {{ $wagon->line_number ?: '—' }}
+                                @else
+                                    <input type="text"
+                                           name="loading[{{ $wagon->id }}][line_number]"
+                                           value="{{ old('loading.'.$wagon->id.'.line_number', $wagon->line_number) }}"
+                                           class="form-control form-control-sm @error('loading.'.$wagon->id.'.line_number') is-invalid @enderror"
+                                           placeholder="مثلاً خط ۲">
+                                    @error('loading.'.$wagon->id.'.line_number')
                                         <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 @endif
@@ -383,6 +410,7 @@
                         <th>#</th>
                         <th>شماره واگن</th>
                         <th>شرح کالا</th>
+                        <th>شماره خط</th>
                         <th>صاحب کالا</th>
                         <th>تعرفه</th>
                         <th>وزن (تن)</th>
@@ -404,6 +432,7 @@
                                 @endif
                             </td>
                             <td>{{ $wagon->cargo_description ?: '—' }}</td>
+                            <td>{{ $wagon->line_number ?: '—' }}</td>
                             <td>
                                 <div>{{ $wagon->ownerName() }}</div>
                                 @if($wagon->isOwnerChanged())
@@ -689,13 +718,15 @@
                     const rows = newWagonRowsContainer.querySelectorAll('.new-wagon-row');
                     const lastRow = rows[rows.length - 1];
                     const lastDescInput = lastRow ? lastRow.querySelector('input[data-new-wagon-description]') : null;
+                    const lastLineInput = lastRow ? lastRow.querySelector('input[data-new-wagon-line]') : null;
                     const suggestedDesc = lastDescInput ? lastDescInput.value : '';
+                    const suggestedLine = lastLineInput ? lastLineInput.value : '';
 
                     const idx = newWagonRowIndex++;
                     const rowDiv = document.createElement('div');
                     rowDiv.className = 'row g-2 align-items-start mb-2 new-wagon-row';
                     rowDiv.innerHTML = `
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <input type="text"
                                    name="new_wagons[${idx}][number]"
                                    class="form-control form-control-sm font-monospace"
@@ -703,13 +734,20 @@
                                    placeholder="شماره واگن جدید (مثلاً 663532)"
                                    required>
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <input type="text"
                                    name="new_wagons[${idx}][description]"
                                    class="form-control form-control-sm"
                                    data-new-wagon-description
                                    placeholder="شرح کالا (اجباری — پیشنهاد خودکار از واگن قبلی)"
                                    required>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="text"
+                                   name="new_wagons[${idx}][line_number]"
+                                   class="form-control form-control-sm"
+                                   data-new-wagon-line
+                                   placeholder="شماره خط (مثلاً خط ۲)">
                         </div>
                         <div class="col-md-3 d-flex gap-1">
                             <button type="button" class="btn btn-sm btn-outline-danger w-100 remove-new-wagon-row">
@@ -721,6 +759,10 @@
                     const descInput = rowDiv.querySelector('input[data-new-wagon-description]');
                     if (descInput) {
                         descInput.value = suggestedDesc;
+                    }
+                    const lineInput = rowDiv.querySelector('input[data-new-wagon-line]');
+                    if (lineInput) {
+                        lineInput.value = suggestedLine;
                     }
 
                     newWagonRowsContainer.appendChild(rowDiv);

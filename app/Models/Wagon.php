@@ -13,6 +13,7 @@ class Wagon extends Model
         'wagon_number',
         'previous_wagon_number',
         'cargo_description',
+        'line_number',
         'tariff_id',
         'loaded_weight',
         'loaded_on',

@@ -38,6 +38,7 @@
             <tr>
                 <th>شماره واگن</th>
                 <th>شرح کالا</th>
+                <th>شماره خط</th>
                 <th>صاحب کالا</th>
                 <th>فاکتور</th>
                 <th>تعرفه</th>
@@ -63,6 +64,7 @@
                         @endif
                     </td>
                     <td>{{ $wagon?->cargo_description ?: '—' }}</td>
+                    <td>{{ $wagon?->line_number ?: '—' }}</td>
                     <td>
                         <div>{{ $wagon?->ownerName() ?? $item->billing?->ownerName() ?? '—' }}</div>
                         @if($wagon?->isOwnerChanged())
@@ -94,7 +96,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="10" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
+                <tr><td colspan="11" class="text-center text-muted py-4">ردیفی در این بازه نیست.</td></tr>
             @endforelse
             </tbody>
         </table>

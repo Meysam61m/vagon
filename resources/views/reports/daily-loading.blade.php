@@ -35,6 +35,7 @@
                 <th>صاحب کالا</th>
                 <th>نماینده</th>
                 <th>شرح کالا</th>
+                <th>شماره خط</th>
                 <th>تعداد واگن</th>
                 <th>وضعیت</th>
             </tr>
@@ -56,11 +57,21 @@
                         @endphp
                         {{ $cargoNames->isEmpty() ? '—' : $cargoNames->implode('، ') }}
                     </td>
+                    <td>
+                        @php
+                            $lineNames = $request->wagons
+                                ->pluck('line_number')
+                                ->filter()
+                                ->unique()
+                                ->values();
+                        @endphp
+                        {{ $lineNames->isEmpty() ? '—' : $lineNames->implode('، ') }}
+                    </td>
                     <td>{{ $request->wagons->count() }}</td>
                     <td>{{ $request->statusLabel() }}</td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="text-center text-muted py-4">در این بازه درخواستی ثبت نشده است.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">در این بازه درخواستی ثبت نشده است.</td></tr>
             @endforelse
             </tbody>
         </table>

@@ -75,6 +75,7 @@ class ReportController extends Controller
 
             foreach ($allRequests as $idx => $req) {
                 $cargoNames = $req->wagons->pluck('cargo_description')->filter()->unique()->values();
+                $lineNames = $req->wagons->pluck('line_number')->filter()->unique()->values();
                 $wagonNumbers = $req->wagons->pluck('wagon_number')->filter()->values();
                 $loadedCount = $req->wagons->filter(fn ($w) => $w->loaded_weight !== null)->count();
                 $totalWeight = round((float) $req->wagons->sum('loaded_weight'), 2);
@@ -86,6 +87,7 @@ class ReportController extends Controller
                     $req->owner?->name ?? '—',
                     $req->representative?->name ?? '—',
                     $cargoNames->isEmpty() ? '—' : $cargoNames->implode('، '),
+                    $lineNames->isEmpty() ? '—' : $lineNames->implode('، '),
                     $wagonNumbers->isEmpty() ? '—' : $wagonNumbers->implode('، '),
                     (int) $req->wagons->count(),
                     (int) $loadedCount,
@@ -104,6 +106,7 @@ class ReportController extends Controller
                     'صاحب کالا',
                     'نماینده',
                     'شرح کالا',
+                    'شماره خط',
                     'شماره واگن‌ها',
                     'تعداد کل واگن',
                     'واگن بارگیری‌شده',
@@ -114,6 +117,7 @@ class ReportController extends Controller
                 [
                     'جمع کل',
                     count($rows).' درخواست',
+                    '',
                     '',
                     '',
                     '',
@@ -407,6 +411,7 @@ class ReportController extends Controller
                     $wagon?->wagon_number ?? '—',
                     $wagon?->isNumberEdited() ? $wagon->previous_wagon_number : '—',
                     $wagon?->cargo_description ?: '—',
+                    $wagon?->line_number ?: '—',
                     $wagon?->ownerName() ?? $item->billing?->ownerName() ?? '—',
                     $wagon?->isOwnerChanged() ? ($wagon->previousOwner?->name ?? '—') : '—',
                     $wagon?->owner_change_note ?: '—',
@@ -428,6 +433,7 @@ class ReportController extends Controller
                     'شماره واگن',
                     'شماره واگن قبلی (اصلاحی)',
                     'شرح کالا',
+                    'شماره خط',
                     'صاحب کالا',
                     'صاحب کالای قبلی',
                     'علت ویرایش واگن',
@@ -443,6 +449,7 @@ class ReportController extends Controller
                 [
                     'جمع کل',
                     count($rows).' واگن',
+                    '',
                     '',
                     '',
                     '',

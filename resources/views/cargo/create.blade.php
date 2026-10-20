@@ -108,13 +108,13 @@
         </div>
 
         <div id="wagon-rows">
-            @php $oldWagons = old('wagons', [['number' => '', 'description' => '']]); @endphp
+            @php $oldWagons = old('wagons', [['number' => '', 'description' => '', 'line_number' => '']]); @endphp
             @foreach($oldWagons as $index => $w)
                 <div class="row g-2 mb-2 wagon-row align-items-start">
                     <div class="col-auto pt-2 text-muted small fw-bold wagon-row-num" style="min-width: 28px;">
                         {{ $index + 1 }}.
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <input type="text"
                                name="wagons[{{ $index }}][number]"
                                value="{{ $w['number'] ?? '' }}"
@@ -127,7 +127,7 @@
                         </div>
                         <div class="small text-warning-emphasis mt-1 d-none" data-unsettled-warning></div>
                     </div>
-                    <div class="col-md-5">
+                    <div class="col-md-4">
                         <input type="text"
                                name="wagons[{{ $index }}][description]"
                                value="{{ $w['description'] ?? '' }}"
@@ -137,6 +137,17 @@
                                placeholder="شرح کالا (اجباری — مثلاً میلگرد، کاشی)"
                                required>
                         @error('wagons.'.$index.'.description')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text"
+                               name="wagons[{{ $index }}][line_number]"
+                               value="{{ $w['line_number'] ?? '' }}"
+                               class="form-control @error('wagons.'.$index.'.line_number') is-invalid @enderror"
+                               data-wagon-line
+                               placeholder="شماره خط (مثلاً خط ۲)">
+                        @error('wagons.'.$index.'.line_number')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                     </div>
@@ -429,6 +440,18 @@
                 return '';
             }
 
+            function getPreviousLineNumber(row) {
+                let prev = row ? row.previousElementSibling : container.lastElementChild;
+                while (prev) {
+                    const input = prev.querySelector('input[data-wagon-line]');
+                    if (input && input.value.trim() !== '') {
+                        return input.value;
+                    }
+                    prev = prev.previousElementSibling;
+                }
+                return '';
+            }
+
             function propagateSuggestionFrom(row) {
                 if (!row) return;
                 const sourceInput = row.querySelector('input[data-wagon-description]');
@@ -456,6 +479,7 @@
 
             function bindRowInputs(row) {
                 const descInput = row.querySelector('input[data-wagon-description]');
+                const lineInput = row.querySelector('input[data-wagon-line]');
                 const numInput = row.querySelector('input[data-wagon-number]');
 
                 if (numInput) {
@@ -469,7 +493,7 @@
                     });
                 }
 
-                [numInput, descInput].forEach(inp => {
+                [numInput, descInput, lineInput].forEach(inp => {
                     if (!inp) return;
                     inp.addEventListener('keydown', function (e) {
                         if (e.key === 'Enter') {
@@ -500,6 +524,7 @@
             function createWagonRow(wagonNumber, cargoDescription) {
                 const index = nextIndex++;
                 const suggestedDescription = cargoDescription || getPreviousDescription(null);
+                const suggestedLine = getPreviousLineNumber(null);
                 const row = document.createElement('div');
                 row.className = 'row g-2 mb-2 wagon-row align-items-start';
 
@@ -508,7 +533,7 @@
                 numCol.style.minWidth = '28px';
 
                 const colNumber = document.createElement('div');
-                colNumber.className = 'col-md-4';
+                colNumber.className = 'col-md-3';
                 const numberInput = document.createElement('input');
                 numberInput.type = 'text';
                 numberInput.name = 'wagons[' + index + '][number]';
@@ -529,7 +554,7 @@
                 colNumber.appendChild(unsettledWarn);
 
                 const colDesc = document.createElement('div');
-                colDesc.className = 'col-md-5';
+                colDesc.className = 'col-md-4';
                 const descInput = document.createElement('input');
                 descInput.type = 'text';
                 descInput.name = 'wagons[' + index + '][description]';
@@ -541,6 +566,17 @@
                 descInput.value = suggestedDescription;
                 descInput.dataset.autoSuggested = (!cargoDescription && suggestedDescription !== '') ? '1' : '0';
                 colDesc.appendChild(descInput);
+
+                const colLine = document.createElement('div');
+                colLine.className = 'col-md-2';
+                const lineInput = document.createElement('input');
+                lineInput.type = 'text';
+                lineInput.name = 'wagons[' + index + '][line_number]';
+                lineInput.className = 'form-control';
+                lineInput.setAttribute('data-wagon-line', '');
+                lineInput.placeholder = 'شماره خط (مثلاً خط ۲)';
+                lineInput.value = suggestedLine;
+                colLine.appendChild(lineInput);
 
                 const colBtn = document.createElement('div');
                 colBtn.className = 'col-md-2';
@@ -554,6 +590,7 @@
                 row.appendChild(numCol);
                 row.appendChild(colNumber);
                 row.appendChild(colDesc);
+                row.appendChild(colLine);
                 row.appendChild(colBtn);
                 container.appendChild(row);
 
@@ -581,8 +618,10 @@
                     } else if (row) {
                         const numInp = row.querySelector('input[data-wagon-number]');
                         const descInp = row.querySelector('input[data-wagon-description]');
+                        const lineInp = row.querySelector('input[data-wagon-line]');
                         if (numInp) numInp.value = '';
                         if (descInp) descInp.value = '';
+                        if (lineInp) lineInp.value = '';
                         validateWagonNumbersRealtime();
                     }
                 }
