@@ -111,6 +111,17 @@ class CargoController extends Controller
         ]);
     }
 
+    /**
+     * صفحه محاسبه‌گر تعرفه و تناژ (صرفاً جهت محاسبه و بدون ثبت در سیستم)
+     */
+    public function calculator()
+    {
+        return view('calculator.index', [
+            'tariffs' => Tariff::active()->orderBy('title')->get(),
+            'taxPercentage' => TaxSetting::currentPercentage(),
+        ]);
+    }
+
     public function create()
     {
         $owners = Owner::active()->orderBy('name')->get();

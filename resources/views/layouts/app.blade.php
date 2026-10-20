@@ -117,6 +117,10 @@
                     <a class="nav-link @if(request()->routeIs('billing.*')) active @endif"
                        href="{{ route('billing.index') }}">صورتحساب‌ها</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link @if(request()->routeIs('calculator.*')) active @endif"
+                       href="{{ \Illuminate\Support\Facades\Route::has('calculator.index') ? route('calculator.index') : url('/calculator') }}">محاسبه‌گر تعرفه</a>
+                </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle @if(request()->routeIs('reports.*')) active @endif"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">گزارش‌ها</a>
@@ -522,6 +526,105 @@
                     item.style.display = (q === '' || labelText.includes(q)) ? '' : 'none';
                 });
             });
+        });
+
+        // محاسبه‌گر مستقل تعرفه و تناژ (بدون ثبت در دیتابیس و با امکان ورود تناژ بیشتر از ظرفیت)
+        const fmtMoney = function (n) {
+            return Math.round(n || 0).toLocaleString('en-US');
+        };
+
+        document.querySelectorAll('[data-tariff-calculator]').forEach(function (calcBox) {
+            const taxPct = parseFloat(calcBox.dataset.tax || '10');
+            const tariffSelect = calcBox.querySelector('.calc-tariff-select');
+            const tonnageInput = calcBox.querySelector('.calc-tonnage-input');
+            const wagonCountInput = calcBox.querySelector('.calc-wagon-count-input');
+            const resetBtn = calcBox.querySelector('.calc-reset-btn');
+            const resultBox = calcBox.querySelector('.calc-result-box');
+            const overCapBadge = calcBox.querySelector('.calc-over-capacity-badge');
+
+            const outCap = calcBox.querySelector('.calc-out-capacity');
+            const outEquip = calcBox.querySelector('.calc-out-equipment');
+            const outBooklet = calcBox.querySelector('.calc-out-booklet-rate');
+            const outPerTon = calcBox.querySelector('.calc-out-per-ton');
+            const outBase = calcBox.querySelector('.calc-out-base');
+            const outTax = calcBox.querySelector('.calc-out-tax');
+            const outTotal = calcBox.querySelector('.calc-out-total');
+
+            function updateCalculation(fromTariffChange) {
+                if (!tariffSelect || !tonnageInput || !resultBox) return;
+
+                const opt = tariffSelect.options[tariffSelect.selectedIndex];
+                if (!opt || !opt.value) {
+                    resultBox.classList.add('d-none');
+                    return;
+                }
+
+                const rate = parseFloat(opt.dataset.rate || '0');
+                const cap = parseFloat(opt.dataset.capacity || '65');
+                const equip = opt.dataset.equipment || '';
+
+                if (fromTariffChange && (!tonnageInput.value || tonnageInput.value.trim() === '')) {
+                    tonnageInput.value = String(cap);
+                }
+
+                const tonnage = parseFloat(tonnageInput.value || '0');
+                const wagonCount = Math.max(1, parseInt(wagonCountInput ? wagonCountInput.value : '1', 10) || 1);
+
+                if (isNaN(tonnage) || tonnage <= 0 || cap <= 0) {
+                    resultBox.classList.add('d-none');
+                    return;
+                }
+
+                const perTonRate = rate / cap;
+                const singleBase = Math.round((tonnage / cap) * rate);
+                const totalBase = singleBase * wagonCount;
+                const totalTax = Math.round(totalBase * (taxPct / 100));
+                const grandTotal = totalBase + totalTax;
+
+                if (outCap) outCap.textContent = String(cap);
+                if (outEquip) outEquip.textContent = equip ? ('(' + equip + ')') : '';
+                if (outBooklet) outBooklet.textContent = fmtMoney(rate);
+                if (outPerTon) outPerTon.textContent = fmtMoney(perTonRate);
+                if (outBase) outBase.textContent = fmtMoney(totalBase);
+                if (outTax) outTax.textContent = fmtMoney(totalTax);
+                if (outTotal) outTotal.textContent = fmtMoney(grandTotal);
+
+                if (overCapBadge) {
+                    if (tonnage > cap) {
+                        overCapBadge.textContent = 'توجه: تناژ واردشده (' + tonnage + ' تن) بیشتر از ظرفیت پایه تعرفه (' + cap + ' تن) است و مبلغ به نسبت تناژ واردشده محاسبه گردید.';
+                        overCapBadge.classList.remove('d-none');
+                    } else {
+                        overCapBadge.classList.add('d-none');
+                        overCapBadge.textContent = '';
+                    }
+                }
+
+                resultBox.classList.remove('d-none');
+            }
+
+            if (tariffSelect) {
+                tariffSelect.addEventListener('change', function () {
+                    updateCalculation(true);
+                });
+            }
+            if (tonnageInput) {
+                tonnageInput.addEventListener('input', function () {
+                    updateCalculation(false);
+                });
+            }
+            if (wagonCountInput) {
+                wagonCountInput.addEventListener('input', function () {
+                    updateCalculation(false);
+                });
+            }
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function () {
+                    if (tariffSelect) tariffSelect.value = '';
+                    if (tonnageInput) tonnageInput.value = '';
+                    if (wagonCountInput) wagonCountInput.value = '1';
+                    if (resultBox) resultBox.classList.add('d-none');
+                });
+            }
         });
     });
 </script>

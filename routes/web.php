@@ -31,6 +31,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // درخواست‌های بارگیری و ویرایش واگن (شماره واگن / صاحب کالا)
+    Route::get('/calculator', [CargoController::class, 'calculator'])->name('calculator.index');
     Route::get('/cargo', [CargoController::class, 'index'])->name('cargo.index');
     Route::get('/cargo/create', [CargoController::class, 'create'])->name('cargo.create');
     Route::post('/cargo', [CargoController::class, 'store'])->name('cargo.store');

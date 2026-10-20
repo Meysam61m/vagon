@@ -73,6 +73,8 @@
         @endif
     </div>
 
+    @include('partials.tariff-calculator', ['tariffs' => $tariffs ?? collect()])
+
     {{-- فرم افزودن واگن جدید به همین درخواست بارگیری --}}
     @php
         $lastCargoDescription = $cargo->wagons->last()?->cargo_description ?? '';

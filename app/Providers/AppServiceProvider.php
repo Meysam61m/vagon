@@ -106,8 +106,10 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
-            if (! Route::has('cargo.quick-bill') || ! Route::has('cargo.wagons.store')) {
+            if (! Route::has('cargo.quick-bill') || ! Route::has('cargo.wagons.store') || ! Route::has('calculator.index')) {
                 Route::middleware(['web', 'auth'])->group(function () {
+                    Route::get('/calculator', [CargoController::class, 'calculator'])
+                        ->name('calculator.index');
                     Route::post('/cargo/{cargo}/wagons', [CargoController::class, 'addWagon'])
                         ->name('cargo.wagons.store');
                     Route::post('/cargo/{cargo}/quick-bill', [CargoController::class, 'quickBill'])
@@ -147,7 +149,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v24';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v25';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -163,7 +165,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v24');
+                @file_put_contents($versionMarker, 'v25');
             }
         }
     }
