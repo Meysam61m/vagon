@@ -357,9 +357,15 @@ class BillingController extends Controller
             return $billing;
         });
 
+        if ($request->input('after_action') === 'show') {
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('success', 'صورتحساب با موفقیت صادر شد.');
+        }
+
         return redirect()
-            ->route('billing.show', $billing)
-            ->with('success', 'صورتحساب با موفقیت صادر شد.');
+            ->route('billing.print', $billing)
+            ->with('success', 'صورتحساب صادر شد؛ آماده چاپ برگه ۴ بخشی تسویه حساب.');
     }
 
     public function show(Billing $billing)
@@ -382,6 +388,7 @@ class BillingController extends Controller
             'items.wagon.owner',
             'items.wagon.previousOwner',
             'items.wagon.cargoRequest',
+            'items.tariff',
             'representative',
             'operator',
         ]);

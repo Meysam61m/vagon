@@ -455,13 +455,9 @@ class CargoController extends Controller
 
             $billing = $this->issueInvoiceForCargoRequest($cargo, $normalizedDate);
 
-            if ($issueBillingMode === 'print') {
-                return redirect()->route('billing.print', $billing);
-            }
-
             return redirect()
-                ->route('billing.show', $billing)
-                ->with('success', "اطلاعات بارگیری ثبت شد و صورتحساب «{$billing->billing_number}» به‌صورت مستقیم صادر گردید.");
+                ->route('billing.print', $billing)
+                ->with('success', "اطلاعات بارگیری ثبت شد و صورتحساب «{$billing->billing_number}» صادر گردید.");
         }
 
         return redirect()
@@ -512,12 +508,8 @@ class CargoController extends Controller
 
         $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
 
-        if ($request->boolean('print')) {
-            return redirect()->route('billing.print', $billing);
-        }
-
         return redirect()
-            ->route('billing.show', $billing)
+            ->route('billing.print', $billing)
             ->with('success', "صورتحساب «{$billing->billing_number}» با موفقیت صادر شد.");
     }
 

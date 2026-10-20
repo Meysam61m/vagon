@@ -16,8 +16,8 @@
             </div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary">
-                چاپ صورتحساب
+            <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary fw-semibold">
+                چاپ برگه ۴ بخشی تسویه حساب
             </a>
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary">
                 + ثبت درخواست جدید
@@ -77,6 +77,80 @@
             </div>
         @endif
     </div>
+
+    @php
+        $groupedSummary = $billing->items
+            ->groupBy(function ($item) {
+                $tId = (string) ($item->tariff_id ?? 0);
+                $tTitle = trim((string) $item->tariff_title);
+                $tRate = (string) ($item->tariff_rate ?? 0);
+                $weightKey = number_format((float) $item->loaded_weight, 2, '.', '');
+                return $tId . '|' . $tTitle . '|' . $tRate . '|' . $weightKey;
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                return [
+                    'wagon_count' => $group->count(),
+                    'wagon_numbers' => $group->map(fn ($i) => $i->wagon?->wagon_number ?? '—')->implode(' ، '),
+                    'cargo_description' => $group->map(fn ($i) => trim((string) ($i->wagon?->cargo_description ?? '')))->filter()->unique()->implode('، ') ?: '—',
+                    'tariff_title' => $first->tariff_title ?: ($first->tariff?->title ?? '—'),
+                    'tariff_rate' => (int) ($first->tariff_rate ?: ($first->tariff?->rate ?? 0)),
+                    'unit_weight' => (float) $first->loaded_weight,
+                    'total_weight' => (float) $group->sum('loaded_weight'),
+                    'base_cost' => (int) $group->sum('base_cost'),
+                    'tax_amount' => (int) $group->sum('tax_amount'),
+                    'total_amount' => (int) $group->sum('total_amount'),
+                ];
+            })
+            ->values();
+    @endphp
+
+    @if($groupedSummary->isNotEmpty())
+        <div class="card p-3 mb-3 border-primary">
+            <h6 class="mb-2 fw-bold text-primary">
+                خلاصه دسته‌بندی واگن‌ها بر اساس تعرفه و تناژ یکسان (مطابق برگه ۴ بخشی چاپ تسویه حساب)
+            </h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm bg-white align-middle mb-0">
+                    <thead class="table-light">
+                    <tr>
+                        <th>ردیف</th>
+                        <th>تعداد واگن</th>
+                        <th>شماره واگن‌ها</th>
+                        <th>شرح کالا</th>
+                        <th>عنوان تعرفه استفاده شده</th>
+                        <th>مبلغ تعرفه (ریال)</th>
+                        <th>تناژ (واحد / کل)</th>
+                        <th>هزینه پایه</th>
+                        <th>مالیات</th>
+                        <th>جمع تسویه</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach($groupedSummary as $gIdx => $gRow)
+                        <tr>
+                            <td>{{ $gIdx + 1 }}</td>
+                            <td class="fw-bold">{{ $gRow['wagon_count'] }}</td>
+                            <td class="font-monospace fw-bold">{{ $gRow['wagon_numbers'] }}</td>
+                            <td>{{ $gRow['cargo_description'] }}</td>
+                            <td>{{ $gRow['tariff_title'] }}</td>
+                            <td class="money">{{ number_format($gRow['tariff_rate']) }}</td>
+                            <td>
+                                {{ $gRow['unit_weight'] }} تن
+                                @if($gRow['wagon_count'] > 1)
+                                    <span class="text-muted small">(جمع: {{ $gRow['total_weight'] }} تن)</span>
+                                @endif
+                            </td>
+                            <td class="money">{{ number_format($gRow['base_cost']) }}</td>
+                            <td class="money">{{ number_format($gRow['tax_amount']) }}</td>
+                            <td class="money fw-bold text-success">{{ number_format($gRow['total_amount']) }}</td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 
     <div class="table-responsive mb-3">
         <table class="table table-bordered bg-white align-middle">

@@ -2,347 +2,568 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>چاپ صورتحساب {{ $billing->billing_number }}</title>
+    <title>چاپ برگه ۴ بخشی تسویه حساب و درخواست بارگیری — {{ $billing->billing_number }}</title>
     <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}">
     <link href="{{ asset('vendor/vazirmatn/Vazirmatn-font-face.css') }}" rel="stylesheet">
     <style>
+        @page {
+            size: A4 portrait;
+            margin: 5mm 6mm;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        body {
+        html, body {
             font-family: 'Vazirmatn', Tahoma, sans-serif;
-            font-size: 13px;
-            padding: 24px;
-            background: #fff;
-            color: #111;
+            background: #f1f5f9;
+            color: #000;
             direction: rtl;
+            font-size: 8.5pt;
         }
 
         .print-toolbar {
+            max-width: 210mm;
+            margin: 12px auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #f1f5f9;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: #ffffff;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
             padding: 10px 16px;
-            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         }
 
         .print-toolbar .actions {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-toolbar {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 12.5px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            border: 1px solid transparent;
         }
 
         .btn-print {
-            background: #1d4ed8;
+            background: #0d6efd;
             color: #fff;
-            border: none;
-            padding: 7px 18px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 13px;
-            font-weight: bold;
-            cursor: pointer;
         }
 
-        .btn-back {
+        .btn-next {
+            background: #198754;
+            color: #fff;
+        }
+
+        .btn-detail {
             background: #fff;
-            color: #334155;
-            border: 1px solid #94a3b8;
-            padding: 7px 14px;
-            border-radius: 6px;
-            font-family: inherit;
-            font-size: 13px;
-            text-decoration: none;
-            cursor: pointer;
+            color: #1e293b;
+            border-color: #94a3b8;
         }
 
-        .header {
+        .a4-sheet {
+            width: 210mm;
+            min-height: 286mm;
+            margin: 0 auto 20px auto;
+            background: #fff;
+            padding: 4mm 5mm;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .slip-box {
+            border: 1.2pt solid #000;
+            border-radius: 3px;
+            padding: 1.8mm 2.2mm;
+            page-break-inside: avoid;
+            break-inside: avoid;
+            background: #fff;
+        }
+
+        .slip-box.slip-primary {
+            border-width: 1.5pt;
+        }
+
+        .cut-line {
+            border-top: 1pt dashed #555;
+            margin: 1.3mm 0;
+            position: relative;
+            text-align: center;
+            height: 0;
+        }
+
+        .cut-line span {
+            position: relative;
+            top: -6px;
+            background: #fff;
+            padding: 0 6px;
+            font-size: 7pt;
+            color: #444;
+        }
+
+        .slip-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border: 1.5px solid #111;
-            border-radius: 6px;
-            padding: 12px 16px;
-            margin-bottom: 18px;
+            border-bottom: 0.8pt solid #000;
+            padding-bottom: 1.2mm;
+            margin-bottom: 1.2mm;
         }
 
-        .header-brand {
+        .slip-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 2mm;
+            width: 31%;
         }
 
-        .header-brand img {
-            height: 54px;
+        .slip-brand img {
+            height: 10.5mm;
             width: auto;
             object-fit: contain;
         }
 
-        .header-org-title {
-            font-weight: bold;
-            font-size: 13px;
-            line-height: 1.6;
+        .slip-org-name {
+            font-size: 7.5pt;
+            font-weight: 800;
+            line-height: 1.35;
         }
 
-        .header-center {
+        .slip-org-sub {
+            font-size: 6.8pt;
+            color: #222;
+            font-weight: 600;
+        }
+
+        .slip-title-center {
             text-align: center;
+            width: 38%;
         }
 
-        .header h1 {
-            font-size: 19px;
-            margin-bottom: 4px;
+        .slip-part-badge {
+            display: inline-block;
+            border: 0.8pt solid #000;
+            background: #f1f5f9;
+            padding: 0.5mm 2.5mm;
+            border-radius: 2px;
+            font-size: 8pt;
+            font-weight: 800;
         }
 
-        .header .sub {
-            font-size: 13px;
-            color: #444;
-            font-weight: bold;
+        .slip-sub-purpose {
+            font-size: 7pt;
+            margin-top: 0.5mm;
+            font-weight: 700;
         }
 
-        .header-meta {
+        .slip-meta {
+            width: 31%;
             text-align: left;
-            font-size: 12px;
-            line-height: 1.7;
+            font-size: 7.3pt;
+            line-height: 1.45;
         }
 
-        .status {
-            margin-top: 4px;
-            font-size: 12px;
+        .info-strip {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            background: #f8fafc;
+            border: 0.6pt solid #000;
+            padding: 0.9mm 2mm;
+            margin-bottom: 1.2mm;
+            font-size: 7.5pt;
         }
 
-        table.info {
-            width: 100%;
-            margin-bottom: 16px;
-            border-collapse: collapse;
+        .status-pill {
+            font-weight: 800;
+            border: 0.6pt solid #000;
+            padding: 0.2mm 1.5mm;
+            background: #e2e8f0;
         }
 
-        table.info td {
-            padding: 6px 8px;
-            border: 1px solid #ccc;
-            text-align: right;
-            width: 35%;
-        }
-
-        table.info td.label {
-            background: #f5f5f5;
-            font-weight: bold;
-            width: 15%;
-        }
-
-        table.items {
+        table.grouped-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 12px 0;
+            margin-bottom: 1.2mm;
+            font-size: 7.3pt;
         }
 
-        table.items th,
-        table.items td {
-            border: 1px solid #444;
-            padding: 6px;
+        table.grouped-table th,
+        table.grouped-table td {
+            border: 0.6pt solid #000;
+            padding: 0.8mm 1.2mm;
             text-align: center;
+            vertical-align: middle;
         }
 
-        table.items th {
-            background: #efefef;
-            font-weight: bold;
+        table.grouped-table thead th {
+            background: #e9ecef;
+            font-weight: 800;
+            font-size: 7.2pt;
+            white-space: nowrap;
         }
 
-        table.totals {
-            width: 55%;
-            margin-right: 0;
-            margin-left: auto;
-            margin-top: 12px;
-            border-collapse: collapse;
+        table.grouped-table tfoot td {
+            background: #f1f5f9;
+            font-weight: 800;
+            border-top: 1pt solid #000;
         }
 
-        table.totals td {
-            border: 1px solid #ccc;
-            padding: 6px 8px;
-            text-align: right;
+        .wagon-numbers-cell {
+            font-family: monospace, 'Vazirmatn', Tahoma;
+            font-weight: 800;
+            font-size: 7.6pt;
+            line-height: 1.3;
+            word-break: break-word;
         }
 
-        table.totals td.amount {
-            text-align: left;
+        .money-cell {
             direction: ltr;
+            font-weight: 700;
+            white-space: nowrap;
         }
 
-        table.totals tr.final td {
-            font-weight: bold;
-            font-size: 15px;
-            background: #f5f5f5;
-            border-top: 2px solid #111;
+        .slip-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 2mm;
+            margin-top: 0.8mm;
+            font-size: 7.1pt;
         }
 
-        .notes {
-            margin-top: 14px;
-            padding: 8px 10px;
-            background: #f9f9f9;
-            border-right: 3px solid #333;
-            line-height: 1.8;
+        .slip-declaration {
+            width: 38%;
+            line-height: 1.4;
+            text-align: justify;
+            font-size: 6.9pt;
+            border-left: 0.6pt dotted #444;
+            padding-left: 2mm;
         }
 
-        .footer {
-            margin-top: 24px;
-            padding-top: 10px;
-            border-top: 1px solid #ccc;
+        .slip-signatures {
+            width: 62%;
+            display: flex;
+            justify-content: space-around;
             text-align: center;
-            font-size: 11px;
-            color: #666;
         }
 
-        .cancelled {
-            color: #b00020;
-            font-weight: bold;
+        .sig-box {
+            width: 32%;
+        }
+
+        .sig-title {
+            font-weight: 800;
+            margin-bottom: 4.5mm;
+        }
+
+        .sig-line {
+            border-top: 0.5pt dotted #333;
+            display: inline-block;
+            min-width: 24mm;
+            font-size: 6.7pt;
+            color: #333;
+            padding-top: 0.4mm;
         }
 
         @media print {
-            body {
-                padding: 0;
+            html, body {
+                background: #fff !important;
             }
 
             .print-toolbar {
                 display: none !important;
+            }
+
+            .a4-sheet {
+                width: 100%;
+                min-height: auto;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+
+            .slip-part-badge,
+            .info-strip,
+            table.grouped-table thead th,
+            table.grouped-table tfoot td,
+            .status-pill {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
 </head>
 <body>
 
+@php
+    // دسته‌بندی و خلاصه‌سازی واگن‌هایی که از تعرفه و تناژ یکسان استفاده کرده‌اند در یک ردیف
+    $groupedRows = $billing->items
+        ->groupBy(function ($item) {
+            $tId = (string) ($item->tariff_id ?? 0);
+            $tTitle = trim((string) $item->tariff_title);
+            $tRate = (string) ($item->tariff_rate ?? 0);
+            $weightKey = number_format((float) $item->loaded_weight, 2, '.', '');
+            return $tId . '|' . $tTitle . '|' . $tRate . '|' . $weightKey;
+        })
+        ->map(function ($group) {
+            $first = $group->first();
+            $wagonNumbers = $group->map(fn ($i) => $i->wagon?->wagon_number ?? '—')->values()->all();
+            $cargoDescriptions = $group->map(fn ($i) => trim((string) ($i->wagon?->cargo_description ?? '')))
+                ->filter()
+                ->unique()
+                ->values()
+                ->implode('، ');
+
+            $unitWeight = (float) $first->loaded_weight;
+            $totalWeight = (float) $group->sum('loaded_weight');
+            $tariffRate = (int) ($first->tariff_rate ?: ($first->tariff?->rate ?? 0));
+            $tariffCapacity = (float) ($first->tariff_capacity ?: ($first->tariff?->capacity ?? 65));
+
+            return [
+                'wagon_count' => $group->count(),
+                'wagon_numbers' => implode(' ، ', $wagonNumbers),
+                'cargo_description' => $cargoDescriptions !== '' ? $cargoDescriptions : '—',
+                'tariff_title' => $first->tariff_title ?: ($first->tariff?->title ?? '—'),
+                'tariff_rate' => $tariffRate,
+                'tariff_capacity' => $tariffCapacity,
+                'unit_weight' => $unitWeight,
+                'total_weight' => $totalWeight,
+                'base_cost' => (int) $group->sum('base_cost'),
+                'tax_amount' => (int) $group->sum('tax_amount'),
+                'total_amount' => (int) $group->sum('total_amount'),
+            ];
+        })
+        ->values();
+
+    $requestNumbers = $billing->items
+        ->map(fn ($i) => $i->wagon?->cargoRequest?->request_number)
+        ->filter()
+        ->unique()
+        ->values()
+        ->implode('، ');
+
+    if ($requestNumbers === '') {
+        $requestNumbers = '—';
+    }
+
+    $totalWagonCount = $billing->items->count();
+    $totalWeightSum = (float) $billing->items->sum('loaded_weight');
+    $totalWeightFormatted = floor($totalWeightSum) == $totalWeightSum
+        ? (string) ((int) $totalWeightSum)
+        : number_format($totalWeightSum, 2);
+
+    $sections = [
+        [
+            'number' => 1,
+            'title' => 'بخش اول: درخواست بارگیری و برگ تسویه حساب واگن',
+            'subtitle' => 'نسخه بایگانی — پس از اخذ امضای نماینده صاحب کالا بایگانی گردد',
+            'declaration' => 'اینجانب نماینده صاحب کالا، ضمن درخواست بارگیری و تأیید شماره واگن‌ها، تناژ و تعرفه مندرج در جدول فوق، تسویه حساب کامل را گواهی می‌نمایم.',
+            'sig1' => 'نام و امضای نماینده صاحب کالا (جهت بایگانی)',
+            'sig2' => 'امضای متصدی بارگیری / صادرکننده',
+            'sig3' => 'مهر و امضای مسئول عملیات / بایگانی',
+            'primary' => true,
+        ],
+        [
+            'number' => 2,
+            'title' => 'بخش دوم: برگ تسویه حساب و مشخصات بارگیری واگن',
+            'subtitle' => 'نسخه امور مالی و صندوق',
+            'declaration' => 'مبالغ پایه و عوارض ارزش افزوده واگن‌های فوق بر اساس تعرفه و تناژ ثبت‌شده محاسبه و تسویه گردید.',
+            'sig1' => 'امضای نماینده صاحب کالا',
+            'sig2' => 'امضای متصدی صدور صورتحساب',
+            'sig3' => 'مهر و امضای امور مالی / صندوق',
+            'primary' => false,
+        ],
+        [
+            'number' => 3,
+            'title' => 'بخش سوم: برگ تسویه حساب و مشخصات بارگیری واگن',
+            'subtitle' => 'نسخه صاحب کالا / نماینده',
+            'declaration' => 'این برگه به منزله گواهی تسویه حساب واگن‌های مندرج در جدول با مشخصات تناژ و تعرفه ثبت‌شده می‌باشد.',
+            'sig1' => 'امضای نماینده صاحب کالا',
+            'sig2' => 'امضای متصدی بارگیری / صدور',
+            'sig3' => 'مهر و امضای واحد صدور صورتحساب',
+            'primary' => false,
+        ],
+        [
+            'number' => 4,
+            'title' => 'بخش چهارم: برگ تسویه حساب و مجوز عملیات واگن',
+            'subtitle' => 'نسخه عملیات بارگیری / انتظامات',
+            'declaration' => 'عملیات بارگیری و تسویه حساب واگن‌های فوق انجام شده و بلامانع است.',
+            'sig1' => 'امضای نماینده صاحب کالا',
+            'sig2' => 'امضای متصدی عملیات بارگیری',
+            'sig3' => 'مهر و امضای رئیس عملیات / انتظامات',
+            'primary' => false,
+        ],
+    ];
+@endphp
+
 <div class="print-toolbar">
     <div>
-        <strong>پیش‌نمایش چاپ صورتحساب {{ $billing->billing_number }}</strong>
+        <strong>برگه ۴ بخشی درخواست بارگیری و تسویه حساب — شماره: {{ $billing->billing_number }}</strong>
+        <span style="font-size: 12px; color: #475569; margin-right: 8px;">
+            ({{ $totalWagonCount }} واگن خلاصه‌شده در {{ $groupedRows->count() }} ردیف تعرفه/تناژ یکسان)
+        </span>
     </div>
     <div class="actions">
-        <button type="button" class="btn-print" onclick="window.print()">چاپ صورتحساب</button>
-        <a href="{{ route('billing.show', $billing) }}" class="btn-back">بازگشت به صورتحساب</a>
+        <button type="button" class="btn-toolbar btn-print" onclick="window.print()">
+            چاپ برگه ۴ بخشی (A4)
+        </button>
+        <a href="{{ route('billing.create') }}" class="btn-toolbar btn-next">
+            + صدور صورتحساب بعدی
+        </a>
+        <a href="{{ route('billing.show', $billing) }}" class="btn-toolbar btn-detail">
+            مشاهده جزئیات / ویرایش واگن‌ها
+        </a>
+        <a href="{{ route('billing.index') }}" class="btn-toolbar btn-detail">
+            لیست صورتحساب‌ها
+        </a>
     </div>
 </div>
 
-<div class="header">
-    <div class="header-brand">
-        <img src="{{ asset('images/logo.png') }}" alt="لوگوی شرکت انبارهای عمومی و خدمات گمرکی ایران">
-        <div class="header-org-title">
-            <div>شرکت انبارهای عمومی و خدمات گمرکی ایران</div>
-            <div style="font-weight: normal; color: #444; font-size: 12px;">مجتمع شهید مطهری — عملیات بارگیری واگن</div>
-        </div>
-    </div>
-    <div class="header-center">
-        <h1>صورتحساب بارگیری واگن</h1>
-        <div class="sub">شماره صورتحساب: {{ $billing->billing_number }}</div>
-    </div>
-    <div class="header-meta">
-        <div><strong>تاریخ صدور:</strong> {{ $billing->billing_date_shamsi }}</div>
-        <div class="status {{ $billing->isCancelled() ? 'cancelled' : '' }}">
-            <strong>وضعیت:</strong> {{ $billing->statusLabel() }}
-            @if($billing->isCancelled() && $billing->cancelled_at)
-                — تاریخ لغو: {{ \Morilog\Jalali\Jalalian::fromCarbon($billing->cancelled_at)->format('Y/m/d') }}
-            @endif
-        </div>
-    </div>
-</div>
+<div class="a4-sheet">
+    @foreach($sections as $sIdx => $sec)
+        <div class="slip-box {{ $sec['primary'] ? 'slip-primary' : '' }}">
+            <div class="slip-header">
+                <div class="slip-brand">
+                    <img src="{{ asset('images/logo.png') }}" alt="لوگو">
+                    <div>
+                        <div class="slip-org-name">شرکت انبارهای عمومی و خدمات گمرکی ایران</div>
+                        <div class="slip-org-sub">مجتمع شهید مطهری — عملیات بارگیری واگن</div>
+                    </div>
+                </div>
 
-<table class="info">
-    <tr>
-        <td class="label">صاحب کالا</td>
-        <td>{{ $billing->ownerName() }}</td>
-        <td class="label">نماینده</td>
-        <td>{{ $billing->representativeName() ?? '-' }}</td>
-    </tr>
-    <tr>
-        <td class="label">تاریخ صدور</td>
-        <td>{{ $billing->billing_date_shamsi }}</td>
-        <td class="label">اپراتور</td>
-        <td>{{ $billing->operator?->name ?? '-' }}</td>
-    </tr>
-</table>
+                <div class="slip-title-center">
+                    <div class="slip-part-badge">{{ $sec['title'] }}</div>
+                    <div class="slip-sub-purpose">{{ $sec['subtitle'] }}</div>
+                </div>
 
-<table class="items">
-    <thead>
-    <tr>
-        <th style="width: 5%;">ردیف</th>
-        <th style="width: 13%;">شماره واگن</th>
-        <th style="width: 15%;">شرح کالا</th>
-        <th style="width: 18%;">تعرفه</th>
-        <th style="width: 8%;">ظرفیت (تن)</th>
-        <th style="width: 8%;">وزن (تن)</th>
-        <th style="width: 11%;">هزینه پایه (ریال)</th>
-        <th style="width: 9%;">مالیات (ریال)</th>
-        <th style="width: 13%;">جمع ردیف (ریال)</th>
-    </tr>
-    </thead>
-    <tbody>
-    @forelse($billing->items as $item)
-        <tr>
-            <td>{{ $loop->iteration }}</td>
-            <td>{{ $item->wagon?->wagon_number ?? '-' }}</td>
-            <td>{{ $item->wagon?->cargo_description ?: '-' }}</td>
-            <td>{{ $item->tariff_title }}</td>
-            <td>{{ $item->tariff_capacity }}</td>
-            <td>{{ $item->loaded_weight }}</td>
-            <td>{{ number_format($item->base_cost) }}</td>
-            <td>{{ number_format($item->tax_amount) }}</td>
-            <td>{{ number_format($item->total_amount) }}</td>
-        </tr>
-    @empty
-        <tr>
-            <td colspan="9">این صورتحساب لغو شده و ردیفی ندارد.</td>
-        </tr>
-    @endforelse
-    </tbody>
-</table>
-
-<table class="totals">
-    <tr>
-        <td>جمع هزینه پایه</td>
-        <td class="amount">{{ number_format($billing->base_amount) }} ریال</td>
-    </tr>
-    <tr>
-        <td>مالیات ({{ number_format((float) $billing->tax_percentage, 2) }}٪)</td>
-        <td class="amount">{{ number_format($billing->tax_amount) }} ریال</td>
-    </tr>
-    <tr class="final">
-        <td>مبلغ قابل پرداخت</td>
-        <td class="amount">{{ number_format($billing->total_amount) }} ریال</td>
-    </tr>
-</table>
-
-@if($billing->notes)
-    <div class="notes">
-        <strong>یادداشت:</strong> {{ $billing->notes }}
-    </div>
-@endif
-
-@php
-    $editedItems = $billing->items->filter(fn ($i) => $i->wagon?->isOwnerEdited());
-@endphp
-@if($editedItems->isNotEmpty())
-    <div class="notes">
-        <strong>ویرایش‌های ثبت‌شده برای واگن‌ها پس از صدور صورتحساب:</strong>
-        @foreach($editedItems as $editedItem)
-            @php $w = $editedItem->wagon; @endphp
-            <div>
-                واگن {{ $w->wagon_number }}:
-                @if($w->isNumberEdited() && $w->isOwnerChanged())
-                    اصلاح شماره واگن از «{{ $w->previous_wagon_number }}» به «{{ $w->wagon_number }}» و تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '-' }}» به «{{ $w->ownerName() }}»
-                @elseif($w->isNumberEdited())
-                    اصلاح شماره واگن از «{{ $w->previous_wagon_number }}» به «{{ $w->wagon_number }}»
-                @else
-                    تغییر صاحب کالا از «{{ $w->previousOwner?->name ?? '-' }}» به «{{ $w->ownerName() }}»
-                @endif
-                — علت: {{ $w->owner_change_note }}
+                <div class="slip-meta">
+                    <div><strong>شماره تسویه:</strong> {{ $billing->billing_number }}</div>
+                    <div><strong>شماره درخواست:</strong> {{ $requestNumbers }}</div>
+                    <div><strong>تاریخ صدور:</strong> {{ $billing->billing_date_shamsi }}</div>
+                </div>
             </div>
-        @endforeach
-    </div>
-@endif
 
-<div class="footer">
-    <div>تاریخ چاپ: {{ \App\Support\JalaliDate::today() }}</div>
-    <div>این سند به صورت خودکار توسط سامانه مدیریت بارگیری واگن صادر شده است.</div>
+            <div class="info-strip">
+                <div><strong>صاحب کالا:</strong> {{ $billing->ownerName() }}</div>
+                <div><strong>نماینده:</strong> {{ $billing->representativeName() ?? '—' }}</div>
+                <div><strong>تعداد کل واگن:</strong> {{ $totalWagonCount }} دستگاه</div>
+                <div><strong>مجموع تناژ:</strong> {{ $totalWeightFormatted }} تن</div>
+                <div>
+                    <span class="status-pill">
+                        وضعیت: {{ $billing->isCancelled() ? 'لغو شده' : 'تسویه شده' }}
+                    </span>
+                </div>
+            </div>
+
+            <table class="grouped-table">
+                <thead>
+                <tr>
+                    <th style="width: 4%;">ردیف</th>
+                    <th style="width: 6%;">تعداد واگن</th>
+                    <th style="width: 22%;">شماره واگن‌ها (دسته‌بندی‌شده)</th>
+                    <th style="width: 11%;">شرح کالا</th>
+                    <th style="width: 18%;">عنوان تعرفه استفاده شده</th>
+                    <th style="width: 9%;">مبلغ تعرفه (ریال)</th>
+                    <th style="width: 9%;">تناژ (واحد / کل)</th>
+                    <th style="width: 7%;">مبلغ پایه</th>
+                    <th style="width: 6%;">مالیات ({{ (float) $billing->tax_percentage }}٪)</th>
+                    <th style="width: 8%;">جمع کل (ریال)</th>
+                </tr>
+                </thead>
+                <tbody>
+                @forelse($groupedRows as $gIdx => $gRow)
+                    @php
+                        $unitWStr = floor($gRow['unit_weight']) == $gRow['unit_weight']
+                            ? (string) ((int) $gRow['unit_weight'])
+                            : number_format($gRow['unit_weight'], 2);
+                        $totWStr = floor($gRow['total_weight']) == $gRow['total_weight']
+                            ? (string) ((int) $gRow['total_weight'])
+                            : number_format($gRow['total_weight'], 2);
+                    @endphp
+                    <tr>
+                        <td>{{ $gIdx + 1 }}</td>
+                        <td><strong>{{ $gRow['wagon_count'] }}</strong></td>
+                        <td class="wagon-numbers-cell">{{ $gRow['wagon_numbers'] }}</td>
+                        <td>{{ $gRow['cargo_description'] }}</td>
+                        <td>{{ $gRow['tariff_title'] }}</td>
+                        <td class="money-cell">{{ number_format($gRow['tariff_rate']) }}</td>
+                        <td>
+                            @if($gRow['wagon_count'] > 1)
+                                {{ $unitWStr }} تن (جمع: {{ $totWStr }})
+                            @else
+                                {{ $unitWStr }} تن
+                            @endif
+                        </td>
+                        <td class="money-cell">{{ number_format($gRow['base_cost']) }}</td>
+                        <td class="money-cell">{{ number_format($gRow['tax_amount']) }}</td>
+                        <td class="money-cell">{{ number_format($gRow['total_amount']) }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="10">ردیفی ثبت نشده است.</td>
+                    </tr>
+                @endforelse
+                </tbody>
+                <tfoot>
+                <tr>
+                    <td colspan="2">جمع کل تسویه:</td>
+                    <td>{{ $totalWagonCount }} واگن</td>
+                    <td colspan="3" style="text-align: left; padding-left: 6px;">مجموع تناژ و مبالغ تسویه حساب (ریال):</td>
+                    <td>{{ $totalWeightFormatted }} تن</td>
+                    <td class="money-cell">{{ number_format($billing->base_amount) }}</td>
+                    <td class="money-cell">{{ number_format($billing->tax_amount) }}</td>
+                    <td class="money-cell">{{ number_format($billing->total_amount) }}</td>
+                </tr>
+                </tfoot>
+            </table>
+
+            <div class="slip-footer">
+                <div class="slip-declaration">
+                    {{ $sec['declaration'] }}
+                    @if($billing->notes)
+                        <br><strong>توضیحات:</strong> {{ $billing->notes }}
+                    @endif
+                </div>
+                <div class="slip-signatures">
+                    <div class="sig-box">
+                        <div class="sig-title">{{ $sec['sig1'] }}</div>
+                        <div class="sig-line">{{ $billing->representativeName() ?? 'امضا' }}</div>
+                    </div>
+                    <div class="sig-box">
+                        <div class="sig-title">{{ $sec['sig2'] }}</div>
+                        <div class="sig-line">{{ $billing->operator?->name ?? 'امضا' }}</div>
+                    </div>
+                    <div class="sig-box">
+                        <div class="sig-title">{{ $sec['sig3'] }}</div>
+                        <div class="sig-line">مهر و امضا</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if(! $loop->last)
+            <div class="cut-line">
+                <span>✂ خط برش بخش {{ $sec['number'] }}</span>
+            </div>
+        @endif
+    @endforeach
 </div>
 
 <script>
