@@ -36,6 +36,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/cargo', [CargoController::class, 'store'])->name('cargo.store');
     Route::get('/cargo/{cargo}', [CargoController::class, 'show'])->name('cargo.show');
     Route::post('/cargo/{cargo}/load', [CargoController::class, 'storeLoading'])->name('cargo.load');
+    Route::post('/cargo/{cargo}/wagons', [CargoController::class, 'addWagon'])->name('cargo.wagons.store');
     Route::post('/cargo/{cargo}/quick-bill', [CargoController::class, 'quickBill'])->name('cargo.quick-bill');
     Route::get('/wagons/{wagon}/edit-owner', [CargoController::class, 'editWagonOwner'])->name('wagons.edit-owner');
     Route::get('/wagons/{wagon}/edit', [CargoController::class, 'editWagonOwner'])->name('wagons.edit');

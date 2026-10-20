@@ -942,6 +942,88 @@ class CargoController extends Controller
     }
 
     /**
+     * افزودن یک یا چند واگن جدید به درخواست بارگیری موجود
+     */
+    public function addWagon(Request $request, CargoRequest $cargo)
+    {
+        $normalizeDigits = static fn (string $v): string => strtr($v, [
+            '۰' => '0', '۱' => '1', '۲' => '2', '۳' => '3', '۴' => '4',
+            '۵' => '5', '۶' => '6', '۷' => '7', '۸' => '8', '۹' => '9',
+            '٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4',
+            '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9',
+        ]);
+
+        $rawWagons = $request->input('new_wagons');
+        if (! is_array($rawWagons)) {
+            $rawWagons = [[
+                'number' => (string) $request->input('wagon_number', ''),
+                'description' => (string) $request->input('cargo_description', ''),
+            ]];
+        }
+
+        $normalizedWagons = collect($rawWagons)->map(fn ($row) => [
+            'number' => is_array($row) ? trim($normalizeDigits((string) ($row['number'] ?? ''))) : '',
+            'description' => is_array($row) ? trim((string) ($row['description'] ?? '')) : '',
+        ])->values()->all();
+
+        $request->merge(['new_wagons' => $normalizedWagons]);
+
+        $data = $request->validate([
+            'new_wagons' => ['required', 'array', 'min:1', 'max:50'],
+            'new_wagons.*.number' => [
+                'required',
+                'string',
+                'max:30',
+                'regex:/^[A-Za-z0-9\-\/]+$/',
+                'distinct',
+            ],
+            'new_wagons.*.description' => ['required', 'string', 'max:255'],
+        ], [
+            'new_wagons.required' => 'حداقل یک واگن باید برای افزودن وارد شود.',
+            'new_wagons.*.number.required' => 'شماره واگن الزامی است.',
+            'new_wagons.*.number.regex' => 'شماره واگن فقط می‌تواند شامل ارقام، حروف انگلیسی، خط تیره (-) یا ممیز (/) باشد.',
+            'new_wagons.*.number.distinct' => 'شماره واگن تکراری در فرم افزودن واگن مجاز نیست.',
+            'new_wagons.*.description.required' => 'شرح کالا برای تمام واگن‌ها الزامی است.',
+        ], [
+            'new_wagons.*.number' => 'شماره واگن',
+            'new_wagons.*.description' => 'شرح کالا',
+        ]);
+
+        $existingNumbers = $cargo->wagons()->pluck('wagon_number')->all();
+        foreach ($data['new_wagons'] as $idx => $row) {
+            if (in_array($row['number'], $existingNumbers, true)) {
+                throw ValidationException::withMessages([
+                    "new_wagons.{$idx}.number" => "شماره واگن «{$row['number']}» قبلاً در همین درخواست بارگیری ثبت شده است.",
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($cargo, $data) {
+            foreach ($data['new_wagons'] as $row) {
+                Wagon::create([
+                    'cargo_request_id' => $cargo->id,
+                    'owner_id' => $cargo->owner_id,
+                    'wagon_number' => $row['number'],
+                    'cargo_description' => $row['description'],
+                ]);
+            }
+
+            if ($cargo->status !== CargoRequest::STATUS_PENDING) {
+                $cargo->update(['status' => CargoRequest::STATUS_PENDING]);
+            }
+        });
+
+        $addedCount = count($data['new_wagons']);
+        $msg = $addedCount === 1
+            ? "واگن «{$data['new_wagons'][0]['number']}» با موفقیت به درخواست بارگیری «{$cargo->request_number}» اضافه شد."
+            : "{$addedCount} واگن جدید با موفقیت به درخواست بارگیری «{$cargo->request_number}» اضافه شد.";
+
+        return redirect()
+            ->route('cargo.show', $cargo)
+            ->with('success', $msg);
+    }
+
+    /**
      * حذف واگن از درخواست بارگیری (قبل از صدور صورتحساب)
      */
     public function destroyWagon(Request $request, Wagon $wagon)

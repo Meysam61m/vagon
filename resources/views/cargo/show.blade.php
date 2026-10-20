@@ -73,6 +73,68 @@
         @endif
     </div>
 
+    {{-- فرم افزودن واگن جدید به همین درخواست بارگیری --}}
+    @php
+        $lastCargoDescription = $cargo->wagons->last()?->cargo_description ?? '';
+        $oldNewWagons = old('new_wagons', [['number' => '', 'description' => $lastCargoDescription]]);
+    @endphp
+    <div class="card p-3 mb-4 border-primary">
+        <form method="POST"
+              action="{{ \Illuminate\Support\Facades\Route::has('cargo.wagons.store') ? route('cargo.wagons.store', $cargo) : url('/cargo/'.$cargo->id.'/wagons') }}"
+              id="add-wagon-to-cargo-form">
+            @csrf
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <h6 class="mb-0 text-primary">
+                    + افزودن واگن جدید به این درخواست بارگیری
+                </h6>
+                <button type="button" id="add-more-new-wagon-row" class="btn btn-sm btn-outline-primary">
+                    + ردیف واگن دیگر
+                </button>
+            </div>
+            <div id="new-wagon-rows-container">
+                @foreach($oldNewWagons as $nwIdx => $nw)
+                    <div class="row g-2 align-items-start mb-2 new-wagon-row">
+                        <div class="col-md-4">
+                            <input type="text"
+                                   name="new_wagons[{{ $nwIdx }}][number]"
+                                   value="{{ $nw['number'] ?? '' }}"
+                                   class="form-control form-control-sm font-monospace @error('new_wagons.'.$nwIdx.'.number') is-invalid @enderror"
+                                   data-new-wagon-number
+                                   placeholder="شماره واگن جدید (مثلاً 663532)"
+                                   required>
+                            @error('new_wagons.'.$nwIdx.'.number')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text"
+                                   name="new_wagons[{{ $nwIdx }}][description]"
+                                   value="{{ $nw['description'] ?? $lastCargoDescription }}"
+                                   class="form-control form-control-sm @error('new_wagons.'.$nwIdx.'.description') is-invalid @enderror"
+                                   data-new-wagon-description
+                                   placeholder="شرح کالا (اجباری — پیشنهاد خودکار از واگن قبلی)"
+                                   required>
+                            @error('new_wagons.'.$nwIdx.'.description')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-3 d-flex gap-1">
+                            @if($loop->first)
+                                <button type="submit" class="btn btn-sm btn-primary flex-grow-1 fw-semibold">
+                                    + ثبت و افزودن واگن
+                                </button>
+                            @else
+                                <button type="button" class="btn btn-sm btn-outline-danger w-100 remove-new-wagon-row">
+                                    حذف ردیف
+                                </button>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </form>
+    </div>
+
     @if($cargo->status !== 'billed')
         <form method="POST" action="{{ route('cargo.load', $cargo) }}" class="card p-4 mb-4" id="cargo-loading-form">
             @csrf
@@ -549,6 +611,69 @@
                     }
                 });
             });
+
+            // افزودن ردیف جدید در فرم «افزودن واگن به این درخواست بارگیری» با پیشنهاد خودکار شرح کالا از ردیف قبلی
+            const addMoreNewWagonBtn = document.getElementById('add-more-new-wagon-row');
+            const newWagonRowsContainer = document.getElementById('new-wagon-rows-container');
+            let newWagonRowIndex = newWagonRowsContainer ? newWagonRowsContainer.querySelectorAll('.new-wagon-row').length : 1;
+
+            if (addMoreNewWagonBtn && newWagonRowsContainer) {
+                addMoreNewWagonBtn.addEventListener('click', function () {
+                    const rows = newWagonRowsContainer.querySelectorAll('.new-wagon-row');
+                    const lastRow = rows[rows.length - 1];
+                    const lastDescInput = lastRow ? lastRow.querySelector('input[data-new-wagon-description]') : null;
+                    const suggestedDesc = lastDescInput ? lastDescInput.value : '';
+
+                    const idx = newWagonRowIndex++;
+                    const rowDiv = document.createElement('div');
+                    rowDiv.className = 'row g-2 align-items-start mb-2 new-wagon-row';
+                    rowDiv.innerHTML = `
+                        <div class="col-md-4">
+                            <input type="text"
+                                   name="new_wagons[${idx}][number]"
+                                   class="form-control form-control-sm font-monospace"
+                                   data-new-wagon-number
+                                   placeholder="شماره واگن جدید (مثلاً 663532)"
+                                   required>
+                        </div>
+                        <div class="col-md-5">
+                            <input type="text"
+                                   name="new_wagons[${idx}][description]"
+                                   class="form-control form-control-sm"
+                                   data-new-wagon-description
+                                   placeholder="شرح کالا (اجباری — پیشنهاد خودکار از واگن قبلی)"
+                                   required>
+                        </div>
+                        <div class="col-md-3 d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-danger w-100 remove-new-wagon-row">
+                                حذف ردیف
+                            </button>
+                        </div>
+                    `;
+
+                    const descInput = rowDiv.querySelector('input[data-new-wagon-description]');
+                    if (descInput) {
+                        descInput.value = suggestedDesc;
+                    }
+
+                    newWagonRowsContainer.appendChild(rowDiv);
+
+                    const numInput = rowDiv.querySelector('input[data-new-wagon-number]');
+                    if (numInput) {
+                        numInput.focus();
+                    }
+                });
+
+                newWagonRowsContainer.addEventListener('click', function (e) {
+                    const removeBtn = e.target.closest('.remove-new-wagon-row');
+                    if (removeBtn) {
+                        const row = removeBtn.closest('.new-wagon-row');
+                        if (row && newWagonRowsContainer.querySelectorAll('.new-wagon-row').length > 1) {
+                            row.remove();
+                        }
+                    }
+                });
+            }
         });
     </script>
 @endpush
