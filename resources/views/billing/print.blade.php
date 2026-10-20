@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>چاپ صورتحساب {{ $billing->billing_number }}</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}">
     <link href="{{ asset('vendor/vazirmatn/Vazirmatn-font-face.css') }}" rel="stylesheet">
     <style>
         * {
@@ -61,24 +62,56 @@
         }
 
         .header {
-            text-align: center;
-            border-bottom: 2px solid #111;
-            padding-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1.5px solid #111;
+            border-radius: 6px;
+            padding: 12px 16px;
             margin-bottom: 18px;
         }
 
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-brand img {
+            height: 54px;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .header-org-title {
+            font-weight: bold;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .header-center {
+            text-align: center;
+        }
+
         .header h1 {
-            font-size: 20px;
+            font-size: 19px;
             margin-bottom: 4px;
         }
 
         .header .sub {
             font-size: 13px;
-            color: #555;
+            color: #444;
+            font-weight: bold;
+        }
+
+        .header-meta {
+            text-align: left;
+            font-size: 12px;
+            line-height: 1.7;
         }
 
         .status {
-            margin-top: 6px;
+            margin-top: 4px;
             font-size: 12px;
         }
 
@@ -191,13 +224,25 @@
 </div>
 
 <div class="header">
-    <h1>صورتحساب بارگیری واگن</h1>
-    <div class="sub">شماره: {{ $billing->billing_number }}</div>
-    <div class="status {{ $billing->isCancelled() ? 'cancelled' : '' }}">
-        وضعیت: {{ $billing->statusLabel() }}
-        @if($billing->isCancelled() && $billing->cancelled_at)
-            — تاریخ لغو: {{ \Morilog\Jalali\Jalalian::fromCarbon($billing->cancelled_at)->format('Y/m/d') }}
-        @endif
+    <div class="header-brand">
+        <img src="{{ asset('images/logo.png') }}" alt="لوگوی شرکت انبارهای عمومی و خدمات گمرکی ایران">
+        <div class="header-org-title">
+            <div>شرکت انبارهای عمومی و خدمات گمرکی ایران</div>
+            <div style="font-weight: normal; color: #444; font-size: 12px;">مجتمع شهید مطهری — عملیات بارگیری واگن</div>
+        </div>
+    </div>
+    <div class="header-center">
+        <h1>صورتحساب بارگیری واگن</h1>
+        <div class="sub">شماره صورتحساب: {{ $billing->billing_number }}</div>
+    </div>
+    <div class="header-meta">
+        <div><strong>تاریخ صدور:</strong> {{ $billing->billing_date_shamsi }}</div>
+        <div class="status {{ $billing->isCancelled() ? 'cancelled' : '' }}">
+            <strong>وضعیت:</strong> {{ $billing->statusLabel() }}
+            @if($billing->isCancelled() && $billing->cancelled_at)
+                — تاریخ لغو: {{ \Morilog\Jalali\Jalalian::fromCarbon($billing->cancelled_at)->format('Y/m/d') }}
+            @endif
+        </div>
     </div>
 </div>
 

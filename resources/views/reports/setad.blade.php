@@ -120,7 +120,21 @@
                 <thead>
                 <tr class="setad-banner">
                     <th colspan="14">
-                        لیست واگن های فاز 2 شهید مطهری در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }}
+                        <div class="d-flex justify-content-between align-items-center px-2">
+                            <div class="d-flex align-items-center gap-2 text-start">
+                                <img src="{{ asset('images/logo.png') }}" alt="لوگو" style="height: 44px; width: auto;">
+                                <div class="small fw-bold" style="line-height: 1.4;">
+                                    <div>شرکت انبارهای عمومی و خدمات گمرکی ایران</div>
+                                    <div class="text-muted" style="font-size: 0.78rem;">مجتمع شهید مطهری</div>
+                                </div>
+                            </div>
+                            <div>
+                                لیست واگن های فاز 2 شهید مطهری در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }}
+                            </div>
+                            <div class="small text-muted" style="min-width: 110px;">
+                                تاریخ گزارش: {{ \App\Support\JalaliDate::today() }}
+                            </div>
+                        </div>
                     </th>
                 </tr>
                 <tr class="setad-headers">

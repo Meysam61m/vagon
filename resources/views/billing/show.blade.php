@@ -2,13 +2,19 @@
 @section('title', 'جزئیات صورتحساب')
 
 @section('content')
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">
-            صورتحساب: {{ $billing->billing_number }}
-            <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : 'bg-success' }} fs-6 align-middle">
-                {{ $billing->statusLabel() }}
-            </span>
-        </h4>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-3">
+            <img src="{{ asset('images/logo.png') }}" alt="لوگو" class="bg-white border rounded p-1 shadow-sm" style="height: 46px; width: auto;">
+            <div>
+                <h4 class="mb-0">
+                    صورتحساب: {{ $billing->billing_number }}
+                    <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : 'bg-success' }} fs-6 align-middle">
+                        {{ $billing->statusLabel() }}
+                    </span>
+                </h4>
+                <div class="text-muted small">شرکت انبارهای عمومی و خدمات گمرکی ایران — مجتمع شهید مطهری</div>
+            </div>
+        </div>
         <div class="d-flex gap-2 flex-wrap">
             <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary">
                 چاپ صورتحساب

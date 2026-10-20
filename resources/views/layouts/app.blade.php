@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'سامانه مدیریت بارگیری واگن')</title>
+    <title>@yield('title', 'سامانه مدیریت بارگیری واگن') — شرکت انبارهای عمومی و خدمات گمرکی ایران</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}">
 
     {{-- همه فایل‌ها به‌صورت محلی سرو می‌شوند؛ برنامه نیازی به اینترنت ندارد --}}
     <link rel="stylesheet" href="{{ asset('vendor/bootstrap-rtl/bootstrap.rtl.min.css') }}">
@@ -11,6 +12,52 @@
     <link rel="stylesheet" href="{{ asset('vendor/persian-datepicker/persian-datepicker.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
     <style>
+        .brand-logo-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            padding: 4px 6px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            transition: transform 0.15s ease;
+        }
+
+        .navbar-brand:hover .brand-logo-wrap {
+            transform: scale(1.04);
+        }
+
+        .brand-logo-img {
+            height: 34px;
+            width: auto;
+            display: block;
+            object-fit: contain;
+        }
+
+        .brand-title-main {
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #ffffff;
+        }
+
+        .brand-title-sub {
+            font-size: 0.7rem;
+            color: #9eeaf9;
+            font-weight: 400;
+            line-height: 1.2;
+        }
+
+        .app-org-footer {
+            border-top: 1px solid #dee2e6;
+            background: #ffffff;
+            color: #6c757d;
+            font-size: 0.8rem;
+            padding: 12px 24px;
+            margin-top: 32px;
+        }
+
         .searchable-select-container {
             position: relative;
             width: 100%;
@@ -96,7 +143,15 @@
 @auth
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{{ auth()->user()->isAdmin() ? route('dashboard') : route('cargo.index') }}">سامانه بارگیری واگن</a>
+        <a class="navbar-brand d-flex align-items-center gap-2 py-1" href="{{ auth()->user()->isAdmin() ? route('dashboard') : route('cargo.index') }}">
+            <span class="brand-logo-wrap">
+                <img src="{{ asset('images/logo.png') }}" alt="لوگوی شرکت انبارهای عمومی و خدمات گمرکی ایران" class="brand-logo-img">
+            </span>
+            <span class="d-flex flex-column">
+                <span class="brand-title-main">سامانه بارگیری واگن</span>
+                <span class="brand-title-sub">شرکت انبارهای عمومی و خدمات گمرکی ایران</span>
+            </span>
+        </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
                 aria-controls="mainNav" aria-expanded="false" aria-label="منو">
             <span class="navbar-toggler-icon"></span>
@@ -204,6 +259,20 @@
 
     @yield('content')
 </div>
+
+@auth
+<footer class="app-org-footer no-print">
+    <div class="container-fluid d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <img src="{{ asset('images/logo.png') }}" alt="لوگو" style="height: 24px; width: auto;">
+            <span><strong>شرکت انبارهای عمومی و خدمات گمرکی ایران</strong> — مجتمع شهید مطهری (سامانه مدیریت بارگیری واگن)</span>
+        </div>
+        <div class="text-muted small">
+            تاریخ امروز: {{ \App\Support\JalaliDate::today() }}
+        </div>
+    </div>
+</footer>
+@endauth
 
 <script src="{{ asset('vendor/jquery/jquery.min.js') }}"></script>
 <script src="{{ asset('vendor/bootstrap-rtl/bootstrap.bundle.min.js') }}"></script>
