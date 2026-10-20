@@ -181,18 +181,20 @@
                                     </a>
                                 @endif
 
+                                @if($req->allWagonsFullySettled())
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('cargo.print') ? route('cargo.print', $req) : url('/cargo/'.$req->id.'/print') }}"
+                                       target="_blank" rel="noopener"
+                                       class="btn btn-sm btn-success fw-semibold">
+                                        چاپ برگه ۴ بخشی
+                                    </a>
+                                @endif
+
                                 @if($readyWagonsCount > 0)
                                     @if($req->owner_id)
                                         <form method="POST" action="{{ route('cargo.quick-bill', $req) }}" class="d-inline">
                                             @csrf
                                             <button type="submit" class="btn btn-sm btn-success" title="صدور مستقیم صورتحساب برای {{ $readyWagonsCount }} واگن بارگیری‌شده">
                                                 صدور صورتحساب
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $req, 'print' => 1]) }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-outline-dark" title="صدور و باز شدن فوری صفحه چاپ صورتحساب">
-                                                صدور و چاپ
                                             </button>
                                         </form>
                                     @else
@@ -207,9 +209,6 @@
                                             </select>
                                             <button type="submit" class="btn btn-sm btn-success py-0 px-2" style="height: 28px; font-size: 0.78rem;" title="تعیین صاحب کالا و صدور صورتحساب">
                                                 تعیین صاحب کالا + صدور فاکتور
-                                            </button>
-                                            <button type="submit" name="print" value="1" class="btn btn-sm btn-outline-dark py-0 px-2" style="height: 28px; font-size: 0.78rem;" title="تعیین صاحب کالا، صدور و چاپ فوری">
-                                                + چاپ
                                             </button>
                                         </form>
                                     @endif

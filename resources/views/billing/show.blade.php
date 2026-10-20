@@ -8,6 +8,15 @@
         $settleUrl = \Illuminate\Support\Facades\Route::has('billing.settle')
             ? route('billing.settle', $billing)
             : url('/billing/'.$billing->id.'/settle');
+
+        $cargoRequests = $billing->items
+            ->map(fn ($item) => $item->wagon?->cargoRequest)
+            ->filter()
+            ->unique('id')
+            ->values();
+        $firstCargo = $cargoRequests->first();
+        $settledCargo = $cargoRequests->first(fn ($c) => $c->allWagonsFullySettled());
+        $canPrintFourPart = ! $billing->isCancelled() && $billing->isSettled() && ($settledCargo !== null || $cargoRequests->isEmpty());
     @endphp
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -25,15 +34,21 @@
         </div>
         <div class="d-flex gap-2 flex-wrap">
             @if(! $billing->isCancelled())
-                @if($billing->isSettled())
-                    <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary fw-semibold">
-                        چاپ برگه ۴ بخشی تسویه حساب
+                @if($canPrintFourPart)
+                    <a href="{{ route('billing.print', ['billing' => $billing->id, 'cargo_request_id' => $settledCargo?->id]) }}" target="_blank" rel="noopener" class="btn btn-primary fw-semibold">
+                        چاپ برگه ۴ بخشی{{ $settledCargo ? ' (درخواست '.$settledCargo->request_number.')' : '' }}
                     </a>
-                @else
+                @elseif(! $billing->isSettled())
                     <a href="#settlement-receipt-form"
                        class="btn btn-warning fw-semibold"
                        onclick="setTimeout(function(){ var el = document.getElementById('receipt_number'); if(el) el.focus(); }, 100);">
                         ثبت فیش واریزی جهت چاپ برگه ۴ بخشی
+                    </a>
+                @elseif($firstCargo)
+                    <a href="{{ route('cargo.show', $firstCargo) }}"
+                       class="btn btn-outline-warning text-dark fw-semibold"
+                       title="چاپ برگه ۴ بخشی پس از تسویه تمام واگن‌های درخواست {{ $firstCargo->request_number }} فعال می‌شود">
+                        در انتظار تسویه همه واگن‌های درخواست {{ $firstCargo->request_number }} ({{ $firstCargo->fullySettledWagonsCount() }}/{{ $firstCargo->wagons->count() }})
                     </a>
                 @endif
             @endif
@@ -73,7 +88,10 @@
                             ثبت اطلاعات فیش واریزی و تسویه حساب (پیشنیاز چاپ برگه ۴ بخشی)
                         </h5>
                         <div class="text-muted small">
-                            مبلغ قابل پرداخت این صورتحساب <strong class="text-dark money">{{ number_format($billing->total_amount) }} ریال</strong> می‌باشد. پس از وارد کردن مشخصات فیش واریزی، بلافاصله برگه ۴ بخشی تسویه حساب آماده چاپ خواهد شد.
+                            مبلغ قابل پرداخت این صورتحساب <strong class="text-dark money">{{ number_format($billing->total_amount) }} ریال</strong> می‌باشد.
+                            @if($firstCargo)
+                                ملاک چاپ برگه ۴ بخشی، تسویه کامل همه واگن‌های <strong>شماره درخواست {{ $firstCargo->request_number }}</strong> ({{ $firstCargo->wagons->count() }} واگن) است.
+                            @endif
                         </div>
                     </div>
                     <span class="badge bg-warning text-dark fs-6">در انتظار ثبت فیش واریزی</span>
@@ -149,7 +167,7 @@
 
                         <div class="col-md-2">
                             <button type="submit" class="btn btn-success fw-semibold w-100">
-                                ثبت فیش و چاپ برگه ۴ بخشی
+                                ثبت فیش و تسویه حساب
                             </button>
                         </div>
                     </div>
@@ -169,14 +187,24 @@
                         @endif
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary fw-semibold">
-                            چاپ مجدد برگه ۴ بخشی
-                        </a>
+                        @if($canPrintFourPart)
+                            <a href="{{ route('billing.print', ['billing' => $billing->id, 'cargo_request_id' => $settledCargo?->id]) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary fw-semibold">
+                                چاپ برگه ۴ بخشی{{ $settledCargo ? ' (درخواست '.$settledCargo->request_number.')' : '' }}
+                            </a>
+                        @endif
                         <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-receipt-collapse">
                             ویرایش فیش واریزی
                         </button>
                     </div>
                 </div>
+
+                @if(! $canPrintFourPart && $firstCargo)
+                    <div class="alert alert-warning mt-2 mb-0 py-2 small">
+                        <strong>توجه:</strong> ملاک چاپ برگه ۴ بخشی، تسویه کامل همه واگن‌های شماره درخواست است. در درخواست بارگیری
+                        <a href="{{ route('cargo.show', $firstCargo) }}" class="fw-bold">{{ $firstCargo->request_number }}</a>
+                        از مجموع <strong>{{ $firstCargo->wagons->count() }}</strong> واگن، تاکنون <strong>{{ $firstCargo->fullySettledWagonsCount() }}</strong> واگن تسویه شده است. به محض تسویه باقی واگن‌های این شماره درخواست، چاپ برگه ۴ بخشی انجام خواهد شد.
+                    </div>
+                @endif
 
                 <div class="collapse mt-3" id="edit-receipt-collapse">
                     <form method="POST" action="{{ $settleUrl }}" class="card card-body bg-white p-3">

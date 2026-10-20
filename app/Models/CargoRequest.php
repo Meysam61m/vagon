@@ -75,4 +75,17 @@ class CargoRequest extends Model
         return $this->wagons->isNotEmpty()
             && $this->wagons->every(fn (Wagon $wagon) => $wagon->loaded_weight !== null);
     }
+
+    /** آیا تمام واگن‌های این شماره درخواست بارگیری، صورتحساب و فیش واریزی ثبت‌شده (تسویه کامل) دارند؟ */
+    public function allWagonsFullySettled(): bool
+    {
+        return $this->wagons->isNotEmpty()
+            && $this->wagons->every(fn (Wagon $wagon) => $wagon->isFullySettled());
+    }
+
+    /** تعداد واگن‌های این درخواست که فیش واریزی آن‌ها ثبت و تسویه کامل شده است */
+    public function fullySettledWagonsCount(): int
+    {
+        return $this->wagons->filter(fn (Wagon $wagon) => $wagon->isFullySettled())->count();
+    }
 }

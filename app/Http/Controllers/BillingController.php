@@ -20,7 +20,13 @@ class BillingController extends Controller
 {
     public function index(Request $request)
     {
-        $billings = Billing::with('owner', 'representative', 'operator', 'items.wagon.owner')
+        $billings = Billing::with([
+            'owner',
+            'representative',
+            'operator',
+            'items.wagon.owner',
+            'items.wagon.cargoRequest.wagons.billingItem.billing',
+        ])
             ->when($request->filled('owner_id'), function ($q) use ($request) {
                 $ownerId = $request->integer('owner_id');
 
@@ -401,6 +407,32 @@ class BillingController extends Controller
             'settled_at' => $billing->settled_at ?? now(),
         ]);
 
+        $billing->load(['items.wagon.cargoRequest.wagons.billingItem.billing']);
+
+        $cargoRequests = $billing->items
+            ->map(fn ($item) => $item->wagon?->cargoRequest)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $fullySettledCargo = $cargoRequests->first(fn (CargoRequest $c) => $c->allWagonsFullySettled());
+
+        if ($fullySettledCargo) {
+            return redirect()
+                ->route('billing.print', ['billing' => $billing->id, 'cargo_request_id' => $fullySettledCargo->id])
+                ->with('success', "همه واگن‌های درخواست بارگیری «{$fullySettledCargo->request_number}» تسویه شدند؛ آماده چاپ برگه ۴ بخشی.");
+        }
+
+        $firstCargo = $cargoRequests->first();
+        if ($firstCargo) {
+            $settledCount = $firstCargo->fullySettledWagonsCount();
+            $totalCount = $firstCargo->wagons->count();
+
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('warning', "اطلاعات فیش واریزی برای صورتحساب «{$billing->billing_number}» ثبت شد؛ اما از مجموع {$totalCount} واگنِ درخواست بارگیری «{$firstCargo->request_number}»، تاکنون {$settledCount} واگن تسویه شده است. چاپ برگه ۴ بخشی به محض تسویه تمام واگن‌های این شماره درخواست انجام خواهد شد.");
+        }
+
         return redirect()
             ->route('billing.print', $billing)
             ->with('success', 'اطلاعات فیش واریزی و تسویه حساب ثبت شد؛ آماده چاپ برگه ۴ بخشی.');
@@ -412,7 +444,7 @@ class BillingController extends Controller
             'items.wagon.owner',
             'items.wagon.previousOwner',
             'items.wagon.ownerChangedBy',
-            'items.wagon.cargoRequest',
+            'items.wagon.cargoRequest.wagons.billingItem.billing',
             'items.tariff',
             'representative',
         ]);
@@ -423,7 +455,7 @@ class BillingController extends Controller
         ]);
     }
 
-    public function print(Billing $billing)
+    public function print(Request $request, Billing $billing)
     {
         if ($billing->isCancelled()) {
             return redirect()
@@ -440,13 +472,42 @@ class BillingController extends Controller
         $billing->load([
             'items.wagon.owner',
             'items.wagon.previousOwner',
-            'items.wagon.cargoRequest',
+            'items.wagon.cargoRequest.owner',
+            'items.wagon.cargoRequest.representative',
+            'items.wagon.cargoRequest.operator',
+            'items.wagon.cargoRequest.wagons.owner',
+            'items.wagon.cargoRequest.wagons.tariff',
+            'items.wagon.cargoRequest.wagons.billingItem.billing.operator',
+            'items.wagon.cargoRequest.wagons.billingItem.billing.representative',
             'items.tariff',
             'representative',
             'operator',
         ]);
 
-        return view('billing.print', ['billing' => $billing]);
+        $cargoRequests = $billing->items
+            ->map(fn ($item) => $item->wagon?->cargoRequest)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        $requestedCargoId = $request->integer('cargo_request_id');
+        $cargo = $requestedCargoId > 0
+            ? $cargoRequests->firstWhere('id', $requestedCargoId)
+            : ($cargoRequests->first(fn (CargoRequest $c) => $c->allWagonsFullySettled()) ?? $cargoRequests->first());
+
+        if ($cargo && ! $cargo->allWagonsFullySettled()) {
+            $settledCount = $cargo->fullySettledWagonsCount();
+            $totalCount = $cargo->wagons->count();
+
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('warning', "ملاک چاپ برگه ۴ بخشی، تسویه کامل همه واگن‌های شماره درخواست است. در درخواست بارگیری «{$cargo->request_number}» از مجموع {$totalCount} واگن، تاکنون {$settledCount} واگن تسویه شده است.");
+        }
+
+        return view('billing.print', [
+            'billing' => $billing,
+            'cargo' => $cargo,
+        ]);
     }
 
     /**

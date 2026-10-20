@@ -313,8 +313,19 @@
 <body>
 
 @php
-    // دسته‌بندی و خلاصه‌سازی واگن‌هایی که از تعرفه و تناژ یکسان استفاده کرده‌اند در یک ردیف
-    $groupedRows = $billing->items
+    $activeCargo = $cargo ?? $billing->items->first()?->wagon?->cargoRequest;
+
+    if ($activeCargo && $activeCargo->relationLoaded('wagons')) {
+        $sourceItems = $activeCargo->wagons
+            ->map(fn ($w) => $w->billingItem)
+            ->filter()
+            ->values();
+    } else {
+        $sourceItems = $billing->items;
+    }
+
+    // دسته‌بندی و خلاصه‌سازی واگن‌های شماره درخواست که از تعرفه و تناژ یکسان استفاده کرده‌اند در یک ردیف
+    $groupedRows = $sourceItems
         ->groupBy(function ($item) {
             $tId = (string) ($item->tariff_id ?? 0);
             $tTitle = trim((string) $item->tariff_title);
@@ -358,7 +369,7 @@
         })
         ->values();
 
-    $requestNumbers = $billing->items
+    $requestNumbers = $activeCargo?->request_number ?: $sourceItems
         ->map(fn ($i) => $i->wagon?->cargoRequest?->request_number)
         ->filter()
         ->unique()
@@ -369,8 +380,38 @@
         $requestNumbers = '—';
     }
 
-    $totalWagonCount = $billing->items->count();
-    $totalWeightSum = (float) $billing->items->sum('loaded_weight');
+    $distinctBillings = $sourceItems
+        ->map(fn ($i) => $i->billing)
+        ->filter()
+        ->unique('id')
+        ->values();
+
+    if ($distinctBillings->isEmpty()) {
+        $distinctBillings = collect([$billing]);
+    }
+
+    $billingNumbersStr = $distinctBillings->pluck('billing_number')->filter()->unique()->implode(' ، ') ?: $billing->billing_number;
+    $ownerNamesStr = $sourceItems
+        ->map(fn ($i) => $i->wagon?->ownerName() ?? $i->billing?->ownerName())
+        ->filter()
+        ->unique()
+        ->implode(' ، ') ?: $billing->ownerName();
+    $repNameStr = $activeCargo?->representative?->name
+        ?: ($billing->representativeName() ?? '—');
+    $operatorNameStr = $distinctBillings->last()?->operator?->name
+        ?: ($billing->operator?->name ?? 'امضا');
+
+    $receiptNumbersStr = $distinctBillings->pluck('receipt_number')->filter()->unique()->implode(' ، ') ?: ($billing->receipt_number ?: '—');
+    $receiptDatesStr = $distinctBillings->pluck('receipt_date_shamsi')->filter()->unique()->implode(' ، ') ?: ($billing->receipt_date_shamsi ?: $billing->billing_date_shamsi);
+    $bankNamesStr = $distinctBillings->pluck('bank_name')->filter()->unique()->implode(' ، ') ?: ($billing->bank_name ?: '');
+
+    $sumBaseAmount = (int) $sourceItems->sum('base_cost');
+    $sumTaxAmount = (int) $sourceItems->sum('tax_amount');
+    $sumTotalAmount = (int) $sourceItems->sum('total_amount');
+    $sumReceiptAmount = (int) $distinctBillings->sum(fn ($b) => (int) ($b->receipt_amount ?? $b->total_amount));
+
+    $totalWagonCount = $sourceItems->count();
+    $totalWeightSum = (float) $sourceItems->sum('loaded_weight');
     $totalWeightFormatted = floor($totalWeightSum) == $totalWeightSum
         ? (string) ((int) $totalWeightSum)
         : number_format($totalWeightSum, 2);
@@ -380,7 +421,7 @@
             'number' => 1,
             'title' => 'بخش اول: درخواست بارگیری و برگ تسویه حساب واگن',
             'subtitle' => 'نسخه بایگانی — پس از اخذ امضای نماینده صاحب کالا بایگانی گردد',
-            'declaration' => 'اینجانب نماینده صاحب کالا، ضمن درخواست بارگیری و تأیید شماره واگن‌ها، تناژ و تعرفه مندرج در جدول فوق، تسویه حساب کامل را گواهی می‌نمایم.',
+            'declaration' => 'اینجانب نماینده صاحب کالا، ضمن درخواست بارگیری و تأیید شماره واگن‌ها، تناژ و تعرفه مندرج در جدول فوق، تسویه حساب کامل تمام واگن‌های این شماره درخواست را گواهی می‌نمایم.',
             'sig1' => 'نام و امضای نماینده صاحب کالا (جهت بایگانی)',
             'sig2' => 'امضای متصدی بارگیری / صادرکننده',
             'sig3' => 'مهر و امضای مسئول عملیات / بایگانی',
@@ -390,7 +431,7 @@
             'number' => 2,
             'title' => 'بخش دوم: برگ تسویه حساب و مشخصات بارگیری واگن',
             'subtitle' => 'نسخه امور مالی و صندوق',
-            'declaration' => 'مبالغ پایه و عوارض ارزش افزوده واگن‌های فوق بر اساس تعرفه و تناژ ثبت‌شده محاسبه و تسویه گردید.',
+            'declaration' => 'مبالغ پایه و عوارض ارزش افزوده تمام واگن‌های شماره درخواست فوق بر اساس تعرفه و تناژ ثبت‌شده محاسبه و تسویه گردید.',
             'sig1' => 'امضای نماینده صاحب کالا',
             'sig2' => 'امضای متصدی صدور صورتحساب',
             'sig3' => 'مهر و امضای امور مالی / صندوق',
@@ -410,7 +451,7 @@
             'number' => 4,
             'title' => 'بخش چهارم: برگ تسویه حساب و مجوز عملیات واگن',
             'subtitle' => 'نسخه عملیات بارگیری / انتظامات',
-            'declaration' => 'عملیات بارگیری و تسویه حساب واگن‌های فوق انجام شده و بلامانع است.',
+            'declaration' => 'عملیات بارگیری و تسویه حساب کامل تمام واگن‌های شماره درخواست فوق انجام شده و بلامانع است.',
             'sig1' => 'امضای نماینده صاحب کالا',
             'sig2' => 'امضای متصدی عملیات بارگیری',
             'sig3' => 'مهر و امضای رئیس عملیات / انتظامات',
@@ -421,20 +462,25 @@
 
 <div class="print-toolbar">
     <div>
-        <strong>برگه ۴ بخشی درخواست بارگیری و تسویه حساب — شماره: {{ $billing->billing_number }}</strong>
+        <strong>برگه ۴ بخشی بر اساس شماره درخواست بارگیری: {{ $requestNumbers }}</strong>
         <span style="font-size: 12px; color: #475569; margin-right: 8px;">
-            ({{ $totalWagonCount }} واگن خلاصه‌شده در {{ $groupedRows->count() }} ردیف تعرفه/تناژ یکسان)
+            (شماره صورتحساب: {{ $billingNumbersStr }} | {{ $totalWagonCount }} واگن خلاصه‌شده در {{ $groupedRows->count() }} ردیف تعرفه/تناژ یکسان)
         </span>
     </div>
     <div class="actions">
         <button type="button" class="btn-toolbar btn-print" onclick="window.print()">
             چاپ برگه ۴ بخشی (A4)
         </button>
+        @if($activeCargo)
+            <a href="{{ route('cargo.show', $activeCargo) }}" class="btn-toolbar btn-detail">
+                مشاهده درخواست {{ $activeCargo->request_number }}
+            </a>
+        @endif
         <a href="{{ route('billing.create') }}" class="btn-toolbar btn-next">
             + صدور صورتحساب بعدی
         </a>
         <a href="{{ route('billing.show', $billing) }}" class="btn-toolbar btn-detail">
-            مشاهده جزئیات / ویرایش واگن‌ها
+            مشاهده صورتحساب
         </a>
         <a href="{{ route('billing.index') }}" class="btn-toolbar btn-detail">
             لیست صورتحساب‌ها
@@ -460,24 +506,24 @@
                 </div>
 
                 <div class="slip-meta">
-                    <div><strong>شماره تسویه:</strong> {{ $billing->billing_number }}</div>
-                    <div><strong>شماره درخواست:</strong> {{ $requestNumbers }}</div>
-                    <div><strong>تاریخ صدور:</strong> {{ $billing->billing_date_shamsi }}</div>
+                    <div><strong>شماره درخواست (ملاک):</strong> {{ $requestNumbers }}</div>
+                    <div><strong>شماره صورتحساب:</strong> {{ $billingNumbersStr }}</div>
+                    <div><strong>تاریخ تسویه:</strong> {{ $receiptDatesStr }}</div>
                 </div>
             </div>
 
             <div class="info-strip">
-                <div><strong>صاحب کالا:</strong> {{ $billing->ownerName() }}</div>
-                <div><strong>نماینده:</strong> {{ $billing->representativeName() ?? '—' }}</div>
-                <div><strong>شماره فیش واریزی:</strong> {{ $billing->receipt_number ?: '—' }}</div>
-                <div><strong>تاریخ فیش:</strong> {{ $billing->receipt_date_shamsi ?: $billing->billing_date_shamsi }}</div>
-                @if($billing->bank_name)
-                    <div><strong>بانک/روش:</strong> {{ $billing->bank_name }}</div>
+                <div><strong>صاحب کالا:</strong> {{ $ownerNamesStr }}</div>
+                <div><strong>نماینده:</strong> {{ $repNameStr }}</div>
+                <div><strong>شماره فیش واریزی:</strong> {{ $receiptNumbersStr }}</div>
+                <div><strong>تاریخ فیش:</strong> {{ $receiptDatesStr }}</div>
+                @if($bankNamesStr !== '')
+                    <div><strong>بانک/روش:</strong> {{ $bankNamesStr }}</div>
                 @endif
-                <div><strong>مبلغ فیش:</strong> {{ number_format($billing->receipt_amount ?? $billing->total_amount) }} ریال</div>
+                <div><strong>مبلغ فیش:</strong> {{ number_format($sumReceiptAmount ?: $sumTotalAmount) }} ریال</div>
                 <div>
                     <span class="status-pill">
-                        وضعیت: تسویه شده
+                        وضعیت درخواست: تسویه کامل ({{ $totalWagonCount }} واگن)
                     </span>
                 </div>
             </div>
@@ -535,13 +581,13 @@
                 </tbody>
                 <tfoot>
                 <tr>
-                    <td colspan="2">جمع کل تسویه:</td>
+                    <td colspan="2">جمع کل درخواست:</td>
                     <td>{{ $totalWagonCount }} واگن</td>
                     <td colspan="4" style="text-align: left; padding-left: 6px;">مجموع تناژ و مبالغ تسویه حساب (ریال):</td>
                     <td>{{ $totalWeightFormatted }} تن</td>
-                    <td class="money-cell">{{ number_format($billing->base_amount) }}</td>
-                    <td class="money-cell">{{ number_format($billing->tax_amount) }}</td>
-                    <td class="money-cell">{{ number_format($billing->total_amount) }}</td>
+                    <td class="money-cell">{{ number_format($sumBaseAmount ?: $billing->base_amount) }}</td>
+                    <td class="money-cell">{{ number_format($sumTaxAmount ?: $billing->tax_amount) }}</td>
+                    <td class="money-cell">{{ number_format($sumTotalAmount ?: $billing->total_amount) }}</td>
                 </tr>
                 </tfoot>
             </table>
@@ -556,11 +602,11 @@
                 <div class="slip-signatures">
                     <div class="sig-box">
                         <div class="sig-title">{{ $sec['sig1'] }}</div>
-                        <div class="sig-line">{{ $billing->representativeName() ?? 'امضا' }}</div>
+                        <div class="sig-line">{{ $repNameStr }}</div>
                     </div>
                     <div class="sig-box">
                         <div class="sig-title">{{ $sec['sig2'] }}</div>
-                        <div class="sig-line">{{ $billing->operator?->name ?? 'امضا' }}</div>
+                        <div class="sig-line">{{ $operatorNameStr }}</div>
                     </div>
                     <div class="sig-box">
                         <div class="sig-title">{{ $sec['sig3'] }}</div>

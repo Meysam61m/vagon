@@ -5,18 +5,34 @@
     @php
         $readyToBillCount = $cargo->wagons->filter(fn($w) => !$w->is_settled && $w->isLoaded() && $w->tariff_id)->count();
         $unsettledCount = $cargo->wagons->where('is_settled', false)->count();
+        $fullySettledCount = $cargo->fullySettledWagonsCount();
+        $totalWagonsCount = $cargo->wagons->count();
+        $allWagonsSettled = $cargo->allWagonsFullySettled();
+        $cargoPrintUrl = \Illuminate\Support\Facades\Route::has('cargo.print')
+            ? route('cargo.print', $cargo)
+            : url('/cargo/'.$cargo->id.'/print');
         $firstSuggestedTariffId = collect($suggestedTariffs ?? [])->filter()->first()
             ?: $cargo->wagons->whereNotNull('tariff_id')->first()?->tariff_id;
         $repOwners = ($cargo->representative?->owners ?? collect())->where('is_active', true)->sortBy('name')->values();
     @endphp
 
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
             <h4 class="mb-0">درخواست بارگیری: {{ $cargo->request_number }}</h4>
             <span class="badge bg-secondary fs-6">{{ $cargo->statusLabel() }}</span>
+            @if($allWagonsSettled)
+                <span class="badge bg-success fs-6">تسویه کامل همه واگن‌ها ({{ $totalWagonsCount }} واگن)</span>
+            @else
+                <span class="badge bg-warning text-dark">تسویه واگن‌های درخواست: {{ $fullySettledCount }} از {{ $totalWagonsCount }}</span>
+            @endif
         </div>
 
         <div class="d-flex gap-2 flex-wrap align-items-center">
+            @if($allWagonsSettled)
+                <a href="{{ $cargoPrintUrl }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm fw-semibold">
+                    چاپ برگه ۴ بخشی درخواست {{ $cargo->request_number }}
+                </a>
+            @endif
             @if($readyToBillCount > 0)
                 @if($cargo->owner_id)
                     <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">

@@ -75,14 +75,30 @@
                         @endif
                     </td>
                     <td class="text-nowrap">
+                        @php
+                            $rowCargos = $billing->items
+                                ->map(fn ($item) => $item->wagon?->cargoRequest)
+                                ->filter()
+                                ->unique('id')
+                                ->values();
+                            $rowSettledCargo = $rowCargos->first(fn ($c) => $c->allWagonsFullySettled());
+                            $rowFirstCargo = $rowCargos->first();
+                            $rowCanPrint = ! $billing->isCancelled() && $billing->isSettled() && ($rowSettledCargo !== null || $rowCargos->isEmpty());
+                        @endphp
                         <a href="{{ route('billing.show', $billing) }}" class="btn btn-sm btn-outline-primary">مشاهده</a>
                         @if(! $billing->isCancelled())
-                            @if($billing->isSettled())
-                                <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener"
+                            @if($rowCanPrint)
+                                <a href="{{ route('billing.print', ['billing' => $billing->id, 'cargo_request_id' => $rowSettledCargo?->id]) }}" target="_blank" rel="noopener"
                                    class="btn btn-sm btn-success fw-semibold">چاپ برگه ۴ بخشی</a>
-                            @else
+                            @elseif(! $billing->isSettled())
                                 <a href="{{ route('billing.show', $billing) }}#settlement-receipt-form"
                                    class="btn btn-sm btn-warning fw-semibold">ثبت فیش و تسویه</a>
+                            @elseif($rowFirstCargo)
+                                <a href="{{ route('cargo.show', $rowFirstCargo) }}"
+                                   class="btn btn-sm btn-outline-warning text-dark"
+                                   title="چاپ برگه ۴ بخشی پس از تسویه تمام واگن‌های درخواست {{ $rowFirstCargo->request_number }} فعال می‌شود">
+                                    تسویه درخواست ({{ $rowFirstCargo->fullySettledWagonsCount() }}/{{ $rowFirstCargo->wagons->count() }})
+                                </a>
                             @endif
                         @endif
                         @if(auth()->user()->isAdmin() && ! $billing->isCancelled())

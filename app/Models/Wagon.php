@@ -75,6 +75,17 @@ class Wagon extends Model
         return $this->loaded_weight !== null;
     }
 
+    /** آیا برای این واگن صورتحساب صادر شده و فیش واریزی آن نیز ثبت و تسویه شده است؟ */
+    public function isFullySettled(): bool
+    {
+        $billing = $this->billingItem?->billing;
+
+        return $this->is_settled
+            && $billing !== null
+            && ! $billing->isCancelled()
+            && $billing->isSettled();
+    }
+
     /** آیا این واگن (شماره واگن یا صاحب کالا) ویرایش شده است؟ */
     public function isOwnerEdited(): bool
     {

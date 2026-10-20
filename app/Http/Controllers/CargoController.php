@@ -47,7 +47,7 @@ class CargoController extends Controller
 
         $queueFilter = $request->string('queue')->toString();
 
-        $cargoRequests = CargoRequest::with(['owner', 'representative.owners', 'wagons.owner'])
+        $cargoRequests = CargoRequest::with(['owner', 'representative.owners', 'wagons.owner', 'wagons.billingItem.billing'])
             ->when($queueFilter === 'my_today', function ($q) {
                 $q->where('operator_id', auth()->id())
                     ->whereDate('created_at', today());
@@ -310,6 +310,49 @@ class CargoController extends Controller
             'owners' => $owners,
             'suggestedTariffs' => $suggestedTariffs,
             'loadingDateShamsi' => JalaliDate::today(),
+        ]);
+    }
+
+    /**
+     * چاپ برگه ۴ بخشی بر اساس شماره درخواست بارگیری (فقط زمانی که تمام واگن‌های درخواست تسویه شده باشند)
+     */
+    public function printSettlement(CargoRequest $cargo)
+    {
+        $cargo->load([
+            'owner',
+            'representative',
+            'operator',
+            'wagons.owner',
+            'wagons.previousOwner',
+            'wagons.tariff',
+            'wagons.billingItem.billing.operator',
+            'wagons.billingItem.billing.representative',
+        ]);
+
+        if (! $cargo->allWagonsFullySettled()) {
+            $settledCount = $cargo->fullySettledWagonsCount();
+            $totalCount = $cargo->wagons->count();
+
+            return redirect()
+                ->route('cargo.show', $cargo)
+                ->with('warning', "ملاک چاپ برگه ۴ بخشی، تسویه کامل همه واگن‌های شماره درخواست است. در درخواست «{$cargo->request_number}» از مجموع {$totalCount} واگن، تاکنون {$settledCount} واگن تسویه شده است.");
+        }
+
+        $primaryBilling = $cargo->wagons
+            ->map(fn (Wagon $w) => $w->billingItem?->billing)
+            ->filter(fn (?Billing $b) => $b !== null && ! $b->isCancelled())
+            ->sortByDesc('id')
+            ->first();
+
+        if (! $primaryBilling) {
+            return redirect()
+                ->route('cargo.show', $cargo)
+                ->with('warning', 'برای این درخواست بارگیری صورتحساب معتبری یافت نشد.');
+        }
+
+        return view('billing.print', [
+            'cargo' => $cargo,
+            'billing' => $primaryBilling,
         ]);
     }
 
