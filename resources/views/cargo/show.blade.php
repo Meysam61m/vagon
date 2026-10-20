@@ -306,15 +306,17 @@
                                     {{ $wagon->loaded_weight }}
                                 @else
                                     <div class="input-group input-group-sm">
-                                        <input type="number" step="0.01" min="0.01" max="200"
+                                        <input type="number" step="0.01" min="0.01"
+                                               max="{{ $selectedTariffObj ? $selectedTariffObj->capacity : 200 }}"
                                                name="loading[{{ $wagon->id }}][weight]"
                                                value="{{ $oldWeight }}"
                                                class="form-control wagon-weight-input @error('loading.'.$wagon->id.'.weight') is-invalid @enderror"
-                                               placeholder="مثلاً 65">
+                                               placeholder="مثلاً {{ $selectedTariffObj ? $selectedTariffObj->capacity : 65 }}">
                                         <button type="button" class="btn btn-outline-secondary fill-row-capacity-btn" title="قرار دادن ظرفیت کامل تعرفه">
                                             کامل
                                         </button>
                                     </div>
+                                    <div class="small text-danger mt-1 d-none" data-capacity-warning></div>
                                     @error('loading.'.$wagon->id.'.weight')
                                         <div class="invalid-feedback d-block">{{ $message }}</div>
                                     @enderror
@@ -458,17 +460,72 @@
             const applyBulkBtn = document.getElementById('apply-bulk-loading-btn');
             const fillAllCapacityBtn = document.getElementById('fill-all-capacity-btn');
 
+            function getRowCapacity(row) {
+                if (!row) return null;
+                const select = row.querySelector('.wagon-tariff-select');
+                if (!select) return null;
+                const opt = select.options[select.selectedIndex];
+                if (!opt || !opt.dataset.capacity) return null;
+                const cap = parseFloat(opt.dataset.capacity);
+                return (!isNaN(cap) && cap > 0) ? cap : null;
+            }
+
+            function syncAndClampRowWeight(row) {
+                if (!row) return;
+                const weightInput = row.querySelector('.wagon-weight-input');
+                const warnEl = row.querySelector('[data-capacity-warning]');
+                if (!weightInput) return;
+
+                const cap = getRowCapacity(row);
+                if (cap !== null) {
+                    weightInput.max = String(cap);
+                    weightInput.placeholder = 'حداکثر ' + cap;
+                    const val = parseFloat(weightInput.value);
+                    if (!isNaN(val) && val > cap) {
+                        weightInput.value = String(cap);
+                        if (warnEl) {
+                            warnEl.textContent = 'حداکثر تناژ مجاز این تعرفه ' + cap + ' تن است.';
+                            warnEl.classList.remove('d-none');
+                        }
+                    } else if (warnEl) {
+                        warnEl.classList.add('d-none');
+                        warnEl.textContent = '';
+                    }
+                } else {
+                    weightInput.max = '200';
+                    if (warnEl) {
+                        warnEl.classList.add('d-none');
+                        warnEl.textContent = '';
+                    }
+                }
+            }
+
             function syncBulkCapacityFromSelect() {
                 if (!bulkTariffSelect || !bulkWeightInput) return;
                 const opt = bulkTariffSelect.options[bulkTariffSelect.selectedIndex];
                 if (opt && opt.dataset.capacity) {
+                    bulkWeightInput.max = opt.dataset.capacity;
                     bulkWeightInput.value = opt.dataset.capacity;
+                } else {
+                    bulkWeightInput.max = '200';
                 }
             }
 
             if (bulkTariffSelect) {
                 bulkTariffSelect.addEventListener('change', syncBulkCapacityFromSelect);
                 syncBulkCapacityFromSelect();
+            }
+
+            if (bulkWeightInput) {
+                bulkWeightInput.addEventListener('input', function () {
+                    if (!bulkTariffSelect) return;
+                    const opt = bulkTariffSelect.options[bulkTariffSelect.selectedIndex];
+                    const cap = (opt && opt.dataset.capacity) ? parseFloat(opt.dataset.capacity) : null;
+                    const val = parseFloat(bulkWeightInput.value);
+                    if (cap !== null && !isNaN(cap) && !isNaN(val) && val > cap) {
+                        bulkWeightInput.value = String(cap);
+                    }
+                });
             }
 
             // اعمال یکجای تعرفه و وزن به تمام واگن‌های تسویه‌نشده
@@ -484,14 +541,17 @@
                         const row = select.closest('tr');
                         const weightInput = row ? row.querySelector('.wagon-weight-input') : null;
                         if (weightInput) {
+                            const opt = select.options[select.selectedIndex];
+                            const cap = (opt && opt.dataset.capacity) ? parseFloat(opt.dataset.capacity) : null;
                             if (weightVal) {
-                                weightInput.value = weightVal;
-                            } else {
-                                const opt = select.options[select.selectedIndex];
-                                if (opt && opt.dataset.capacity) {
-                                    weightInput.value = opt.dataset.capacity;
-                                }
+                                const parsedW = parseFloat(weightVal);
+                                weightInput.value = (cap !== null && !isNaN(parsedW) && parsedW > cap)
+                                    ? String(cap)
+                                    : weightVal;
+                            } else if (cap !== null) {
+                                weightInput.value = String(cap);
                             }
+                            syncAndClampRowWeight(row);
                             weightInput.dispatchEvent(new Event('input', { bubbles: true }));
                         }
                     });
@@ -507,6 +567,7 @@
                         const weightInput = row ? row.querySelector('.wagon-weight-input') : null;
                         if (weightInput && opt && opt.dataset.capacity) {
                             weightInput.value = opt.dataset.capacity;
+                            syncAndClampRowWeight(row);
                             weightInput.dispatchEvent(new Event('input', { bubbles: true }));
                         }
                     });
@@ -515,6 +576,9 @@
 
             // با تغییر تعرفه هر ردیف، ظرفیت کامل آن تعرفه در وزن همان ردیف (و ردیف‌های خالی بعدی) قرار می‌گیرد
             document.querySelectorAll('.wagon-tariff-select').forEach(function (select) {
+                const currentRow = select.closest('tr');
+                syncAndClampRowWeight(currentRow);
+
                 select.addEventListener('change', function () {
                     const opt = select.options[select.selectedIndex];
                     const row = select.closest('tr');
@@ -522,7 +586,10 @@
 
                     if (weightInput && opt && opt.dataset.capacity) {
                         weightInput.value = opt.dataset.capacity;
+                        syncAndClampRowWeight(row);
                         weightInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        syncAndClampRowWeight(row);
                     }
 
                     // انتشار خودکار تعرفه به ردیف‌های بعدی که هنوز تعرفه ندارند
@@ -534,11 +601,23 @@
                             nextSelect.value = select.value;
                             if (nextWeight && (!nextWeight.value || nextWeight.value.trim() === '') && opt && opt.dataset.capacity) {
                                 nextWeight.value = opt.dataset.capacity;
+                                syncAndClampRowWeight(nextRow);
                                 nextWeight.dispatchEvent(new Event('input', { bubbles: true }));
                             }
                         }
                         nextRow = nextRow.nextElementSibling;
                     }
+                });
+            });
+
+            // جلوگیری لحظه‌ای از ورود تناژ بیشتر از ظرفیت تعرفه در هر ردیف
+            document.querySelectorAll('.wagon-weight-input').forEach(function (weightInput) {
+                const row = weightInput.closest('tr');
+                weightInput.addEventListener('input', function () {
+                    syncAndClampRowWeight(row);
+                });
+                weightInput.addEventListener('change', function () {
+                    syncAndClampRowWeight(row);
                 });
             });
 

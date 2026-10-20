@@ -270,7 +270,14 @@
                     const opt = select.options[select.selectedIndex];
                     const rate = parseFloat(opt.dataset.rate || '0');
                     const cap = parseFloat(opt.dataset.capacity || '1');
-                    const w = parseFloat(weightInput.value || '0');
+                    if (cap > 0) {
+                        weightInput.max = String(cap);
+                    }
+                    let w = parseFloat(weightInput.value || '0');
+                    if (!isNaN(w) && cap > 0 && w > cap) {
+                        w = cap;
+                        weightInput.value = String(cap);
+                    }
 
                     const base = cap > 0 ? Math.round((w / cap) * rate) : 0;
                     const tax = Math.round(base * (taxPct / 100));

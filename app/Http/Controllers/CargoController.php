@@ -616,6 +616,12 @@ class CargoController extends Controller
                 }
 
                 $weight = (float) $wagon->loaded_weight;
+                if ($weight > (float) $tariff->capacity) {
+                    throw ValidationException::withMessages([
+                        'wagons' => "وزن بارگیری واگن {$wagon->wagon_number} ({$weight} تن) نمی‌تواند بیشتر از ظرفیت تعرفه ({$tariff->capacity} تن) باشد.",
+                    ]);
+                }
+
                 $baseCost = BillingItem::calculateBaseCost($weight, (float) $tariff->capacity, (float) $tariff->rate);
                 $itemTax = BillingItem::calculateTax($baseCost, $taxPercentage);
 
