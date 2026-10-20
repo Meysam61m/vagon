@@ -26,10 +26,17 @@
                 @error('phone')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
             <div class="col-12">
-                <label class="form-label">صاحبان کالای مرتبط</label>
-                <div class="row g-2">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <label class="form-label mb-0">صاحبان کالای مرتبط</label>
+                    <input type="text"
+                           class="form-control form-control-sm"
+                           style="max-width: 280px;"
+                           data-owner-checkbox-search="#rep-create-owners-list"
+                           placeholder="جستجوی نام صاحب کالا…">
+                </div>
+                <div class="row g-2" id="rep-create-owners-list">
                     @foreach($owners as $owner)
-                        <div class="col-md-4">
+                        <div class="col-md-4" data-owner-checkbox-item>
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" name="owner_ids[]"
                                        value="{{ $owner->id }}" id="owner_{{ $owner->id }}"

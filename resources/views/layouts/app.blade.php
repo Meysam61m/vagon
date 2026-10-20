@@ -10,6 +10,86 @@
     <link rel="stylesheet" href="{{ asset('vendor/fonts/vazirmatn.css') }}">
     <link rel="stylesheet" href="{{ asset('vendor/persian-datepicker/persian-datepicker.min.css') }}">
     <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+    <style>
+        .searchable-select-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .searchable-select-native {
+            position: absolute !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 1px !important;
+            height: 1px !important;
+            bottom: 0;
+            right: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+        }
+
+        .searchable-select-trigger {
+            text-align: right;
+            cursor: pointer;
+            user-select: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            background-color: #fff;
+        }
+
+        .searchable-select-dropdown {
+            position: absolute;
+            top: calc(100% + 2px);
+            right: 0;
+            left: 0;
+            z-index: 1060;
+            background: #fff;
+            border: 1px solid #ced4da;
+            border-radius: 0.375rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            display: none;
+            min-width: 220px;
+        }
+
+        .searchable-select-dropdown.show {
+            display: block;
+        }
+
+        .searchable-select-search-wrap {
+            padding: 6px;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+            border-top-left-radius: 0.375rem;
+            border-top-right-radius: 0.375rem;
+        }
+
+        .searchable-select-options {
+            max-height: 230px;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+
+        .searchable-select-option {
+            padding: 6px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #212529;
+            transition: background-color 0.1s ease;
+        }
+
+        .searchable-select-option:hover,
+        .searchable-select-option.active {
+            background-color: #e9ecef;
+        }
+
+        .searchable-select-option.selected {
+            background-color: #0d6efd;
+            color: #fff;
+            font-weight: 600;
+        }
+    </style>
     @stack('styles')
 </head>
 <body>
@@ -179,6 +259,270 @@
                 });
             });
         }
+
+        // تبدیل خودکار فیلدهای انتخاب صاحب کالا و نماینده به دراپ‌داون قابل جستجو (Searchable Select)
+        const normalizePersian = function (str) {
+            return String(str || '')
+                .replace(/ي/g, 'ی')
+                .replace(/ك/g, 'ک')
+                .replace(/\u200c/g, ' ')
+                .replace(/[۰-۹]/g, function (d) { return d.charCodeAt(0) - 1776; })
+                .replace(/[٠-٩]/g, function (d) { return d.charCodeAt(0) - 1632; })
+                .toLowerCase()
+                .trim();
+        };
+
+        const nativeSelectValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+
+        function initSearchableSelect(select) {
+            if (!select || select.dataset.searchableInitialized === '1') {
+                return;
+            }
+            select.dataset.searchableInitialized = '1';
+
+            const container = document.createElement('div');
+            container.className = 'searchable-select-container';
+            if (select.style.minWidth) {
+                container.style.minWidth = select.style.minWidth;
+            }
+            if (select.style.width) {
+                container.style.width = select.style.width;
+            }
+
+            const trigger = document.createElement('div');
+            trigger.tabIndex = 0;
+            trigger.className = 'form-select searchable-select-trigger';
+            if (select.classList.contains('form-select-sm')) {
+                trigger.classList.add('form-select-sm');
+            }
+            if (select.classList.contains('py-0')) {
+                trigger.classList.add('py-0');
+            }
+            if (select.classList.contains('is-invalid')) {
+                trigger.classList.add('is-invalid');
+            }
+            if (select.style.height) {
+                trigger.style.height = select.style.height;
+            }
+            if (select.style.fontSize) {
+                trigger.style.fontSize = select.style.fontSize;
+            }
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'searchable-select-dropdown';
+
+            const searchWrap = document.createElement('div');
+            searchWrap.className = 'searchable-select-search-wrap';
+
+            const searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.className = 'form-control form-control-sm searchable-select-input';
+            searchInput.placeholder = 'جستجو با تایپ نام…';
+            searchInput.autocomplete = 'off';
+            searchWrap.appendChild(searchInput);
+
+            const optionsList = document.createElement('div');
+            optionsList.className = 'searchable-select-options';
+
+            dropdown.appendChild(searchWrap);
+            dropdown.appendChild(optionsList);
+
+            select.parentNode.insertBefore(container, select);
+            container.appendChild(select);
+            container.appendChild(trigger);
+            container.appendChild(dropdown);
+            select.classList.add('searchable-select-native');
+            select.tabIndex = -1;
+
+            function syncTriggerLabel() {
+                const selectedOpt = select.options[select.selectedIndex];
+                trigger.textContent = selectedOpt ? selectedOpt.textContent.trim() : 'انتخاب کنید…';
+                trigger.title = trigger.textContent;
+            }
+
+            function renderOptions(filterQuery) {
+                const q = normalizePersian(filterQuery || '');
+                optionsList.innerHTML = '';
+                let visibleCount = 0;
+
+                Array.from(select.options).forEach(function (opt) {
+                    if (opt.hidden) {
+                        return;
+                    }
+                    const text = opt.textContent.trim();
+                    if (q !== '' && !normalizePersian(text).includes(q)) {
+                        return;
+                    }
+
+                    const item = document.createElement('div');
+                    item.className = 'searchable-select-option';
+                    if (String(opt.value) === String(select.value)) {
+                        item.classList.add('selected', 'active');
+                    } else if (visibleCount === 0 && q !== '') {
+                        item.classList.add('active');
+                    }
+                    item.dataset.value = opt.value;
+                    item.textContent = text;
+
+                    item.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        selectValue(opt.value);
+                    });
+
+                    optionsList.appendChild(item);
+                    visibleCount++;
+                });
+
+                if (visibleCount === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-muted small p-2 text-center';
+                    empty.textContent = 'موردی یافت نشد';
+                    optionsList.appendChild(empty);
+                }
+            }
+
+            function selectValue(val) {
+                const changed = String(select.value) !== String(val);
+                if (nativeSelectValueDesc && nativeSelectValueDesc.set) {
+                    nativeSelectValueDesc.set.call(select, val);
+                } else {
+                    select.value = val;
+                }
+                syncTriggerLabel();
+                closeDropdown();
+                if (changed) {
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }
+
+            function openDropdown() {
+                document.querySelectorAll('.searchable-select-dropdown.show').forEach(function (el) {
+                    if (el !== dropdown) {
+                        el.classList.remove('show');
+                    }
+                });
+                searchInput.value = '';
+                renderOptions('');
+                dropdown.classList.add('show');
+                setTimeout(function () {
+                    searchInput.focus();
+                    const selectedItem = optionsList.querySelector('.searchable-select-option.selected');
+                    if (selectedItem) {
+                        selectedItem.scrollIntoView({ block: 'nearest' });
+                    }
+                }, 10);
+            }
+
+            function closeDropdown() {
+                dropdown.classList.remove('show');
+            }
+
+            trigger.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (dropdown.classList.contains('show')) {
+                    closeDropdown();
+                } else {
+                    openDropdown();
+                }
+            });
+
+            trigger.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    openDropdown();
+                }
+            });
+
+            searchInput.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+
+            searchInput.addEventListener('input', function () {
+                renderOptions(searchInput.value);
+            });
+
+            searchInput.addEventListener('keydown', function (e) {
+                const items = Array.from(optionsList.querySelectorAll('.searchable-select-option'));
+                let activeIdx = items.findIndex(function (el) { return el.classList.contains('active'); });
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (items.length === 0) return;
+                    items.forEach(function (el) { el.classList.remove('active'); });
+                    activeIdx = (activeIdx + 1) % items.length;
+                    items[activeIdx].classList.add('active');
+                    items[activeIdx].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (items.length === 0) return;
+                    items.forEach(function (el) { el.classList.remove('active'); });
+                    activeIdx = activeIdx <= 0 ? items.length - 1 : activeIdx - 1;
+                    items[activeIdx].classList.add('active');
+                    items[activeIdx].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const target = activeIdx >= 0 ? items[activeIdx] : items[0];
+                    if (target) {
+                        selectValue(target.dataset.value);
+                    }
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeDropdown();
+                    trigger.focus();
+                }
+            });
+
+            // رهگیری تغییرات برنامه‌نویسی روی select.value و گزینه‌ها
+            if (nativeSelectValueDesc && nativeSelectValueDesc.get && nativeSelectValueDesc.set) {
+                Object.defineProperty(select, 'value', {
+                    configurable: true,
+                    get: function () {
+                        return nativeSelectValueDesc.get.call(this);
+                    },
+                    set: function (v) {
+                        nativeSelectValueDesc.set.call(this, v);
+                        syncTriggerLabel();
+                    }
+                });
+            }
+
+            select.addEventListener('change', syncTriggerLabel);
+
+            const observer = new MutationObserver(function () {
+                syncTriggerLabel();
+                if (dropdown.classList.contains('show')) {
+                    renderOptions(searchInput.value);
+                }
+            });
+            observer.observe(select, { childList: true, subtree: true, attributes: true });
+
+            syncTriggerLabel();
+        }
+
+        document.querySelectorAll('select[name="owner_id"], select[name="representative_id"], select[data-searchable="true"]').forEach(initSearchableSelect);
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.searchable-select-container')) {
+                document.querySelectorAll('.searchable-select-dropdown.show').forEach(function (el) {
+                    el.classList.remove('show');
+                });
+            }
+        });
+
+        // جستجوی لحظه‌ای چک‌باکس‌های صاحبان کالا در فرم افزودن/ویرایش نماینده
+        document.querySelectorAll('[data-owner-checkbox-search]').forEach(function (searchBox) {
+            const containerSelector = searchBox.getAttribute('data-owner-checkbox-search');
+            const listContainer = containerSelector ? document.querySelector(containerSelector) : null;
+            if (!listContainer) return;
+
+            searchBox.addEventListener('input', function () {
+                const q = normalizePersian(searchBox.value);
+                listContainer.querySelectorAll('[data-owner-checkbox-item]').forEach(function (item) {
+                    const labelText = normalizePersian(item.textContent || '');
+                    item.style.display = (q === '' || labelText.includes(q)) ? '' : 'none';
+                });
+            });
+        });
     });
 </script>
 @stack('scripts')
