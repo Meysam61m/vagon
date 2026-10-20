@@ -463,11 +463,15 @@
             <div class="info-strip">
                 <div><strong>صاحب کالا:</strong> {{ $billing->ownerName() }}</div>
                 <div><strong>نماینده:</strong> {{ $billing->representativeName() ?? '—' }}</div>
-                <div><strong>تعداد کل واگن:</strong> {{ $totalWagonCount }} دستگاه</div>
-                <div><strong>مجموع تناژ:</strong> {{ $totalWeightFormatted }} تن</div>
+                <div><strong>شماره فیش واریزی:</strong> {{ $billing->receipt_number ?: '—' }}</div>
+                <div><strong>تاریخ فیش:</strong> {{ $billing->receipt_date_shamsi ?: $billing->billing_date_shamsi }}</div>
+                @if($billing->bank_name)
+                    <div><strong>بانک/روش:</strong> {{ $billing->bank_name }}</div>
+                @endif
+                <div><strong>مبلغ فیش:</strong> {{ number_format($billing->receipt_amount ?? $billing->total_amount) }} ریال</div>
                 <div>
                     <span class="status-pill">
-                        وضعیت: {{ $billing->isCancelled() ? 'لغو شده' : 'تسویه شده' }}
+                        وضعیت: تسویه شده
                     </span>
                 </div>
             </div>

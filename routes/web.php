@@ -51,6 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/billing/create', [BillingController::class, 'create'])->name('billing.create');
     Route::post('/billing', [BillingController::class, 'store'])->name('billing.store');
     Route::get('/billing/{billing}', [BillingController::class, 'show'])->name('billing.show');
+    Route::post('/billing/{billing}/settle', [BillingController::class, 'settle'])->name('billing.settle');
     Route::get('/billing/{billing}/print', [BillingController::class, 'print'])->name('billing.print');
     Route::post('/billing/{billing}/cancel', [BillingController::class, 'cancel'])
         ->middleware('role:admin')

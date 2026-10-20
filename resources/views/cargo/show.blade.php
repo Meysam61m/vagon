@@ -19,16 +19,10 @@
         <div class="d-flex gap-2 flex-wrap align-items-center">
             @if($readyToBillCount > 0)
                 @if($cargo->owner_id)
-                    <form method="POST" action="{{ route('cargo.quick-bill', ['cargo' => $cargo, 'print' => 1]) }}" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-success btn-sm fw-semibold">
-                            صدور و چاپ فوری صورتحساب ({{ $readyToBillCount }} واگن)
-                        </button>
-                    </form>
                     <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline">
                         @csrf
-                        <button type="submit" class="btn btn-outline-success btn-sm">
-                            صدور صورتحساب
+                        <button type="submit" class="btn btn-success btn-sm fw-semibold">
+                            صدور صورتحساب جهت ثبت فیش و تسویه ({{ $readyToBillCount }} واگن)
                         </button>
                     </form>
                 @else
@@ -40,11 +34,8 @@
                                 <option value="{{ $owner->id }}" @selected($repOwners->count() === 1)>{{ $owner->name }}</option>
                             @endforeach
                         </select>
-                        <button type="submit" name="print" value="1" class="btn btn-success btn-sm fw-semibold text-nowrap">
-                            تعیین صاحب کالا + چاپ فاکتور
-                        </button>
-                        <button type="submit" class="btn btn-outline-success btn-sm text-nowrap">
-                            صدور فاکتور
+                        <button type="submit" class="btn btn-success btn-sm fw-semibold text-nowrap">
+                            تعیین صاحب کالا و صدور صورتحساب
                         </button>
                     </form>
                 @endif
@@ -72,8 +63,6 @@
             <div class="mt-3"><strong>توضیحات:</strong> {{ $cargo->notes }}</div>
         @endif
     </div>
-
-    @include('partials.tariff-calculator', ['tariffs' => $tariffs ?? collect()])
 
     {{-- فرم افزودن واگن جدید به همین درخواست بارگیری --}}
     @php
@@ -364,11 +353,8 @@
             </div>
 
             <div class="d-flex gap-2 flex-wrap align-items-center">
-                <button class="btn btn-success fw-semibold" type="submit" name="issue_billing" value="print">
-                    ذخیره بارگیری و چاپ فوری صورتحساب (۱ کلیک)
-                </button>
-                <button class="btn btn-outline-success fw-semibold" type="submit" name="issue_billing" value="1">
-                    ذخیره بارگیری و صدور صورتحساب
+                <button class="btn btn-success fw-semibold" type="submit" name="issue_billing" value="1">
+                    ذخیره بارگیری و صدور صورتحساب (جهت ثبت فیش و تسویه)
                 </button>
                 <button class="btn btn-primary" type="submit" name="issue_billing" value="0">
                     فقط ذخیره بارگیری

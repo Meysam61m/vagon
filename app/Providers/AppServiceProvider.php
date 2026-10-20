@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TariffController;
@@ -106,7 +107,7 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
-            if (! Route::has('cargo.quick-bill') || ! Route::has('cargo.wagons.store') || ! Route::has('calculator.index')) {
+            if (! Route::has('cargo.quick-bill') || ! Route::has('cargo.wagons.store') || ! Route::has('calculator.index') || ! Route::has('billing.settle')) {
                 Route::middleware(['web', 'auth'])->group(function () {
                     Route::get('/calculator', [CargoController::class, 'calculator'])
                         ->name('calculator.index');
@@ -114,6 +115,8 @@ class AppServiceProvider extends ServiceProvider
                         ->name('cargo.wagons.store');
                     Route::post('/cargo/{cargo}/quick-bill', [CargoController::class, 'quickBill'])
                         ->name('cargo.quick-bill');
+                    Route::post('/billing/{billing}/settle', [BillingController::class, 'settle'])
+                        ->name('billing.settle');
                 });
                 $registered = true;
             }
@@ -149,7 +152,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v27';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v28';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -165,7 +168,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v27');
+                @file_put_contents($versionMarker, 'v28');
             }
         }
     }
@@ -185,6 +188,26 @@ class AppServiceProvider extends ServiceProvider
         try {
             if (! Schema::hasTable('wagons')) {
                 return;
+            }
+
+            if (Schema::hasTable('billings') && ! Schema::hasColumn('billings', 'receipt_number')) {
+                Schema::table('billings', function (Blueprint $table) {
+                    if (! Schema::hasColumn('billings', 'receipt_number')) {
+                        $table->string('receipt_number', 100)->nullable()->after('total_amount');
+                    }
+                    if (! Schema::hasColumn('billings', 'receipt_date_shamsi')) {
+                        $table->string('receipt_date_shamsi', 20)->nullable()->after('receipt_number');
+                    }
+                    if (! Schema::hasColumn('billings', 'bank_name')) {
+                        $table->string('bank_name', 100)->nullable()->after('receipt_date_shamsi');
+                    }
+                    if (! Schema::hasColumn('billings', 'receipt_amount')) {
+                        $table->unsignedBigInteger('receipt_amount')->nullable()->after('bank_name');
+                    }
+                    if (! Schema::hasColumn('billings', 'settled_at')) {
+                        $table->timestamp('settled_at')->nullable()->after('receipt_amount');
+                    }
+                });
             }
 
             if (! Schema::hasColumn('wagons', 'cargo_description')) {

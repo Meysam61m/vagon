@@ -67,14 +67,24 @@
                     <td class="money">{{ number_format($billing->tax_amount) }} ({{ $billing->tax_percentage }}٪)</td>
                     <td class="money fw-bold">{{ number_format($billing->total_amount) }}</td>
                     <td>
-                        <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : 'bg-success' }}">
+                        <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : ($billing->isSettled() ? 'bg-success' : 'bg-warning text-dark') }}">
                             {{ $billing->statusLabel() }}
                         </span>
+                        @if($billing->receipt_number)
+                            <div class="small text-muted font-monospace mt-1">فیش: {{ $billing->receipt_number }}</div>
+                        @endif
                     </td>
                     <td class="text-nowrap">
                         <a href="{{ route('billing.show', $billing) }}" class="btn btn-sm btn-outline-primary">مشاهده</a>
-                        <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener"
-                           class="btn btn-sm btn-outline-secondary">چاپ</a>
+                        @if(! $billing->isCancelled())
+                            @if($billing->isSettled())
+                                <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener"
+                                   class="btn btn-sm btn-success fw-semibold">چاپ برگه ۴ بخشی</a>
+                            @else
+                                <a href="{{ route('billing.show', $billing) }}#settlement-receipt-form"
+                                   class="btn btn-sm btn-warning fw-semibold">ثبت فیش و تسویه</a>
+                            @endif
+                        @endif
                         @if(auth()->user()->isAdmin() && ! $billing->isCancelled())
                             <form action="{{ route('billing.cancel', $billing) }}" method="POST" class="d-inline"
                                   onsubmit="return confirm('صورتحساب لغو شود؟ واگن‌ها آزاد می‌شوند و امکان صدور مجدد فراهم می‌شود.');">

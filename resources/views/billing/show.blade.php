@@ -2,13 +2,21 @@
 @section('title', 'جزئیات صورتحساب')
 
 @section('content')
+    @php
+        $defaultReceiptDate = $billing->receipt_date_shamsi
+            ?: ($todayShamsi ?? \App\Support\JalaliDate::today());
+        $settleUrl = \Illuminate\Support\Facades\Route::has('billing.settle')
+            ? route('billing.settle', $billing)
+            : url('/billing/'.$billing->id.'/settle');
+    @endphp
+
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div class="d-flex align-items-center gap-3">
             <img src="{{ asset('images/logo.png') }}" alt="لوگو" class="bg-white border rounded p-1 shadow-sm" style="height: 46px; width: auto;">
             <div>
                 <h4 class="mb-0">
                     صورتحساب: {{ $billing->billing_number }}
-                    <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : 'bg-success' }} fs-6 align-middle">
+                    <span class="badge {{ $billing->isCancelled() ? 'bg-secondary' : ($billing->isSettled() ? 'bg-success' : 'bg-warning text-dark') }} fs-6 align-middle">
                         {{ $billing->statusLabel() }}
                     </span>
                 </h4>
@@ -16,9 +24,19 @@
             </div>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary fw-semibold">
-                چاپ برگه ۴ بخشی تسویه حساب
-            </a>
+            @if(! $billing->isCancelled())
+                @if($billing->isSettled())
+                    <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-primary fw-semibold">
+                        چاپ برگه ۴ بخشی تسویه حساب
+                    </a>
+                @else
+                    <a href="#settlement-receipt-form"
+                       class="btn btn-warning fw-semibold"
+                       onclick="setTimeout(function(){ var el = document.getElementById('receipt_number'); if(el) el.focus(); }, 100);">
+                        ثبت فیش واریزی جهت چاپ برگه ۴ بخشی
+                    </a>
+                @endif
+            @endif
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary">
                 + ثبت درخواست جدید
             </a>
@@ -34,6 +52,163 @@
             @endif
         </div>
     </div>
+
+    @if(! $billing->isCancelled())
+        <datalist id="common-banks-list">
+            <option value="بانک ملی ایران"></option>
+            <option value="بانک ملت"></option>
+            <option value="بانک صادرات ایران"></option>
+            <option value="بانک تجارت"></option>
+            <option value="بانک سپه"></option>
+            <option value="بانک رفاه کارگران"></option>
+            <option value="کارتخوان (POS)"></option>
+            <option value="پایا / ساتنا"></option>
+        </datalist>
+
+        @if(! $billing->isSettled())
+            <div class="card border-warning border-2 shadow-sm p-4 mb-4" id="settlement-receipt-form">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <div>
+                        <h5 class="mb-1 fw-bold text-dark">
+                            ثبت اطلاعات فیش واریزی و تسویه حساب (پیشنیاز چاپ برگه ۴ بخشی)
+                        </h5>
+                        <div class="text-muted small">
+                            مبلغ قابل پرداخت این صورتحساب <strong class="text-dark money">{{ number_format($billing->total_amount) }} ریال</strong> می‌باشد. پس از وارد کردن مشخصات فیش واریزی، بلافاصله برگه ۴ بخشی تسویه حساب آماده چاپ خواهد شد.
+                        </div>
+                    </div>
+                    <span class="badge bg-warning text-dark fs-6">در انتظار ثبت فیش واریزی</span>
+                </div>
+
+                <form method="POST" action="{{ $settleUrl }}">
+                    @csrf
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold" for="receipt_number">
+                                شماره فیش واریزی / کد رهگیری <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   name="receipt_number"
+                                   id="receipt_number"
+                                   value="{{ old('receipt_number', $billing->receipt_number) }}"
+                                   class="form-control font-monospace @error('receipt_number') is-invalid @enderror"
+                                   placeholder="شماره فیش یا شناسه پرداخت"
+                                   autofocus
+                                   required>
+                            @error('receipt_number')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold" for="receipt_date_shamsi">
+                                تاریخ واریز (شمسی) <span class="text-danger">*</span>
+                            </label>
+                            <input type="text"
+                                   name="receipt_date_shamsi"
+                                   id="receipt_date_shamsi"
+                                   value="{{ old('receipt_date_shamsi', $defaultReceiptDate) }}"
+                                   class="form-control jalali-datepicker @error('receipt_date_shamsi') is-invalid @enderror"
+                                   autocomplete="off"
+                                   required>
+                            @error('receipt_date_shamsi')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold" for="bank_name">
+                                نام بانک / روش واریز
+                            </label>
+                            <input type="text"
+                                   name="bank_name"
+                                   id="bank_name"
+                                   list="common-banks-list"
+                                   value="{{ old('bank_name', $billing->bank_name) }}"
+                                   class="form-control @error('bank_name') is-invalid @enderror"
+                                   placeholder="مثلاً بانک ملی / کارتخوان / پایا">
+                            @error('bank_name')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold" for="receipt_amount">
+                                مبلغ فیش (ریال)
+                            </label>
+                            <input type="number"
+                                   name="receipt_amount"
+                                   id="receipt_amount"
+                                   min="0"
+                                   step="1"
+                                   value="{{ old('receipt_amount', $billing->receipt_amount ?? $billing->total_amount) }}"
+                                   class="form-control font-monospace @error('receipt_amount') is-invalid @enderror">
+                            @error('receipt_amount')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-success fw-semibold w-100">
+                                ثبت فیش و چاپ برگه ۴ بخشی
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        @else
+            <div class="card border-success p-3 mb-4 bg-success-subtle" id="settlement-receipt-form">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex flex-wrap gap-4 align-items-center small">
+                        <span class="badge bg-success fs-6">تسویه حساب و فیش واریزی ثبت شده</span>
+                        <div><strong>شماره فیش / رهگیری:</strong> <span class="font-monospace fw-bold">{{ $billing->receipt_number }}</span></div>
+                        <div><strong>تاریخ فیش واریزی:</strong> {{ $billing->receipt_date_shamsi ?: '—' }}</div>
+                        <div><strong>بانک / روش واریز:</strong> {{ $billing->bank_name ?: '—' }}</div>
+                        <div><strong>مبلغ فیش:</strong> <span class="money fw-bold">{{ number_format($billing->receipt_amount ?? $billing->total_amount) }} ریال</span></div>
+                        @if($billing->settled_at)
+                            <div><strong>زمان ثبت تسویه:</strong> @jdatetime($billing->settled_at)</div>
+                        @endif
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('billing.print', $billing) }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary fw-semibold">
+                            چاپ مجدد برگه ۴ بخشی
+                        </a>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-receipt-collapse">
+                            ویرایش فیش واریزی
+                        </button>
+                    </div>
+                </div>
+
+                <div class="collapse mt-3" id="edit-receipt-collapse">
+                    <form method="POST" action="{{ $settleUrl }}" class="card card-body bg-white p-3">
+                        @csrf
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold mb-1">شماره فیش واریزی / کد رهگیری *</label>
+                                <input type="text" name="receipt_number" value="{{ old('receipt_number', $billing->receipt_number) }}" class="form-control form-control-sm font-monospace" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-semibold mb-1">تاریخ واریز (شمسی) *</label>
+                                <input type="text" name="receipt_date_shamsi" value="{{ old('receipt_date_shamsi', $defaultReceiptDate) }}" class="form-control form-control-sm jalali-datepicker" autocomplete="off" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold mb-1">نام بانک / روش واریز</label>
+                                <input type="text" name="bank_name" list="common-banks-list" value="{{ old('bank_name', $billing->bank_name) }}" class="form-control form-control-sm">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-semibold mb-1">مبلغ فیش (ریال)</label>
+                                <input type="number" name="receipt_amount" min="0" step="1" value="{{ old('receipt_amount', $billing->receipt_amount ?? $billing->total_amount) }}" class="form-control form-control-sm font-monospace">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-sm btn-success w-100 fw-semibold">
+                                    به‌روزرسانی و چاپ
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        @endif
+    @endif
 
     <div class="card p-4 mb-4">
         <div class="row g-3">

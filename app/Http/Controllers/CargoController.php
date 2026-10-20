@@ -456,8 +456,8 @@ class CargoController extends Controller
             $billing = $this->issueInvoiceForCargoRequest($cargo, $normalizedDate);
 
             return redirect()
-                ->route('billing.print', $billing)
-                ->with('success', "اطلاعات بارگیری ثبت شد و صورتحساب «{$billing->billing_number}» صادر گردید.");
+                ->route('billing.show', $billing)
+                ->with('success', "اطلاعات بارگیری ثبت شد و صورتحساب «{$billing->billing_number}» صادر گردید. لطفاً اطلاعات فیش واریزی را وارد و تسویه حساب را ثبت کنید تا برگه ۴ بخشی چاپ شود.");
         }
 
         return redirect()
@@ -509,8 +509,8 @@ class CargoController extends Controller
         $billing = $this->issueInvoiceForCargoRequest($cargo, JalaliDate::today());
 
         return redirect()
-            ->route('billing.print', $billing)
-            ->with('success', "صورتحساب «{$billing->billing_number}» با موفقیت صادر شد.");
+            ->route('billing.show', $billing)
+            ->with('success', "صورتحساب «{$billing->billing_number}» صادر شد. لطفاً اطلاعات فیش واریزی را وارد و تسویه حساب را ثبت کنید تا برگه ۴ بخشی چاپ شود.");
     }
 
     /**

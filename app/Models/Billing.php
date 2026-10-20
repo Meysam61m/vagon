@@ -22,7 +22,9 @@ class Billing extends Model
         'billing_number', 'owner_id', 'representative_id', 'operator_id',
         'owner_name', 'representative_name',
         'billing_date', 'billing_date_shamsi', 'base_amount', 'tax_percentage',
-        'tax_amount', 'total_amount', 'status', 'notes', 'cancelled_at',
+        'tax_amount', 'total_amount', 'receipt_number', 'receipt_date_shamsi',
+        'bank_name', 'receipt_amount', 'settled_at',
+        'status', 'notes', 'cancelled_at',
     ];
 
     protected function casts(): array
@@ -30,10 +32,12 @@ class Billing extends Model
         return [
             'billing_date' => 'date',
             'cancelled_at' => 'datetime',
+            'settled_at' => 'datetime',
             'base_amount' => 'integer',
             'tax_percentage' => 'decimal:2',
             'tax_amount' => 'integer',
             'total_amount' => 'integer',
+            'receipt_amount' => 'integer',
         ];
     }
 
@@ -62,9 +66,23 @@ class Billing extends Model
         return $this->status === self::STATUS_CANCELLED;
     }
 
+    public function isSettled(): bool
+    {
+        return ! $this->isCancelled()
+            && ($this->settled_at !== null || trim((string) $this->receipt_number) !== '');
+    }
+
     public function statusLabel(): string
     {
-        return self::STATUS_LABELS[$this->status] ?? $this->status;
+        if ($this->isCancelled()) {
+            return 'لغو شده';
+        }
+
+        if ($this->isSettled()) {
+            return 'تسویه شده';
+        }
+
+        return 'در انتظار ثبت فیش واریزی';
     }
 
     /** نام صاحب کالا در لحظه صدور (snapshot) با بازگشت به رابطه در رکوردهای قدیمی */

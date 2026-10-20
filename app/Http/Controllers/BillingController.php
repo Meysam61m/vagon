@@ -357,15 +357,53 @@ class BillingController extends Controller
             return $billing;
         });
 
-        if ($request->input('after_action') === 'show') {
+        return redirect()
+            ->route('billing.show', $billing)
+            ->with('success', 'صورتحساب با موفقیت صادر شد. لطفاً اطلاعات فیش واریزی را وارد و تسویه حساب را ثبت کنید تا برگه ۴ بخشی چاپ شود.');
+    }
+
+    /**
+     * ثبت اطلاعات فیش واریزی و تسویه حساب صورتحساب و هدایت مستقیم به صفحه چاپ برگه ۴ بخشی
+     */
+    public function settle(Request $request, Billing $billing)
+    {
+        if ($billing->isCancelled()) {
             return redirect()
                 ->route('billing.show', $billing)
-                ->with('success', 'صورتحساب با موفقیت صادر شد.');
+                ->with('error', 'این صورتحساب لغو شده است و امکان ثبت فیش واریزی برای آن وجود ندارد.');
         }
+
+        $data = $request->validate([
+            'receipt_number' => ['required', 'string', 'max:100'],
+            'receipt_date_shamsi' => ['required', 'string', 'max:20'],
+            'bank_name' => ['nullable', 'string', 'max:100'],
+            'receipt_amount' => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'receipt_number.required' => 'وارد کردن شماره فیش واریزی / کد رهگیری الزامی است.',
+            'receipt_date_shamsi.required' => 'وارد کردن تاریخ فیش واریزی الزامی است.',
+        ], [
+            'receipt_number' => 'شماره فیش واریزی',
+            'receipt_date_shamsi' => 'تاریخ فیش واریزی',
+            'bank_name' => 'نام بانک / روش واریز',
+            'receipt_amount' => 'مبلغ فیش واریزی',
+        ]);
+
+        JalaliDate::parse($data['receipt_date_shamsi'], 'receipt_date_shamsi');
+        $receiptDateShamsi = JalaliDate::normalize($data['receipt_date_shamsi']);
+
+        $billing->update([
+            'receipt_number' => trim($data['receipt_number']),
+            'receipt_date_shamsi' => $receiptDateShamsi,
+            'bank_name' => ! empty($data['bank_name']) ? trim($data['bank_name']) : null,
+            'receipt_amount' => isset($data['receipt_amount']) && $data['receipt_amount'] !== ''
+                ? (int) round((float) $data['receipt_amount'])
+                : (int) $billing->total_amount,
+            'settled_at' => $billing->settled_at ?? now(),
+        ]);
 
         return redirect()
             ->route('billing.print', $billing)
-            ->with('success', 'صورتحساب صادر شد؛ آماده چاپ برگه ۴ بخشی تسویه حساب.');
+            ->with('success', 'اطلاعات فیش واریزی و تسویه حساب ثبت شد؛ آماده چاپ برگه ۴ بخشی.');
     }
 
     public function show(Billing $billing)
@@ -379,11 +417,26 @@ class BillingController extends Controller
             'representative',
         ]);
 
-        return view('billing.show', ['billing' => $billing]);
+        return view('billing.show', [
+            'billing' => $billing,
+            'todayShamsi' => JalaliDate::today(),
+        ]);
     }
 
     public function print(Billing $billing)
     {
+        if ($billing->isCancelled()) {
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('error', 'امکان چاپ برگه تسویه برای صورتحساب لغوشده وجود ندارد.');
+        }
+
+        if (! $billing->isSettled()) {
+            return redirect()
+                ->route('billing.show', $billing)
+                ->with('warning', 'برای چاپ برگه ۴ بخشی تسویه حساب، ابتدا اطلاعات فیش واریزی را وارد و تسویه حساب را ثبت نمایید.');
+        }
+
         $billing->load([
             'items.wagon.owner',
             'items.wagon.previousOwner',

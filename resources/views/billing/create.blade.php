@@ -235,11 +235,8 @@
                 </div>
 
                 <div class="d-flex gap-2 flex-wrap">
-                    <button class="btn btn-success fw-semibold px-4" type="submit" name="after_action" value="print">
-                        صدور قطعی و چاپ برگه ۴ بخشی تسویه حساب
-                    </button>
-                    <button class="btn btn-outline-primary" type="submit" name="after_action" value="show">
-                        فقط صدور صورتحساب (بدون چاپ فوری)
+                    <button class="btn btn-success fw-semibold px-4" type="submit">
+                        صدور قطعی صورتحساب (جهت ثبت فیش واریزی و تسویه)
                     </button>
                 </div>
             @endif

@@ -12,8 +12,6 @@
         <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">بازگشت به کارتابل</a>
     </div>
 
-    @include('partials.tariff-calculator', ['tariffs' => $tariffs ?? collect()])
-
     <datalist id="common-cargo-descriptions">
         <option value="میلگرد"></option>
         <option value="کلاف"></option>
