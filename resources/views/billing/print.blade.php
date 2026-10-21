@@ -8,7 +8,7 @@
     <style>
         @page {
             size: A4 portrait;
-            margin: 5mm 6mm;
+            margin: 3.5mm 5mm;
         }
 
         * {
@@ -22,7 +22,7 @@
             background: #f1f5f9;
             color: #000;
             direction: rtl;
-            font-size: 8.5pt;
+            font-size: 8pt;
         }
 
         .print-toolbar {
@@ -76,32 +76,32 @@
 
         .a4-sheet {
             width: 210mm;
-            min-height: 286mm;
             margin: 0 auto 20px auto;
             background: #fff;
-            padding: 4mm 5mm;
+            padding: 3mm 4mm;
             box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
         }
 
         .slip-box {
-            border: 1.2pt solid #000;
+            width: 100%;
+            border: 1.1pt solid #000;
             border-radius: 3px;
-            padding: 1.8mm 2.2mm;
+            padding: 1.2mm 1.8mm;
             page-break-inside: avoid;
             break-inside: avoid;
             background: #fff;
+            overflow: hidden;
         }
 
         .slip-box.slip-primary {
-            border-width: 1.5pt;
+            border-width: 1.4pt;
         }
 
         .cut-line {
-            border-top: 1pt dashed #555;
-            margin: 1.3mm 0;
+            border-top: 0.9pt dashed #555;
+            margin: 1mm 0;
             position: relative;
             text-align: center;
             height: 0;
@@ -109,10 +109,10 @@
 
         .cut-line span {
             position: relative;
-            top: -6px;
+            top: -5px;
             background: #fff;
-            padding: 0 6px;
-            font-size: 7pt;
+            padding: 0 5px;
+            font-size: 6.5pt;
             color: #444;
         }
 
@@ -120,62 +120,62 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 0.8pt solid #000;
-            padding-bottom: 1.2mm;
-            margin-bottom: 1.2mm;
+            border-bottom: 0.7pt solid #000;
+            padding-bottom: 0.8mm;
+            margin-bottom: 0.8mm;
         }
 
         .slip-brand {
             display: flex;
             align-items: center;
-            gap: 2mm;
-            width: 31%;
+            gap: 1.5mm;
+            width: 29%;
         }
 
         .slip-brand img {
-            height: 10.5mm;
+            height: 7.8mm;
             width: auto;
             object-fit: contain;
         }
 
         .slip-org-name {
-            font-size: 7.5pt;
+            font-size: 7pt;
             font-weight: 800;
-            line-height: 1.35;
+            line-height: 1.3;
         }
 
         .slip-org-sub {
-            font-size: 6.8pt;
+            font-size: 6.3pt;
             color: #222;
             font-weight: 600;
         }
 
         .slip-title-center {
             text-align: center;
-            width: 38%;
+            width: 39%;
         }
 
         .slip-part-badge {
             display: inline-block;
-            border: 0.8pt solid #000;
+            border: 0.7pt solid #000;
             background: #f1f5f9;
-            padding: 0.5mm 2.5mm;
+            padding: 0.3mm 2mm;
             border-radius: 2px;
-            font-size: 8pt;
+            font-size: 7.4pt;
             font-weight: 800;
         }
 
         .slip-sub-purpose {
-            font-size: 7pt;
-            margin-top: 0.5mm;
+            font-size: 6.4pt;
+            margin-top: 0.3mm;
             font-weight: 700;
         }
 
         .slip-meta {
-            width: 31%;
+            width: 32%;
             text-align: left;
-            font-size: 7.3pt;
-            line-height: 1.45;
+            font-size: 6.7pt;
+            line-height: 1.35;
         }
 
         .info-strip {
@@ -183,78 +183,91 @@
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
+            gap: 1.5mm;
             background: #f8fafc;
             border: 0.6pt solid #000;
-            padding: 0.9mm 2mm;
-            margin-bottom: 1.2mm;
-            font-size: 7.5pt;
+            padding: 0.6mm 1.5mm;
+            margin-bottom: 0.8mm;
+            font-size: 6.9pt;
         }
 
         .status-pill {
             font-weight: 800;
             border: 0.6pt solid #000;
-            padding: 0.2mm 1.5mm;
+            padding: 0.1mm 1.2mm;
             background: #e2e8f0;
+            font-size: 6.6pt;
         }
 
         table.grouped-table {
             width: 100%;
+            table-layout: fixed;
             border-collapse: collapse;
-            margin-bottom: 1.2mm;
-            font-size: 7.3pt;
+            margin-bottom: 0.8mm;
+            font-size: 6.8pt;
         }
 
         table.grouped-table th,
         table.grouped-table td {
             border: 0.6pt solid #000;
-            padding: 0.8mm 1.2mm;
+            padding: 0.5mm 0.7mm;
             text-align: center;
             vertical-align: middle;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
         }
 
         table.grouped-table thead th {
             background: #e9ecef;
             font-weight: 800;
-            font-size: 7.2pt;
-            white-space: nowrap;
+            font-size: 6.6pt;
+            line-height: 1.2;
         }
 
         table.grouped-table tfoot td {
             background: #f1f5f9;
             font-weight: 800;
-            border-top: 1pt solid #000;
+            border-top: 0.9pt solid #000;
+            font-size: 6.8pt;
         }
 
         .wagon-numbers-cell {
-            font-family: monospace, 'Vazirmatn', Tahoma;
-            font-weight: 800;
-            font-size: 7.6pt;
-            line-height: 1.3;
+            font-family: Tahoma, 'Vazirmatn', sans-serif;
+            font-weight: 700;
+            font-size: 6.8pt;
+            line-height: 1.25;
             word-break: break-word;
         }
 
         .money-cell {
             direction: ltr;
+            unicode-bidi: embed;
+            font-family: Tahoma, 'Vazirmatn', sans-serif;
+            font-size: 6.8pt;
             font-weight: 700;
+            text-align: center;
             white-space: nowrap;
+            letter-spacing: -0.15px;
+            padding-left: 0.5mm !important;
+            padding-right: 0.5mm !important;
         }
 
         .slip-footer {
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            gap: 2mm;
-            margin-top: 0.8mm;
-            font-size: 7.1pt;
+            gap: 1.5mm;
+            margin-top: 0.4mm;
+            font-size: 6.6pt;
         }
 
         .slip-declaration {
             width: 38%;
-            line-height: 1.4;
+            line-height: 1.3;
             text-align: justify;
-            font-size: 6.9pt;
+            font-size: 6.3pt;
             border-left: 0.6pt dotted #444;
-            padding-left: 2mm;
+            padding-left: 1.5mm;
         }
 
         .slip-signatures {
@@ -270,16 +283,17 @@
 
         .sig-title {
             font-weight: 800;
-            margin-bottom: 4.5mm;
+            margin-bottom: 2.3mm;
+            font-size: 6.4pt;
         }
 
         .sig-line {
             border-top: 0.5pt dotted #333;
             display: inline-block;
-            min-width: 24mm;
-            font-size: 6.7pt;
+            min-width: 22mm;
+            font-size: 6.3pt;
             color: #333;
-            padding-top: 0.4mm;
+            padding-top: 0.3mm;
         }
 
         @media print {
@@ -529,19 +543,32 @@
             </div>
 
             <table class="grouped-table">
+                <colgroup>
+                    <col style="width: 3.5%;">
+                    <col style="width: 4.5%;">
+                    <col style="width: 15%;">
+                    <col style="width: 8.5%;">
+                    <col style="width: 5.5%;">
+                    <col style="width: 15%;">
+                    <col style="width: 10%;">
+                    <col style="width: 8%;">
+                    <col style="width: 10%;">
+                    <col style="width: 9%;">
+                    <col style="width: 11%;">
+                </colgroup>
                 <thead>
                 <tr>
-                    <th style="width: 4%;">ردیف</th>
-                    <th style="width: 5%;">تعداد واگن</th>
-                    <th style="width: 20%;">شماره واگن‌ها (دسته‌بندی‌شده)</th>
-                    <th style="width: 10%;">شرح کالا</th>
-                    <th style="width: 6%;">شماره خط</th>
-                    <th style="width: 17%;">عنوان تعرفه استفاده شده</th>
-                    <th style="width: 9%;">مبلغ تعرفه (ریال)</th>
-                    <th style="width: 8%;">تناژ (واحد / کل)</th>
-                    <th style="width: 7%;">مبلغ پایه</th>
-                    <th style="width: 6%;">مالیات ({{ (float) $billing->tax_percentage }}٪)</th>
-                    <th style="width: 8%;">جمع کل (ریال)</th>
+                    <th>ردیف</th>
+                    <th>تعداد</th>
+                    <th>شماره واگن‌ها</th>
+                    <th>شرح کالا</th>
+                    <th>شماره خط</th>
+                    <th>عنوان تعرفه استفاده شده</th>
+                    <th>مبلغ تعرفه (ریال)</th>
+                    <th>تناژ (واحد/کل)</th>
+                    <th>مبلغ پایه (ریال)</th>
+                    <th>مالیات ({{ (float) $billing->tax_percentage }}٪)</th>
+                    <th>جمع کل (ریال)</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -564,7 +591,7 @@
                         <td class="money-cell">{{ number_format($gRow['tariff_rate']) }}</td>
                         <td>
                             @if($gRow['wagon_count'] > 1)
-                                {{ $unitWStr }} تن (جمع: {{ $totWStr }})
+                                {{ $unitWStr }} ({{ $totWStr }} تن)
                             @else
                                 {{ $unitWStr }} تن
                             @endif
@@ -581,7 +608,7 @@
                 </tbody>
                 <tfoot>
                 <tr>
-                    <td colspan="2">جمع کل درخواست:</td>
+                    <td colspan="2">جمع کل:</td>
                     <td>{{ $totalWagonCount }} واگن</td>
                     <td colspan="4" style="text-align: left; padding-left: 6px;">مجموع تناژ و مبالغ تسویه حساب (ریال):</td>
                     <td>{{ $totalWeightFormatted }} تن</td>
