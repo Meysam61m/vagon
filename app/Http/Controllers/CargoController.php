@@ -86,8 +86,24 @@ class CargoController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        $pendingLoadingWagons = Wagon::query()
+            ->select('wagons.*')
+            ->join('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
+            ->where('wagons.is_settled', false)
+            ->where(function ($q) {
+                $q->whereNull('wagons.loaded_weight')
+                    ->orWhereNull('wagons.tariff_id');
+            })
+            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, CargoRequest::STATUS_CANCELLED])
+            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative'])
+            ->orderByDesc('cargo_requests.request_date')
+            ->orderByDesc('wagons.cargo_request_id')
+            ->orderBy('wagons.id')
+            ->get();
+
         $queueStats = [
             'pending_loading' => CargoRequest::where('status', CargoRequest::STATUS_PENDING)->count(),
+            'pending_loading_wagons' => $pendingLoadingWagons->count(),
             'ready_to_bill' => CargoRequest::where('status', CargoRequest::STATUS_LOADED)->count(),
             'unknown_owner' => CargoRequest::whereNull('owner_id')
                 ->where('status', '!=', CargoRequest::STATUS_BILLED)
@@ -104,7 +120,9 @@ class CargoController extends Controller
 
         return view('cargo.index', [
             'cargoRequests' => $cargoRequests,
+            'pendingLoadingWagons' => $pendingLoadingWagons,
             'owners' => Owner::orderBy('name')->get(['id', 'name']),
+            'representatives' => Representative::active()->orderBy('name')->get(['id', 'name']),
             'statusLabels' => CargoRequest::STATUS_LABELS,
             'queueStats' => $queueStats,
             'queueFilter' => $queueFilter,
@@ -308,6 +326,7 @@ class CargoController extends Controller
             'cargo' => $cargo,
             'tariffs' => $tariffs,
             'owners' => $owners,
+            'representatives' => Representative::active()->orderBy('name')->get(['id', 'name']),
             'suggestedTariffs' => $suggestedTariffs,
             'loadingDateShamsi' => JalaliDate::today(),
         ]);

@@ -4,10 +4,24 @@
 @section('content')
     <h4 class="mb-3">افزودن صاحب کالای جدید</h4>
 
+    @php
+        $defaultReps = old('representative_ids', request()->filled('representative_id') ? [(int) request('representative_id')] : []);
+        $cancelUrl = match (request('redirect_to')) {
+            'cargo.create' => route('cargo.create'),
+            'cargo.index' => route('cargo.index'),
+            'cargo.show' => request('cargo_request_id') ? route('cargo.show', request('cargo_request_id')) : route('cargo.index'),
+            'billing.create' => route('billing.create', array_filter(['cargo_request_id' => request('cargo_request_id')])),
+            default => route('owners.index'),
+        };
+    @endphp
+
     <form method="POST" action="{{ route('owners.store') }}" class="card p-4">
         @csrf
         @if(request('redirect_to'))
             <input type="hidden" name="redirect_to" value="{{ request('redirect_to') }}">
+        @endif
+        @if(request('cargo_request_id'))
+            <input type="hidden" name="cargo_request_id" value="{{ request('cargo_request_id') }}">
         @endif
         <div class="row g-3">
             <div class="col-md-6">
@@ -60,7 +74,7 @@
                                 <div class="form-check">
                                     <input type="checkbox" class="form-check-input" name="representative_ids[]"
                                            value="{{ $rep->id }}" id="rep_{{ $rep->id }}"
-                                           @checked(in_array($rep->id, old('representative_ids', [])))>
+                                           @checked(in_array($rep->id, $defaultReps))>
                                     <label class="form-check-label" for="rep_{{ $rep->id }}">{{ $rep->name }}</label>
                                 </div>
                             </div>
@@ -71,7 +85,7 @@
         </div>
         <div class="mt-4 d-flex gap-2">
             <button class="btn btn-primary" type="submit">ذخیره</button>
-            <a href="{{ request('redirect_to') === 'cargo.create' ? route('cargo.create') : route('owners.index') }}" class="btn btn-secondary">انصراف</a>
+            <a href="{{ $cancelUrl }}" class="btn btn-secondary">انصراف</a>
         </div>
     </form>
 @endsection

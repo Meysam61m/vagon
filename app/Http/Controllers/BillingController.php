@@ -155,6 +155,7 @@ class BillingController extends Controller
             'tariffs' => Tariff::active()->orderBy('title')->get(),
             'taxPercentage' => TaxSetting::currentPercentage(),
             'representatives' => $representatives,
+            'allRepresentatives' => Representative::active()->orderBy('name')->get(['id', 'name']),
             'billingDateShamsi' => JalaliDate::today(),
         ]);
     }

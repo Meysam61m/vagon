@@ -38,7 +38,23 @@ class OwnerController extends Controller
             $owner->representatives()->syncWithoutDetaching($repIds);
         }
 
-        if ($request->input('redirect_to') === 'cargo.create') {
+        $cargoRequestId = $request->integer('cargo_request_id') ?: null;
+        if ($cargoRequestId && $request->boolean('assign_to_cargo_request', true)) {
+            $cargoReq = \App\Models\CargoRequest::find($cargoRequestId);
+            if ($cargoReq && ($cargoReq->owner_id === null || $request->boolean('force_assign_owner'))) {
+                if (! $cargoReq->representative_id || in_array((int) $cargoReq->representative_id, $repIds, true)) {
+                    $cargoReq->update(['owner_id' => $owner->id]);
+                    \App\Models\Wagon::where('cargo_request_id', $cargoReq->id)
+                        ->where('is_settled', false)
+                        ->whereNull('owner_id')
+                        ->update(['owner_id' => $owner->id]);
+                }
+            }
+        }
+
+        $redirectTo = (string) $request->input('redirect_to', '');
+
+        if ($redirectTo === 'cargo.create') {
             $redirect = redirect()->route('cargo.create')
                 ->with('selected_owner_id', $owner->id)
                 ->with('success', "صاحب کالای جدید «{$owner->name}» ثبت شد و در فرم انتخاب گردید.");
@@ -48,6 +64,26 @@ class OwnerController extends Controller
             }
 
             return $redirect;
+        }
+
+        if ($redirectTo === 'cargo.show' && $cargoRequestId) {
+            return redirect()->route('cargo.show', $cargoRequestId)
+                ->with('selected_owner_id', $owner->id)
+                ->with('success', "صاحب کالای جدید «{$owner->name}» ثبت شد و به درخواست بارگیری اختصاص یافت.");
+        }
+
+        if ($redirectTo === 'cargo.index') {
+            return redirect()->route('cargo.index')
+                ->with('selected_owner_id', $owner->id)
+                ->with('success', "صاحب کالای جدید «{$owner->name}» ثبت شد و در درخواست بارگیری قرار گرفت.");
+        }
+
+        if ($redirectTo === 'billing.create') {
+            return redirect()->route('billing.create', array_filter([
+                'owner_id' => $owner->id,
+                'cargo_request_id' => $cargoRequestId,
+                'representative_id' => $repIds[0] ?? null,
+            ]))->with('success', "صاحب کالای جدید «{$owner->name}» ثبت شد و برای صدور صورتحساب انتخاب گردید.");
         }
 
         return redirect()->route('owners.index')->with('success', 'صاحب کالای جدید افزوده شد.');

@@ -42,18 +42,27 @@
                         </button>
                     </form>
                 @else
-                    <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
-                        @csrf
-                        <select name="owner_id" class="form-select form-select-sm" style="min-width: 230px;" required>
-                            <option value="">صاحب کالا (مرتبط با {{ $cargo->representative?->name }})…</option>
-                            @foreach($repOwners as $owner)
-                                <option value="{{ $owner->id }}" @selected($repOwners->count() === 1)>{{ $owner->name }}</option>
-                            @endforeach
-                        </select>
-                        <button type="submit" class="btn btn-success btn-sm fw-semibold text-nowrap">
-                            تعیین صاحب کالا و صدور صورتحساب
+                    <div class="d-inline-flex flex-column align-items-start gap-1">
+                        <form method="POST" action="{{ route('cargo.quick-bill', $cargo) }}" class="d-inline-flex gap-1 align-items-center bg-warning-subtle border border-warning rounded p-1">
+                            @csrf
+                            <select name="owner_id" class="form-select form-select-sm" style="min-width: 230px;" required>
+                                <option value="">صاحب کالا (مرتبط با {{ $cargo->representative?->name }})…</option>
+                                @foreach($repOwners as $owner)
+                                    <option value="{{ $owner->id }}" @selected((int) session('selected_owner_id') === (int) $owner->id || $repOwners->count() === 1)>{{ $owner->name }}</option>
+                                @endforeach
+                            </select>
+                            <button type="submit" class="btn btn-success btn-sm fw-semibold text-nowrap">
+                                تعیین صاحب کالا و صدور صورتحساب
+                            </button>
+                        </form>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary py-0 px-2"
+                                style="font-size: 0.78rem;"
+                                data-bs-toggle="modal"
+                                data-bs-target="#cargoShowQuickOwnerModal">
+                            + تعریف صاحب کالای جدید (مرتبط با {{ $cargo->representative?->name }})
                         </button>
-                    </form>
+                    </div>
                 @endif
             @endif
             <a href="{{ route('cargo.create') }}" class="btn btn-outline-primary btn-sm">+ درخواست جدید</a>
@@ -174,7 +183,7 @@
                     <select name="owner_id" id="loading_owner_id" class="form-select @error('owner_id') is-invalid @enderror">
                         <option value="">— ناشناس / نامشخص (فقط ذخیره بارگیری) —</option>
                         @foreach($repOwners as $owner)
-                            <option value="{{ $owner->id }}" @selected((int) old('owner_id', $cargo->owner_id) === (int) $owner->id)>
+                            <option value="{{ $owner->id }}" @selected((int) old('owner_id', session('selected_owner_id', $cargo->owner_id)) === (int) $owner->id)>
                                 {{ $owner->name }}
                             </option>
                         @endforeach
@@ -182,11 +191,20 @@
                     @error('owner_id')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
-                    @if($repOwners->isEmpty())
-                        <div class="form-text text-danger small">
-                            به نماینده «{{ $cargo->representative?->name }}» هنوز صاحب کالایی تخصیص داده نشده است.
-                        </div>
-                    @endif
+                    <div class="mt-1 d-flex justify-content-between align-items-center flex-wrap gap-1">
+                        @if($repOwners->isEmpty())
+                            <span class="text-danger small">
+                                به نماینده «{{ $cargo->representative?->name }}» هنوز صاحب کالایی تخصیص داده نشده است.
+                            </span>
+                        @endif
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary py-0 px-2"
+                                style="font-size: 0.78rem;"
+                                data-bs-toggle="modal"
+                                data-bs-target="#cargoShowQuickOwnerModal">
+                            + تعریف صاحب کالای جدید
+                        </button>
+                    </div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label mb-1" for="loading_date_shamsi">تاریخ بارگیری (شمسی)</label>
@@ -483,6 +501,84 @@
     @endif
 
     <a href="{{ route('cargo.index') }}" class="btn btn-secondary">بازگشت</a>
+
+    {{-- مودال تعریف صاحب کالای جدید برای این درخواست بارگیری --}}
+    @php $showModalReps = $representatives ?? collect(); @endphp
+    <div class="modal fade" id="cargoShowQuickOwnerModal" tabindex="-1" aria-labelledby="cargoShowQuickOwnerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form method="POST" action="{{ route('owners.store') }}" class="modal-content">
+                @csrf
+                <input type="hidden" name="redirect_to" value="cargo.show">
+                <input type="hidden" name="cargo_request_id" value="{{ $cargo->id }}">
+                <input type="hidden" name="assign_to_cargo_request" value="1">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="cargoShowQuickOwnerModalLabel">
+                        تعریف صاحب کالای جدید (درخواست {{ $cargo->request_number }})
+                    </h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="بستن"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        صاحب کالای جدید پس از ثبت، به نماینده <strong>«{{ $cargo->representative?->name ?? '—' }}»</strong> متصل شده و به‌صورت خودکار روی این درخواست بارگیری قرار می‌گیرد.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="show_quick_owner_name">نام صاحب کالا <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="show_quick_owner_name" class="form-control" required placeholder="نام شخص حقیقی یا شرکت">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="show_quick_owner_national_id">کد ملی / شناسه ملی</label>
+                            <input type="text" name="national_id" id="show_quick_owner_national_id" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="show_quick_owner_phone">تلفن</label>
+                            <input type="text" name="phone" id="show_quick_owner_phone" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="show_quick_owner_economic_code">کد اقتصادی</label>
+                            <input type="text" name="economic_code" id="show_quick_owner_economic_code" class="form-control">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="show_quick_owner_address">آدرس</label>
+                            <input type="text" name="address" id="show_quick_owner_address" class="form-control">
+                        </div>
+                        @if($showModalReps->isNotEmpty())
+                            <div class="col-12">
+                                <label class="form-label mb-1">نماینده مرتبط با این صاحب کالا</label>
+                                <div class="row g-2 border rounded p-2 bg-light" style="max-height: 170px; overflow-y: auto;">
+                                    @foreach($showModalReps as $rep)
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input type="checkbox"
+                                                       class="form-check-input"
+                                                       name="representative_ids[]"
+                                                       value="{{ $rep->id }}"
+                                                       id="show_rep_{{ $rep->id }}"
+                                                       @checked((int) $cargo->representative_id === (int) $rep->id)>
+                                                <label class="form-check-label small" for="show_rep_{{ $rep->id }}">{{ $rep->name }}</label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @elseif($cargo->representative_id)
+                            <input type="hidden" name="representative_ids[]" value="{{ $cargo->representative_id }}">
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <a href="{{ route('owners.create', ['redirect_to' => 'cargo.show', 'cargo_request_id' => $cargo->id, 'representative_id' => $cargo->representative_id]) }}"
+                       class="btn btn-link btn-sm text-decoration-none">
+                        باز کردن فرم کامل تعریف صاحب کالا
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                        <button type="submit" class="btn btn-primary fw-semibold">ذخیره و انتخاب صاحب کالا</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')

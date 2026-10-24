@@ -53,6 +53,16 @@
                                 @empty
                                     <span class="badge bg-danger">هیچ صاحب کالایی به این نماینده تخصیص نیافته است</span>
                                 @endforelse
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary open-billing-quick-owner-btn"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#billingQuickOwnerModal"
+                                        data-cargo-id="{{ $crId }}"
+                                        data-request-number="{{ $firstW?->cargoRequest?->request_number }}"
+                                        data-rep-id="{{ $repObj?->id }}"
+                                        data-rep-name="{{ $repObj?->name }}">
+                                    + تعریف صاحب کالای جدید
+                                </button>
                                 <a href="{{ route('cargo.show', $crId) }}" class="btn btn-sm btn-outline-secondary">
                                     مشاهده درخواست
                                 </a>
@@ -101,6 +111,16 @@
                         </option>
                     @endforeach
                 </select>
+                <div class="mt-2">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary open-billing-quick-owner-btn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#billingQuickOwnerModal"
+                            data-cargo-id="{{ $selectedCargoRequestId ?? '' }}"
+                            data-rep-id="{{ $defaultRepresentativeId ?? '' }}">
+                        + تعریف صاحب کالای جدید
+                    </button>
+                </div>
             </div>
         </div>
     </form>
@@ -244,11 +264,115 @@
             @endif
         </form>
     @endif
+
+    {{-- مودال تعریف صاحب کالای جدید زیر بخش تعیین صاحب کالا و صدور صورتحساب --}}
+    @php $billingModalReps = $allRepresentatives ?? $representatives ?? collect(); @endphp
+    <div class="modal fade" id="billingQuickOwnerModal" tabindex="-1" aria-labelledby="billingQuickOwnerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form method="POST" action="{{ route('owners.store') }}" class="modal-content">
+                @csrf
+                <input type="hidden" name="redirect_to" value="billing.create">
+                <input type="hidden" name="cargo_request_id" id="billing_modal_cargo_id" value="{{ $selectedCargoRequestId ?? '' }}">
+                <input type="hidden" name="assign_to_cargo_request" value="1">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="billingQuickOwnerModalLabel">تعریف صاحب کالای جدید برای صدور صورتحساب</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="بستن"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small mb-3" id="billing_modal_hint" style="display: none;"></div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="billing_quick_owner_name">نام صاحب کالا <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="billing_quick_owner_name" class="form-control" required placeholder="نام شخص حقیقی یا شرکت">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="billing_quick_owner_national_id">کد ملی / شناسه ملی</label>
+                            <input type="text" name="national_id" id="billing_quick_owner_national_id" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="billing_quick_owner_phone">تلفن</label>
+                            <input type="text" name="phone" id="billing_quick_owner_phone" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="billing_quick_owner_economic_code">کد اقتصادی</label>
+                            <input type="text" name="economic_code" id="billing_quick_owner_economic_code" class="form-control">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="billing_quick_owner_address">آدرس</label>
+                            <input type="text" name="address" id="billing_quick_owner_address" class="form-control">
+                        </div>
+                        @if($billingModalReps->isNotEmpty())
+                            <div class="col-12">
+                                <label class="form-label mb-1">نماینده مرتبط با این صاحب کالا</label>
+                                <div class="row g-2 border rounded p-2 bg-light" style="max-height: 170px; overflow-y: auto;">
+                                    @foreach($billingModalReps as $rep)
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input type="checkbox"
+                                                       class="form-check-input billing-quick-owner-rep-check"
+                                                       name="representative_ids[]"
+                                                       value="{{ $rep->id }}"
+                                                       id="billing_rep_{{ $rep->id }}">
+                                                <label class="form-check-label small" for="billing_rep_{{ $rep->id }}">{{ $rep->name }}</label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <a href="{{ route('owners.create', ['redirect_to' => 'billing.create']) }}" class="btn btn-link btn-sm text-decoration-none">
+                        باز کردن فرم کامل تعریف صاحب کالا
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                        <button type="submit" class="btn btn-primary fw-semibold">ذخیره و انتخاب برای صدور صورتحساب</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
     <script>
         (function () {
+            const billingModalEl = document.getElementById('billingQuickOwnerModal');
+            if (billingModalEl) {
+                document.querySelectorAll('.open-billing-quick-owner-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const cargoId = btn.getAttribute('data-cargo-id') || '';
+                        const reqNum = btn.getAttribute('data-request-number') || '';
+                        const repId = btn.getAttribute('data-rep-id') || '';
+                        const repName = btn.getAttribute('data-rep-name') || '';
+
+                        const cargoInput = document.getElementById('billing_modal_cargo_id');
+                        if (cargoInput) cargoInput.value = cargoId;
+
+                        const hint = document.getElementById('billing_modal_hint');
+                        if (hint) {
+                            if (reqNum) {
+                                hint.textContent = 'صاحب کالای جدید پس از ثبت، به نماینده «' + (repName || '—') + '» متصل شده و برای صدور صورتحساب درخواست «' + reqNum + '» انتخاب می‌شود.';
+                                hint.style.display = 'block';
+                            } else {
+                                hint.style.display = 'none';
+                            }
+                        }
+
+                        billingModalEl.querySelectorAll('.billing-quick-owner-rep-check').forEach(function (chk) {
+                            chk.checked = (repId !== '' && String(chk.value) === String(repId));
+                        });
+                    });
+                });
+
+                billingModalEl.addEventListener('shown.bs.modal', function () {
+                    const nameInput = document.getElementById('billing_quick_owner_name');
+                    if (nameInput) nameInput.focus();
+                });
+            }
+
             const form = document.getElementById('billing-form');
             if (!form) return;
 

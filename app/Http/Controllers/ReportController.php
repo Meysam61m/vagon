@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Billing;
 use App\Models\BillingItem;
 use App\Models\CargoRequest;
+use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\TaxSetting;
 use App\Models\Wagon;
@@ -47,6 +48,141 @@ class ReportController extends Controller
     private function fileDateRange(string $fromShamsi, string $toShamsi): string
     {
         return str_replace('/', '-', $fromShamsi).'-to-'.str_replace('/', '-', $toShamsi);
+    }
+
+    /**
+     * گزارش واگن‌های در انتظار بارگیری (واگن‌هایی که هنوز وزن بارگیری یا تعرفه ندارند و تسویه نشده‌اند)
+     */
+    public function pendingLoading(Request $request)
+    {
+        $fromShamsi = $request->filled('from') ? JalaliDate::normalize($request->string('from')->toString()) : '';
+        $toShamsi = $request->filled('to') ? JalaliDate::normalize($request->string('to')->toString()) : '';
+
+        $from = $fromShamsi !== '' ? JalaliDate::parse($fromShamsi, 'from')->startOfDay() : null;
+        $to = $toShamsi !== '' ? JalaliDate::parse($toShamsi, 'to')->endOfDay() : null;
+
+        if ($from && $to && $from->greaterThan($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+            [$fromShamsi, $toShamsi] = [JalaliDate::fromCarbon($from), JalaliDate::fromCarbon($to)];
+        }
+
+        $baseQuery = Wagon::query()
+            ->select('wagons.*')
+            ->join('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
+            ->where('wagons.is_settled', false)
+            ->where(function ($q) {
+                $q->whereNull('wagons.loaded_weight')
+                    ->orWhereNull('wagons.tariff_id');
+            })
+            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, CargoRequest::STATUS_CANCELLED])
+            ->when($from !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '>=', $from->toDateString()))
+            ->when($to !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '<=', $to->toDateString()))
+            ->when($request->filled('owner_id'), function ($q) use ($request) {
+                if ($request->string('owner_id')->toString() === 'unknown') {
+                    $q->whereNull('wagons.owner_id')->whereNull('cargo_requests.owner_id');
+
+                    return;
+                }
+                $ownerId = $request->integer('owner_id');
+                $q->where(function ($sub) use ($ownerId) {
+                    $sub->where('wagons.owner_id', $ownerId)
+                        ->orWhere(function ($s2) use ($ownerId) {
+                            $s2->whereNull('wagons.owner_id')->where('cargo_requests.owner_id', $ownerId);
+                        });
+                });
+            })
+            ->when($request->filled('representative_id'), fn ($q) => $q->where('cargo_requests.representative_id', $request->integer('representative_id')))
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $term = '%'.trim($request->string('search')->toString()).'%';
+                $q->where(function ($inner) use ($term) {
+                    $inner->where('wagons.wagon_number', 'like', $term)
+                        ->orWhere('wagons.previous_wagon_number', 'like', $term)
+                        ->orWhere('wagons.cargo_description', 'like', $term)
+                        ->orWhere('wagons.line_number', 'like', $term)
+                        ->orWhere('cargo_requests.request_number', 'like', $term)
+                        ->orWhereHas('owner', fn ($ow) => $ow->where('name', 'like', $term))
+                        ->orWhereHas('cargoRequest.owner', fn ($ow) => $ow->where('name', 'like', $term))
+                        ->orWhereHas('cargoRequest.representative', fn ($rep) => $rep->where('name', 'like', $term));
+                });
+            })
+            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative', 'cargoRequest.operator'])
+            ->orderByDesc('cargo_requests.request_date')
+            ->orderByDesc('wagons.cargo_request_id')
+            ->orderBy('wagons.id');
+
+        $summary = [
+            'total_wagons' => (clone $baseQuery)->count('wagons.id'),
+            'total_requests' => (clone $baseQuery)->distinct()->count('wagons.cargo_request_id'),
+            'unknown_owner_wagons' => (clone $baseQuery)
+                ->whereNull('wagons.owner_id')
+                ->whereNull('cargo_requests.owner_id')
+                ->count('wagons.id'),
+        ];
+
+        if ($this->wantsExcel($request)) {
+            $allWagons = (clone $baseQuery)->get();
+            $rows = [];
+
+            foreach ($allWagons as $idx => $wagon) {
+                $cr = $wagon->cargoRequest;
+                $ownerLabel = $wagon->owner?->name ?? $cr?->owner?->name ?? 'ناشناس';
+
+                $rows[] = [
+                    $idx + 1,
+                    $cr?->request_number ?? '—',
+                    $cr?->request_date_shamsi ?? '—',
+                    $wagon->wagon_number,
+                    $wagon->cargo_description ?: '—',
+                    $wagon->line_number ?: '—',
+                    $ownerLabel,
+                    $cr?->representative?->name ?? '—',
+                    'در انتظار بارگیری',
+                ];
+            }
+
+            $dateSuffix = ($fromShamsi !== '' || $toShamsi !== '')
+                ? $this->fileDateRange($fromShamsi ?: 'all', $toShamsi ?: 'all')
+                : str_replace('/', '-', JalaliDate::today());
+
+            return ExcelExport::download(
+                'pending-loading-report-'.$dateSuffix.'.xlsx',
+                'گزارش واگن‌های در انتظار بارگیری',
+                [
+                    'ردیف',
+                    'شماره درخواست',
+                    'تاریخ درخواست (شمسی)',
+                    'شماره واگن',
+                    'شرح کالا',
+                    'شماره خط',
+                    'صاحب کالا',
+                    'نماینده',
+                    'وضعیت',
+                ],
+                $rows,
+                [
+                    'جمع کل',
+                    $summary['total_requests'].' درخواست',
+                    '',
+                    $summary['total_wagons'].' واگن',
+                    '',
+                    '',
+                    $summary['unknown_owner_wagons'] > 0 ? ($summary['unknown_owner_wagons'].' واگن ناشناس') : '',
+                    '',
+                    '',
+                ]
+            );
+        }
+
+        $wagons = $baseQuery->paginate(25)->withQueryString();
+
+        return view('reports.pending-loading', [
+            'wagons' => $wagons,
+            'summary' => $summary,
+            'fromShamsi' => $fromShamsi,
+            'toShamsi' => $toShamsi,
+            'owners' => Owner::orderBy('name')->get(['id', 'name']),
+            'representatives' => Representative::orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     /** گزارش درخواست‌ها و بارگیری‌های روزانه */

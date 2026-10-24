@@ -188,6 +188,7 @@
                     <a class="nav-link dropdown-toggle @if(request()->routeIs('reports.*')) active @endif"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">گزارش‌ها</a>
                     <ul class="dropdown-menu">
+                        <li><a class="dropdown-item fw-bold text-warning-emphasis" href="{{ \Illuminate\Support\Facades\Route::has('reports.pending-loading') ? route('reports.pending-loading') : url('/reports/pending-loading') }}">گزارش در انتظار بارگیری</a></li>
                         <li><a class="dropdown-item fw-bold text-primary" href="{{ \Illuminate\Support\Facades\Route::has('reports.setad') ? route('reports.setad') : url('/reports/setad') }}">گزارش ستاد</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{{ route('reports.daily-loading') }}">گزارش روزانه بارگیری</a></li>

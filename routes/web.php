@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
 
     // گزارش‌ها (برای همه نقش‌ها؛ فقط خواندنی)
     Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/pending-loading', [ReportController::class, 'pendingLoading'])->name('pending-loading');
         Route::get('/setad', [ReportController::class, 'setad'])->name('setad');
         Route::get('/daily-loading', [ReportController::class, 'dailyLoading'])->name('daily-loading');
         Route::get('/billings', [ReportController::class, 'billings'])->name('billings');
