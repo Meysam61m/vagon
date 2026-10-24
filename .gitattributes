@@ -2,3 +2,5 @@
 /wagon-system-mysql.zip export-ignore
 /wagon-system.rar export-ignore
 /*.xlsx export-ignore
+*.bat text eol=crlf
+
