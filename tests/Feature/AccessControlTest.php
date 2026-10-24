@@ -31,13 +31,17 @@ class AccessControlTest extends TestCase
     {
         $operator = $this->makeUser(User::ROLE_OPERATOR);
 
-        $this->actingAs($operator)->get(route('owners.index'))->assertForbidden();
         $this->actingAs($operator)->get(route('users.index'))->assertForbidden();
         $this->actingAs($operator)->get(route('tariffs.index'))->assertForbidden();
+        $this->actingAs($operator)->get(route('tax.edit'))->assertForbidden();
 
-        // اما بخش عملیاتی باز است
+        // بخش عملیاتی، تعریف صاحب کالا و نماینده و گزارش‌ها برای اپراتور باز است
+        $this->actingAs($operator)->get(route('owners.index'))->assertOk();
+        $this->actingAs($operator)->get(route('representatives.index'))->assertOk();
         $this->actingAs($operator)->get(route('cargo.index'))->assertOk();
         $this->actingAs($operator)->get(route('billing.index'))->assertOk();
+        $this->actingAs($operator)->get(route('reports.setad'))->assertOk();
+        $this->actingAs($operator)->get(route('reports.financial'))->assertOk();
     }
 
     public function test_admin_can_access_admin_area(): void

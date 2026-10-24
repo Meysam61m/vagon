@@ -19,7 +19,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['cargo_request_id', 'wagon_number']);
+            $table->index('wagon_number');
+            $table->index('loaded_on');
             $table->index(['is_settled', 'loaded_weight']);
+            $table->index(['is_settled', 'loaded_on']);
         });
     }
 

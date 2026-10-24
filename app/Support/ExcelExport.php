@@ -239,12 +239,12 @@ class ExcelExport
 
         // ردیف‌های داده (از ردیف ۳ به بعد)
         $rowNum = 3;
-        $sumG = 0;
-        $sumH = 0;
-        $sumI = 0;
-        $sumK = 0.0;
-        $sumL = 0.0;
-        $sumM = 0.0;
+        $totalBookletWithVat = 0;
+        $totalCustomerPayable = 0;
+        $totalCustomerTax = 0;
+        $totalBookletRate = 0.0;
+        $totalOperationalTonnage = 0.0;
+        $totalPerTonRate = 0.0;
 
         foreach ($itemsData as $row) {
             $xml .= '<row r="'.$rowNum.'" ht="19.5" customHeight="1">';
@@ -272,9 +272,9 @@ class ExcelExport
             $xml .= '<c r="F'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['owner_name'] ?? '')).'</t></is></c>';
 
             $bookletRate = (float) ($row['booklet_rate'] ?? 0);
-            $gVal = (int) round((float) ($row['total_with_vat'] ?? 0));
-            $hVal = (int) round((float) ($row['customer_payable'] ?? $gVal));
-            $iVal = (int) round((float) ($row['customer_tax'] ?? 0));
+            $bookletWithVat = (int) round((float) ($row['total_with_vat'] ?? 0));
+            $customerPayable = (int) round((float) ($row['customer_payable'] ?? $bookletWithVat));
+            $customerTax = (int) round((float) ($row['customer_tax'] ?? 0));
             $tonnageVal = (float) ($row['operational_tonnage'] ?? 0);
             $perTon = (float) ($row['per_ton_rate'] ?? 0);
             $cap = (float) ($row['capacity'] ?? 65);
@@ -282,21 +282,21 @@ class ExcelExport
             $vatDivisor = (float) ($row['vat_divisor'] ?? 1.1);
             $vatRate = max(0.0, round($vatDivisor - 1.0, 6));
 
-            $sumG += $gVal;
-            $sumH += $hVal;
-            $sumI += $iVal;
-            $sumK += $bookletRate;
-            $sumL += $tonnageVal;
-            $sumM += $perTon;
+            $totalBookletWithVat += $bookletWithVat;
+            $totalCustomerPayable += $customerPayable;
+            $totalCustomerTax += $customerTax;
+            $totalBookletRate += $bookletRate;
+            $totalOperationalTonnage += $tonnageVal;
+            $totalPerTonRate += $perTon;
 
             // G: مبلغ با احتساب مالیات بر ارزش افزوده (= مبلغ تعرفه در کتابچه با احتساب مالیات)
-            $xml .= '<c r="G'.$rowNum.'" s="4"><f>ROUND(K'.$rowNum.'*'.$vatDivisor.',0)</f><v>'.$gVal.'</v></c>';
+            $xml .= '<c r="G'.$rowNum.'" s="4"><f>ROUND(K'.$rowNum.'*'.$vatDivisor.',0)</f><v>'.$bookletWithVat.'</v></c>';
 
             // H: مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
-            $xml .= '<c r="H'.$rowNum.'" s="4"><f>ROUND((L'.$rowNum.'*M'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$hVal.'</v></c>';
+            $xml .= '<c r="H'.$rowNum.'" s="4"><f>ROUND((L'.$rowNum.'*M'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$customerPayable.'</v></c>';
 
             // I: مالیات دریافتی از مشتری
-            $xml .= '<c r="I'.$rowNum.'" s="4"><f>ROUND((L'.$rowNum.'*M'.$rowNum.')*'.$vatRate.',0)</f><v>'.$iVal.'</v></c>';
+            $xml .= '<c r="I'.$rowNum.'" s="4"><f>ROUND((L'.$rowNum.'*M'.$rowNum.')*'.$vatRate.',0)</f><v>'.$customerTax.'</v></c>';
 
             // J: توضیحات/ شماره وسیله حمل
             $xml .= '<c r="J'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['equipment_label'] ?? '')).'</t></is></c>';
@@ -334,13 +334,13 @@ class ExcelExport
                 .'<c r="D'.$rowNum.'" s="2"/>'
                 .'<c r="E'.$rowNum.'" s="2" t="inlineStr"><is><t>'.($lastDataRow - 2).' واگن</t></is></c>'
                 .'<c r="F'.$rowNum.'" s="2"/>'
-                .'<c r="G'.$rowNum.'" s="4"><f>SUM(G3:G'.$lastDataRow.')</f><v>'.$sumG.'</v></c>'
-                .'<c r="H'.$rowNum.'" s="4"><f>SUM(H3:H'.$lastDataRow.')</f><v>'.$sumH.'</v></c>'
-                .'<c r="I'.$rowNum.'" s="4"><f>SUM(I3:I'.$lastDataRow.')</f><v>'.$sumI.'</v></c>'
+                .'<c r="G'.$rowNum.'" s="4"><f>SUM(G3:G'.$lastDataRow.')</f><v>'.$totalBookletWithVat.'</v></c>'
+                .'<c r="H'.$rowNum.'" s="4"><f>SUM(H3:H'.$lastDataRow.')</f><v>'.$totalCustomerPayable.'</v></c>'
+                .'<c r="I'.$rowNum.'" s="4"><f>SUM(I3:I'.$lastDataRow.')</f><v>'.$totalCustomerTax.'</v></c>'
                 .'<c r="J'.$rowNum.'" s="2"/>'
-                .'<c r="K'.$rowNum.'" s="5"><f>SUM(K3:K'.$lastDataRow.')</f><v>'.round($sumK).'</v></c>'
-                .'<c r="L'.$rowNum.'" s="4"><f>SUM(L3:L'.$lastDataRow.')</f><v>'.round($sumL, 2).'</v></c>'
-                .'<c r="M'.$rowNum.'" s="4"><f>SUM(M3:M'.$lastDataRow.')</f><v>'.round($sumM).'</v></c>'
+                .'<c r="K'.$rowNum.'" s="5"><f>SUM(K3:K'.$lastDataRow.')</f><v>'.round($totalBookletRate).'</v></c>'
+                .'<c r="L'.$rowNum.'" s="4"><f>SUM(L3:L'.$lastDataRow.')</f><v>'.round($totalOperationalTonnage, 2).'</v></c>'
+                .'<c r="M'.$rowNum.'" s="4"><f>SUM(M3:M'.$lastDataRow.')</f><v>'.round($totalPerTonRate).'</v></c>'
                 .'<c r="N'.$rowNum.'" s="2"/>'
                 .'<c r="O'.$rowNum.'" s="2"/>'
                 .'</row>';
@@ -650,6 +650,11 @@ class ExcelExport
     {
         // حذف کاراکترهای کنترلی غیرمجاز در XML 1.0
         $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $value) ?? '';
+
+        // جلوگیری از Formula Injection در سلول‌های متنی اکسل
+        if ($clean !== '' && in_array($clean[0], ['=', '+', '-', '@'], true) && $clean !== '—') {
+            $clean = "'".$clean;
+        }
 
         return htmlspecialchars($clean, ENT_XML1 | ENT_QUOTES, 'UTF-8');
     }

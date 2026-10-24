@@ -129,9 +129,17 @@ class TariffController extends Controller
     public function importExcel(Request $request)
     {
         $request->validate([
-            'tariff_file' => ['required', 'file', 'max:10240'],
+            'tariff_file' => [
+                'required',
+                'file',
+                'max:10240',
+                'mimes:xlsx,zip',
+                'mimetypes:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/octet-stream',
+            ],
         ], [
             'tariff_file.required' => 'لطفاً فایل اکسل تعرفه (tarefe.xlsx) را انتخاب کنید.',
+            'tariff_file.mimes' => 'لطفاً فایل با فرمت اکسل استاندارد (.xlsx) انتخاب کنید.',
+            'tariff_file.mimetypes' => 'ساختار باینری فایل انتخاب‌شده معتبر نیست. لطفاً فایل .xlsx استاندارد انتخاب کنید.',
         ]);
 
         $file = $request->file('tariff_file');

@@ -9,6 +9,12 @@ use RuntimeException;
  */
 class ExcelReader
 {
+    /** حداکثر حجم مجاز هر فایل XML بازشده در حافظه (جلوگیری از Zip Bomb) */
+    private const MAX_UNCOMPRESSED_ENTRY_BYTES = 16 * 1024 * 1024;
+
+    /** حداکثر مجموع حجم بازشده کل آرشیو اکسل در حافظه */
+    private const MAX_TOTAL_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
+
     /**
      * خواندن تمام شیت‌ها و ردیف‌های یک فایل `.xlsx`
      *
@@ -72,6 +78,7 @@ class ExcelReader
         $entries = [];
         $len = strlen($zipData);
         $offset = 0;
+        $totalUncompressed = 0;
 
         while ($offset + 30 <= $len) {
             $sig = unpack('V', substr($zipData, $offset, 4))[1];
@@ -93,15 +100,28 @@ class ExcelReader
                 return self::extractViaCentralDirectory($zipData);
             }
 
+            if ($header['uncompSize'] > self::MAX_UNCOMPRESSED_ENTRY_BYTES) {
+                throw new RuntimeException('حجم بازشده فایل اکسل بیش از حد مجاز است.');
+            }
+
             $rawPayload = substr($zipData, $dataStart, $compSize);
 
             if ($header['method'] === 0) {
+                if (strlen($rawPayload) > self::MAX_UNCOMPRESSED_ENTRY_BYTES) {
+                    throw new RuntimeException('حجم بازشده فایل اکسل بیش از حد مجاز است.');
+                }
                 $entries[$name] = $rawPayload;
+                $totalUncompressed += strlen($rawPayload);
             } elseif ($header['method'] === 8 && function_exists('gzinflate')) {
-                $inflated = @gzinflate($rawPayload);
+                $inflated = @gzinflate($rawPayload, self::MAX_UNCOMPRESSED_ENTRY_BYTES);
                 if ($inflated !== false) {
                     $entries[$name] = $inflated;
+                    $totalUncompressed += strlen($inflated);
                 }
+            }
+
+            if ($totalUncompressed > self::MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                throw new RuntimeException('مجموع حجم داده‌های فایل اکسل بیش از سقف مجاز است.');
             }
 
             $offset = $dataStart + $compSize;
@@ -128,6 +148,7 @@ class ExcelReader
         $eocd = unpack('vdisk/vcdDisk/vdiskEntries/vtotalEntries/VcdSize/VcdOffset', substr($zipData, $eocdPos + 4, 16));
         $pos = $eocd['cdOffset'];
         $end = $pos + $eocd['cdSize'];
+        $totalUncompressed = 0;
 
         while ($pos + 46 <= $end && $pos + 46 <= strlen($zipData)) {
             $sig = unpack('V', substr($zipData, $pos, 4))[1];
@@ -140,6 +161,10 @@ class ExcelReader
                 substr($zipData, $pos + 4, 42)
             );
 
+            if ($cd['uncompSize'] > self::MAX_UNCOMPRESSED_ENTRY_BYTES) {
+                throw new RuntimeException('حجم بازشده فایل اکسل بیش از حد مجاز است.');
+            }
+
             $name = substr($zipData, $pos + 46, $cd['nameLen']);
             $localOffset = $cd['localOffset'];
 
@@ -149,12 +174,21 @@ class ExcelReader
                 $rawPayload = substr($zipData, $dataStart, $cd['compSize']);
 
                 if ($cd['method'] === 0) {
+                    if (strlen($rawPayload) > self::MAX_UNCOMPRESSED_ENTRY_BYTES) {
+                        throw new RuntimeException('حجم بازشده فایل اکسل بیش از حد مجاز است.');
+                    }
                     $entries[$name] = $rawPayload;
+                    $totalUncompressed += strlen($rawPayload);
                 } elseif ($cd['method'] === 8 && function_exists('gzinflate')) {
-                    $inflated = @gzinflate($rawPayload);
+                    $inflated = @gzinflate($rawPayload, self::MAX_UNCOMPRESSED_ENTRY_BYTES);
                     if ($inflated !== false) {
                         $entries[$name] = $inflated;
+                        $totalUncompressed += strlen($inflated);
                     }
+                }
+
+                if ($totalUncompressed > self::MAX_TOTAL_UNCOMPRESSED_BYTES) {
+                    throw new RuntimeException('مجموع حجم داده‌های فایل اکسل بیش از سقف مجاز است.');
                 }
             }
 

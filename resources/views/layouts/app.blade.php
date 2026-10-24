@@ -195,14 +195,12 @@
                         <li><a class="dropdown-item" href="{{ route('reports.daily-loading') }}">گزارش روزانه بارگیری</a></li>
                         <li><a class="dropdown-item" href="{{ route('reports.billings') }}">گزارش صورتحساب‌ها</a></li>
                         <li><a class="dropdown-item" href="{{ route('reports.wagon-detail') }}">گزارش تفصیلی واگن‌ها</a></li>
-                        @if(auth()->user()->isAdmin())
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header text-muted small">گزارش‌های مدیریتی</h6></li>
-                            <li><a class="dropdown-item" href="{{ route('reports.financial') }}">گزارش مالی</a></li>
-                            <li><a class="dropdown-item" href="{{ route('reports.operators') }}">عملکرد اپراتورها</a></li>
-                            <li><a class="dropdown-item" href="{{ route('reports.owners') }}">عملکرد صاحبان کالا</a></li>
-                            <li><a class="dropdown-item" href="{{ route('reports.representatives') }}">عملکرد نمایندگان</a></li>
-                        @endif
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header text-muted small">گزارش‌های مالی و عملکردی</h6></li>
+                        <li><a class="dropdown-item" href="{{ route('reports.financial') }}">گزارش مالی</a></li>
+                        <li><a class="dropdown-item" href="{{ route('reports.operators') }}">عملکرد اپراتورها</a></li>
+                        <li><a class="dropdown-item" href="{{ route('reports.owners') }}">عملکرد صاحبان کالا</a></li>
+                        <li><a class="dropdown-item" href="{{ route('reports.representatives') }}">عملکرد نمایندگان</a></li>
                     </ul>
                 </li>
                 @if(auth()->user()->isAdmin())

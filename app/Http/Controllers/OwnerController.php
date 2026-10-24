@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Owner;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class OwnerController extends Controller
 {
@@ -28,29 +29,34 @@ class OwnerController extends Controller
 
     public function store(Request $request)
     {
-        $data = $this->validated($request);
-        $repIds = array_values(array_filter(array_map('intval', (array) ($data['representative_ids'] ?? []))));
-        unset($data['representative_ids']);
-
-        $owner = Owner::create($data);
-
-        if (! empty($repIds)) {
-            $owner->representatives()->syncWithoutDetaching($repIds);
-        }
+        $validatedData = $this->validated($request);
+        $repIds = array_values(array_filter(array_map('intval', (array) ($validatedData['representative_ids'] ?? []))));
+        unset($validatedData['representative_ids']);
 
         $cargoRequestId = $request->integer('cargo_request_id') ?: null;
-        if ($cargoRequestId && $request->boolean('assign_to_cargo_request', true)) {
-            $cargoReq = \App\Models\CargoRequest::find($cargoRequestId);
-            if ($cargoReq && ($cargoReq->owner_id === null || $request->boolean('force_assign_owner'))) {
-                if (! $cargoReq->representative_id || in_array((int) $cargoReq->representative_id, $repIds, true)) {
-                    $cargoReq->update(['owner_id' => $owner->id]);
-                    \App\Models\Wagon::where('cargo_request_id', $cargoReq->id)
-                        ->where('is_settled', false)
-                        ->whereNull('owner_id')
-                        ->update(['owner_id' => $owner->id]);
+
+        $owner = DB::transaction(function () use ($validatedData, $repIds, $cargoRequestId, $request) {
+            $owner = Owner::create($validatedData);
+
+            if (! empty($repIds)) {
+                $owner->representatives()->syncWithoutDetaching($repIds);
+            }
+
+            if ($cargoRequestId && $request->boolean('assign_to_cargo_request', true)) {
+                $cargoReq = \App\Models\CargoRequest::lockForUpdate()->find($cargoRequestId);
+                if ($cargoReq && ($cargoReq->owner_id === null || $request->boolean('force_assign_owner'))) {
+                    if (! $cargoReq->representative_id || in_array((int) $cargoReq->representative_id, $repIds, true)) {
+                        $cargoReq->update(['owner_id' => $owner->id]);
+                        \App\Models\Wagon::where('cargo_request_id', $cargoReq->id)
+                            ->where('is_settled', false)
+                            ->whereNull('owner_id')
+                            ->update(['owner_id' => $owner->id]);
+                    }
                 }
             }
-        }
+
+            return $owner;
+        });
 
         $redirectTo = (string) $request->input('redirect_to', '');
 
@@ -99,16 +105,18 @@ class OwnerController extends Controller
 
     public function update(Request $request, Owner $owner)
     {
-        $data = $this->validated($request, $owner->id);
+        $validatedData = $this->validated($request, $owner->id);
         $hasRepsField = $request->has('representative_ids') || $request->boolean('sync_representatives');
-        $repIds = array_values(array_filter(array_map('intval', (array) ($data['representative_ids'] ?? []))));
-        unset($data['representative_ids']);
+        $repIds = array_values(array_filter(array_map('intval', (array) ($validatedData['representative_ids'] ?? []))));
+        unset($validatedData['representative_ids']);
 
-        $owner->update($data);
+        DB::transaction(function () use ($owner, $validatedData, $hasRepsField, $repIds) {
+            $owner->update($validatedData);
 
-        if ($hasRepsField) {
-            $owner->representatives()->sync($repIds);
-        }
+            if ($hasRepsField) {
+                $owner->representatives()->sync($repIds);
+            }
+        });
 
         return redirect()->route('owners.index')->with('success', 'اطلاعات صاحب کالا بروزرسانی شد.');
     }

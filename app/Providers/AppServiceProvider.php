@@ -201,7 +201,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v39';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v40';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -217,7 +217,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v39');
+                @file_put_contents($versionMarker, 'v40');
             }
         }
     }
@@ -364,8 +364,8 @@ class AppServiceProvider extends ServiceProvider
                 }
                 @file_put_contents($seededMarker, '1');
             }
-        } catch (\Throwable) {
-            // اگر اتصال دیتابیس هنوز برقرار نشده باشد (مثلاً قبل از نصب اولیه)، خطایی پرتاب نشود
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }

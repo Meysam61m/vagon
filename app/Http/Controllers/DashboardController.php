@@ -48,7 +48,9 @@ class DashboardController extends Controller
         $ownerShareChart = DB::table('billing_items')
             ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
             ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
-            ->join('owners', 'owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'))
+            ->join('owners', function ($join) {
+                $join->on('owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'));
+            })
             ->whereBetween('billings.billing_date', [$from, $to])
             ->where('billings.status', Billing::STATUS_ISSUED)
             ->whereNull('billings.deleted_at')

@@ -6,6 +6,7 @@ use App\Models\CargoRequest;
 use App\Models\Owner;
 use App\Models\Representative;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class RepresentativeController extends Controller
@@ -32,16 +33,20 @@ class RepresentativeController extends Controller
 
     public function store(Request $request)
     {
-        $data = $this->validated($request);
-        $ownerIds = array_values(array_filter(array_map('intval', (array) ($data['owner_ids'] ?? []))));
+        $validatedData = $this->validated($request);
+        $ownerIds = array_values(array_filter(array_map('intval', (array) ($validatedData['owner_ids'] ?? []))));
 
-        $representative = Representative::create([
-            'name' => $data['name'],
-            'national_id' => $data['national_id'] ?? null,
-            'phone' => $data['phone'] ?? null,
-        ]);
+        $representative = DB::transaction(function () use ($validatedData, $ownerIds) {
+            $rep = Representative::create([
+                'name' => $validatedData['name'],
+                'national_id' => $validatedData['national_id'] ?? null,
+                'phone' => $validatedData['phone'] ?? null,
+            ]);
 
-        $representative->owners()->sync($ownerIds);
+            $rep->owners()->sync($ownerIds);
+
+            return $rep;
+        });
 
         if ($request->input('redirect_to') === 'cargo.create') {
             $redirect = redirect()->route('cargo.create')
@@ -68,16 +73,18 @@ class RepresentativeController extends Controller
 
     public function update(Request $request, Representative $representative)
     {
-        $data = $this->validated($request, $representative->id);
-        $ownerIds = array_values(array_filter(array_map('intval', (array) ($data['owner_ids'] ?? []))));
+        $validatedData = $this->validated($request, $representative->id);
+        $ownerIds = array_values(array_filter(array_map('intval', (array) ($validatedData['owner_ids'] ?? []))));
 
-        $representative->update([
-            'name' => $data['name'],
-            'national_id' => $data['national_id'] ?? null,
-            'phone' => $data['phone'] ?? null,
-        ]);
+        DB::transaction(function () use ($representative, $validatedData, $ownerIds) {
+            $representative->update([
+                'name' => $validatedData['name'],
+                'national_id' => $validatedData['national_id'] ?? null,
+                'phone' => $validatedData['phone'] ?? null,
+            ]);
 
-        $representative->owners()->sync($ownerIds);
+            $representative->owners()->sync($ownerIds);
+        });
 
         return redirect()->route('representatives.index')->with('success', 'اطلاعات نماینده بروزرسانی شد.');
     }

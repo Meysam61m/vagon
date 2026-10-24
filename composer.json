@@ -12,9 +12,8 @@
     "license": "proprietary",
     "require": {
         "php": "^8.2",
-        "barryvdh/laravel-dompdf": "^3.0",
         "laravel/framework": "^12.0",
-        "morilog/jalali": "3.5"
+        "morilog/jalali": "^3.4"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
