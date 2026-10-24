@@ -90,12 +90,8 @@ class CargoController extends Controller
             ->select('wagons.*')
             ->join('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
             ->where('wagons.is_settled', false)
-            ->where(function ($q) {
-                $q->whereNull('wagons.loaded_weight')
-                    ->orWhereNull('wagons.tariff_id');
-            })
-            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, 'cancelled'])
-            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative'])
+            ->where('cargo_requests.status', '!=', 'cancelled')
+            ->with(['owner', 'tariff', 'cargoRequest.owner', 'cargoRequest.representative'])
             ->orderByDesc('cargo_requests.request_date')
             ->orderByDesc('wagons.cargo_request_id')
             ->orderBy('wagons.id')

@@ -253,16 +253,22 @@
 
     <div class="mt-3 mb-4">{{ $cargoRequests->links() }}</div>
 
-    {{-- گزارش واگن‌های در انتظار بارگیری در کارتابل عملیات بارگیری --}}
+    {{-- گزارش واگن‌های در انتظار بارگیری و صورتحساب‌نشده در کارتابل عملیات بارگیری --}}
+    @php
+        $pendingOnlyCount = $pendingWagonsList->filter(fn($w) => $w->loaded_weight === null || $w->tariff_id === null)->count();
+        $unbilledLoadedCount = $pendingWagonsList->filter(fn($w) => $w->loaded_weight !== null && $w->tariff_id !== null)->count();
+    @endphp
     <div class="card border-warning mb-4" id="pending-loading-report-card">
         <div class="card-header bg-warning-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h5 class="mb-0 fw-bold text-dark">
-                    گزارش واگن‌های در انتظار بارگیری
-                    <span class="badge bg-warning text-dark ms-1">{{ number_format($pendingWagonsList->count()) }} واگن</span>
+                    گزارش واگن‌های در انتظار بارگیری و صورتحساب‌نشده
+                    <span class="badge bg-dark ms-1">{{ number_format($pendingWagonsList->count()) }} واگن کل</span>
+                    <span class="badge bg-warning text-dark ms-1">{{ number_format($pendingOnlyCount) }} در انتظار بارگیری</span>
+                    <span class="badge bg-info text-dark ms-1">{{ number_format($unbilledLoadedCount) }} صورتحساب‌نشده</span>
                 </h5>
                 <div class="small text-muted">
-                    لیست کلیه واگن‌هایی که درخواست آن‌ها ثبت شده و در انتظار تکمیل اطلاعات بارگیری (تعرفه و تناژ) هستند.
+                    شامل کلیه واگن‌های در انتظار ثبت بارگیری و واگن‌های بارگیری‌شده‌ای که هنوز صورتحساب برای آن‌ها صادر نشده است.
                 </div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
@@ -287,6 +293,8 @@
                         <th>شماره خط</th>
                         <th>صاحب کالا</th>
                         <th>نماینده</th>
+                        <th>تعرفه ثبت‌شده</th>
+                        <th>وزن (تن)</th>
                         <th>وضعیت</th>
                         <th>عملیات</th>
                     </tr>
@@ -296,6 +304,7 @@
                         @php
                             $pwCr = $pw->cargoRequest;
                             $pwOwnerName = $pw->owner?->name ?? $pwCr?->owner?->name;
+                            $pwLoadedUnbilled = $pw->loaded_weight !== null && $pw->tariff_id !== null;
                         @endphp
                         <tr>
                             <td>{{ $loop->iteration }}</td>
@@ -318,19 +327,33 @@
                                 @endif
                             </td>
                             <td>{{ $pwCr?->representative?->name ?? '—' }}</td>
-                            <td><span class="badge bg-warning text-dark">در انتظار بارگیری</span></td>
+                            <td class="small">{{ $pw->tariff?->title ?? '—' }}</td>
+                            <td>{{ $pw->loaded_weight !== null ? $pw->loaded_weight : '—' }}</td>
+                            <td>
+                                @if($pwLoadedUnbilled)
+                                    <span class="badge bg-info text-dark">صورتحساب‌نشده (بارگیری‌شده)</span>
+                                @else
+                                    <span class="badge bg-warning text-dark">در انتظار بارگیری</span>
+                                @endif
+                            </td>
                             <td class="text-nowrap">
                                 @if($pwCr)
-                                    <a href="{{ route('cargo.show', $pwCr) }}" class="btn btn-sm btn-primary">
-                                        ثبت بارگیری
-                                    </a>
+                                    @if($pwLoadedUnbilled)
+                                        <a href="{{ route('cargo.show', $pwCr) }}" class="btn btn-sm btn-success">
+                                            صدور صورتحساب / مشاهده
+                                        </a>
+                                    @else
+                                        <a href="{{ route('cargo.show', $pwCr) }}" class="btn btn-sm btn-primary">
+                                            ثبت بارگیری
+                                        </a>
+                                    @endif
                                 @endif
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-center text-muted py-4">
-                                هم‌اکنون هیچ واگنی در انتظار بارگیری نیست.
+                            <td colspan="12" class="text-center text-muted py-4">
+                                هم‌اکنون هیچ واگنی در انتظار بارگیری یا صورتحساب‌نشده وجود ندارد.
                             </td>
                         </tr>
                     @endforelse

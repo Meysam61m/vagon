@@ -51,7 +51,7 @@ class ReportController extends Controller
     }
 
     /**
-     * گزارش واگن‌های در انتظار بارگیری (واگن‌هایی که هنوز وزن بارگیری یا تعرفه ندارند و تسویه نشده‌اند)
+     * گزارش واگن‌های در انتظار بارگیری و صورتحساب‌نشده (تمام واگن‌های باز که هنوز صورتحساب برای آن‌ها صادر نشده است)
      */
     public function pendingLoading(Request $request)
     {
@@ -66,14 +66,22 @@ class ReportController extends Controller
             [$fromShamsi, $toShamsi] = [JalaliDate::fromCarbon($from), JalaliDate::fromCarbon($to)];
         }
 
+        $stage = $request->string('stage')->toString();
+
         $filterQuery = Wagon::query()
             ->join('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
             ->where('wagons.is_settled', false)
-            ->where(function ($q) {
-                $q->whereNull('wagons.loaded_weight')
-                    ->orWhereNull('wagons.tariff_id');
+            ->where('cargo_requests.status', '!=', 'cancelled')
+            ->when($stage === 'pending_loading', function ($q) {
+                $q->where(function ($sub) {
+                    $sub->whereNull('wagons.loaded_weight')
+                        ->orWhereNull('wagons.tariff_id');
+                });
             })
-            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, 'cancelled'])
+            ->when($stage === 'unbilled', function ($q) {
+                $q->whereNotNull('wagons.loaded_weight')
+                    ->whereNotNull('wagons.tariff_id');
+            })
             ->when($from !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '>=', $from->toDateString()))
             ->when($to !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '<=', $to->toDateString()))
             ->when($request->filled('owner_id'), function ($q) use ($request) {
@@ -107,6 +115,16 @@ class ReportController extends Controller
 
         $summary = [
             'total_wagons' => (clone $filterQuery)->count('wagons.id'),
+            'pending_loading_wagons' => (clone $filterQuery)
+                ->where(function ($q) {
+                    $q->whereNull('wagons.loaded_weight')
+                        ->orWhereNull('wagons.tariff_id');
+                })
+                ->count('wagons.id'),
+            'unbilled_wagons' => (clone $filterQuery)
+                ->whereNotNull('wagons.loaded_weight')
+                ->whereNotNull('wagons.tariff_id')
+                ->count('wagons.id'),
             'total_requests' => (clone $filterQuery)->distinct()->count('wagons.cargo_request_id'),
             'unknown_owner_wagons' => (clone $filterQuery)
                 ->whereNull('wagons.owner_id')
@@ -116,7 +134,7 @@ class ReportController extends Controller
 
         $baseQuery = (clone $filterQuery)
             ->select('wagons.*')
-            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative', 'cargoRequest.operator'])
+            ->with(['owner', 'tariff', 'cargoRequest.owner', 'cargoRequest.representative', 'cargoRequest.operator'])
             ->orderByDesc('cargo_requests.request_date')
             ->orderByDesc('wagons.cargo_request_id')
             ->orderBy('wagons.id');
@@ -128,6 +146,8 @@ class ReportController extends Controller
             foreach ($allWagons as $idx => $wagon) {
                 $cr = $wagon->cargoRequest;
                 $ownerLabel = $wagon->owner?->name ?? $cr?->owner?->name ?? 'ناشناس';
+                $isLoadedUnbilled = $wagon->loaded_weight !== null && $wagon->tariff_id !== null;
+                $statusText = $isLoadedUnbilled ? 'بارگیری‌شده (صورتحساب‌نشده)' : 'در انتظار بارگیری';
 
                 $rows[] = [
                     $idx + 1,
@@ -138,7 +158,9 @@ class ReportController extends Controller
                     $wagon->line_number ?: '—',
                     $ownerLabel,
                     $cr?->representative?->name ?? '—',
-                    'در انتظار بارگیری',
+                    $wagon->tariff?->title ?? '—',
+                    $wagon->loaded_weight !== null ? round((float) $wagon->loaded_weight, 2) : '—',
+                    $statusText,
                 ];
             }
 
@@ -147,8 +169,8 @@ class ReportController extends Controller
                 : str_replace('/', '-', JalaliDate::today());
 
             return ExcelExport::download(
-                'pending-loading-report-'.$dateSuffix.'.xlsx',
-                'گزارش واگن‌های در انتظار بارگیری',
+                'pending-loading-and-unbilled-'.$dateSuffix.'.xlsx',
+                'گزارش واگن‌های در انتظار بارگیری و صورتحساب‌نشده',
                 [
                     'ردیف',
                     'شماره درخواست',
@@ -158,7 +180,9 @@ class ReportController extends Controller
                     'شماره خط',
                     'صاحب کالا',
                     'نماینده',
-                    'وضعیت',
+                    'تعرفه ثبت‌شده',
+                    'وزن بارگیری (تن)',
+                    'وضعیت واگن',
                 ],
                 $rows,
                 [
@@ -166,9 +190,11 @@ class ReportController extends Controller
                     $summary['total_requests'].' درخواست',
                     '',
                     $summary['total_wagons'].' واگن',
-                    '',
-                    '',
+                    'در انتظار بارگیری: '.$summary['pending_loading_wagons'],
+                    'صورتحساب‌نشده: '.$summary['unbilled_wagons'],
                     $summary['unknown_owner_wagons'] > 0 ? ($summary['unknown_owner_wagons'].' واگن ناشناس') : '',
+                    '',
+                    '',
                     '',
                     '',
                 ]
