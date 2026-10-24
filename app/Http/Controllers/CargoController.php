@@ -94,7 +94,7 @@ class CargoController extends Controller
                 $q->whereNull('wagons.loaded_weight')
                     ->orWhereNull('wagons.tariff_id');
             })
-            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, CargoRequest::STATUS_CANCELLED])
+            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, 'cancelled'])
             ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative'])
             ->orderByDesc('cargo_requests.request_date')
             ->orderByDesc('wagons.cargo_request_id')

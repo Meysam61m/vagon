@@ -10,6 +10,7 @@ class CargoRequest extends Model
     public const STATUS_PENDING = 'pending';
     public const STATUS_LOADED = 'loaded';
     public const STATUS_BILLED = 'billed';
+    public const STATUS_CANCELLED = 'cancelled';
 
     public const STATUS_LABELS = [
         self::STATUS_PENDING => 'در انتظار بارگیری',

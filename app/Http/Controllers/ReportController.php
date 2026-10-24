@@ -66,15 +66,14 @@ class ReportController extends Controller
             [$fromShamsi, $toShamsi] = [JalaliDate::fromCarbon($from), JalaliDate::fromCarbon($to)];
         }
 
-        $baseQuery = Wagon::query()
-            ->select('wagons.*')
+        $filterQuery = Wagon::query()
             ->join('cargo_requests', 'cargo_requests.id', '=', 'wagons.cargo_request_id')
             ->where('wagons.is_settled', false)
             ->where(function ($q) {
                 $q->whereNull('wagons.loaded_weight')
                     ->orWhereNull('wagons.tariff_id');
             })
-            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, CargoRequest::STATUS_CANCELLED])
+            ->whereNotIn('cargo_requests.status', [CargoRequest::STATUS_BILLED, 'cancelled'])
             ->when($from !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '>=', $from->toDateString()))
             ->when($to !== null, fn ($q) => $q->whereDate('cargo_requests.request_date', '<=', $to->toDateString()))
             ->when($request->filled('owner_id'), function ($q) use ($request) {
@@ -104,20 +103,23 @@ class ReportController extends Controller
                         ->orWhereHas('cargoRequest.owner', fn ($ow) => $ow->where('name', 'like', $term))
                         ->orWhereHas('cargoRequest.representative', fn ($rep) => $rep->where('name', 'like', $term));
                 });
-            })
-            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative', 'cargoRequest.operator'])
-            ->orderByDesc('cargo_requests.request_date')
-            ->orderByDesc('wagons.cargo_request_id')
-            ->orderBy('wagons.id');
+            });
 
         $summary = [
-            'total_wagons' => (clone $baseQuery)->count('wagons.id'),
-            'total_requests' => (clone $baseQuery)->distinct()->count('wagons.cargo_request_id'),
-            'unknown_owner_wagons' => (clone $baseQuery)
+            'total_wagons' => (clone $filterQuery)->count('wagons.id'),
+            'total_requests' => (clone $filterQuery)->distinct()->count('wagons.cargo_request_id'),
+            'unknown_owner_wagons' => (clone $filterQuery)
                 ->whereNull('wagons.owner_id')
                 ->whereNull('cargo_requests.owner_id')
                 ->count('wagons.id'),
         ];
+
+        $baseQuery = (clone $filterQuery)
+            ->select('wagons.*')
+            ->with(['owner', 'cargoRequest.owner', 'cargoRequest.representative', 'cargoRequest.operator'])
+            ->orderByDesc('cargo_requests.request_date')
+            ->orderByDesc('wagons.cargo_request_id')
+            ->orderBy('wagons.id');
 
         if ($this->wantsExcel($request)) {
             $allWagons = (clone $baseQuery)->get();
