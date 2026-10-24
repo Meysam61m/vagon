@@ -129,18 +129,18 @@ $envExists = is_file($base.'/.env');
  */
 $diagnoseKey = isset($env['DIAGNOSE_KEY']) ? trim((string) $env['DIAGNOSE_KEY']) : '';
 $remoteAddress = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
-$isLocalRequest = in_array($remoteAddress, ['127.0.0.1', '::1'], true);
+$isLocalRequest = PHP_SAPI === 'cli' || in_array($remoteAddress, ['127.0.0.1', '::1'], true);
 
 $providedKey = '';
 
-if (isset($_GET['key']) && is_string($_GET['key'])) {
-    $providedKey = $_GET['key'];
+if (isset($_POST['diagnose_key']) && is_string($_POST['diagnose_key'])) {
+    $providedKey = $_POST['diagnose_key'];
 } elseif (isset($_SERVER['HTTP_X_DIAGNOSE_KEY'])) {
     $providedKey = (string) $_SERVER['HTTP_X_DIAGNOSE_KEY'];
 }
 
 $diagnoseAllowed = $isLocalRequest
-    || ($diagnoseKey !== '' && hash_equals($diagnoseKey, $providedKey));
+    || (strlen($diagnoseKey) >= 16 && hash_equals($diagnoseKey, $providedKey));
 
 if (! $diagnoseAllowed) {
     if (! headers_sent()) {

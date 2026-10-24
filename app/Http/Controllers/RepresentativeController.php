@@ -7,12 +7,15 @@ use App\Models\Owner;
 use App\Models\Representative;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class RepresentativeController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Representative::class);
+
         $representatives = Representative::query()
             ->with('owners')
             ->search($request->string('search')->toString())
@@ -26,13 +29,17 @@ class RepresentativeController extends Controller
 
     public function create()
     {
-        $owners = Owner::active()->orderBy('name')->get();
+        Gate::authorize('create', Representative::class);
+
+        $owners = Owner::active()->orderBy('name')->get(['id', 'name', 'national_id']);
 
         return view('representatives.create', compact('owners'));
     }
 
     public function store(Request $request)
     {
+        Gate::authorize('create', Representative::class);
+
         $validatedData = $this->validated($request);
         $ownerIds = array_values(array_filter(array_map('intval', (array) ($validatedData['owner_ids'] ?? []))));
 
@@ -65,7 +72,9 @@ class RepresentativeController extends Controller
 
     public function edit(Representative $representative)
     {
-        $owners = Owner::active()->orderBy('name')->get();
+        Gate::authorize('update', $representative);
+
+        $owners = Owner::active()->orderBy('name')->get(['id', 'name', 'national_id']);
         $representative->load('owners');
 
         return view('representatives.edit', compact('representative', 'owners'));
@@ -73,6 +82,8 @@ class RepresentativeController extends Controller
 
     public function update(Request $request, Representative $representative)
     {
+        Gate::authorize('update', $representative);
+
         $validatedData = $this->validated($request, $representative->id);
         $ownerIds = array_values(array_filter(array_map('intval', (array) ($validatedData['owner_ids'] ?? []))));
 
@@ -91,6 +102,8 @@ class RepresentativeController extends Controller
 
     public function toggleActive(Representative $representative)
     {
+        Gate::authorize('update', $representative);
+
         $representative->update(['is_active' => ! $representative->is_active]);
 
         return back()->with('success', $representative->is_active ? 'نماینده فعال شد.' : 'نماینده غیرفعال شد.');
@@ -98,6 +111,8 @@ class RepresentativeController extends Controller
 
     public function destroy(Representative $representative)
     {
+        Gate::authorize('delete', $representative);
+
         if ($representative->cargoRequests()->exists() || $representative->billings()->exists()) {
             return back()->with('warning', 'این نماینده سابقه درخواست یا صورتحساب دارد و حذف نمی‌شود؛ آن را غیرفعال کنید.');
         }
@@ -110,6 +125,7 @@ class RepresentativeController extends Controller
     /** تاریخچه فعالیت‌های یک نماینده */
     public function history(Representative $representative)
     {
+        Gate::authorize('view', $representative);
         $cargoRequests = $representative->cargoRequests()
             ->with('owner')
             ->latest('request_date')

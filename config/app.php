@@ -143,4 +143,8 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'seed_admin_email' => env('SEED_ADMIN_EMAIL', 'admin@wagon.local'),
+    'seed_admin_password' => env('SEED_ADMIN_PASSWORD'),
+    'seed_operator_email' => env('SEED_OPERATOR_EMAIL', 'operator@wagon.local'),
+
 ];

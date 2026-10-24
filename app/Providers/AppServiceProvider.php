@@ -7,13 +7,18 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TariffController;
+use App\Models\Owner;
+use App\Models\Representative;
 use App\Models\Tariff;
+use App\Policies\OwnerPolicy;
+use App\Policies\RepresentativePolicy;
 use Database\Seeders\TariffSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
@@ -71,6 +76,10 @@ class AppServiceProvider extends ServiceProvider
         Blade::directive('jdatetime', function (string $expression) {
             return "<?php echo e($expression ? \\Morilog\\Jalali\\Jalalian::fromCarbon(\\Illuminate\\Support\\Carbon::instance($expression))->format('Y/m/d H:i') : '-'); ?>";
         });
+
+        // ثبت Policyهای مدل‌های دامنه (با حفظ کامل دسترسی اپراتور به تعریف و مدیریت صاحب کالا و نماینده)
+        Gate::policy(Owner::class, OwnerPolicy::class);
+        Gate::policy(Representative::class, RepresentativePolicy::class);
 
         // اطمینان از اینکه نمونه‌سازی کلاس تاریخ شمسی در زمان اجرا با autoload کامپوزر انجام می‌شود
         class_exists(Jalalian::class);
@@ -201,7 +210,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v40';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v41';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -217,7 +226,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v40');
+                @file_put_contents($versionMarker, 'v41');
             }
         }
     }

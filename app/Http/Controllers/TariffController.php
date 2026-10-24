@@ -150,8 +150,12 @@ class TariffController extends Controller
 
         try {
             $sheets = ExcelReader::readSheets($file->getRealPath());
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['tariff_file' => $e->getMessage()]);
         } catch (Throwable $e) {
-            return back()->withErrors(['tariff_file' => 'خطا در خواندن فایل اکسل: '.$e->getMessage()]);
+            report($e);
+
+            return back()->withErrors(['tariff_file' => 'فایل اکسل انتخاب‌شده قابل پردازش نیست.']);
         }
 
         $importedCount = 0;
@@ -327,40 +331,11 @@ class TariffController extends Controller
             return null;
         }
 
-        // استخراج نرخ
-        $rate = 0;
-        if ($colMap['rate'] && isset($row[$colMap['rate']])) {
-            $num = $toDigits($row[$colMap['rate']]);
-            if (is_numeric($num)) {
-                $rate = (int) round((float) $num);
-            }
-        }
-
-        if ($rate <= 0 && $colMap['rate_with_vat'] && isset($row[$colMap['rate_with_vat']])) {
-            $num = $toDigits($row[$colMap['rate_with_vat']]);
-            if (is_numeric($num)) {
-                $currentTaxPct = (float) TaxSetting::currentPercentage();
-                $divisor = $currentTaxPct > 0 ? (1 + ($currentTaxPct / 100)) : 1.0;
-                $rate = (int) round(((float) $num) / $divisor);
-            }
-        }
-
-        // اگر هنوز نرخ پیدا نشده، بزرگ‌ترین عدد ردیف (بیشتر از ۱۰۰ هزار ریال) را به عنوان نرخ در نظر می‌گیریم
-        if ($rate <= 0) {
-            foreach ($row as $val) {
-                $num = $toDigits($val);
-                if (is_numeric($num) && (float) $num >= 100_000) {
-                    $rate = (int) round((float) $num);
-                    break;
-                }
-            }
-        }
-
+        $rate = $this->extractRateFromRow($row, $colMap, $toDigits);
         if ($rate <= 0) {
             return null;
         }
 
-        // تشخیص نوع دستگاه (جرثقیل / لیفتراک / کارگری)
         $equipmentRaw = $colMap['equipment'] ? ($row[$colMap['equipment']] ?? '') : implode(' ', $row);
         $equipmentType = 'crane';
         if (str_contains($equipmentRaw, 'لیفتراک') || stripos($equipmentRaw, 'forklift') !== false) {
@@ -369,19 +344,7 @@ class TariffController extends Controller
             $equipmentType = 'labor';
         }
 
-        // ظرفیت
-        $capacity = 65.0;
-        if ($colMap['capacity'] && isset($row[$colMap['capacity']])) {
-            $capNum = $toDigits($row[$colMap['capacity']]);
-            if (is_numeric($capNum) && (float) $capNum >= 1 && (float) $capNum <= 200) {
-                $capacity = (float) $capNum;
-            }
-        } elseif (preg_match('/(\d{2,3})\s*تن/u', $title.' '.($row[$colMap['unit'] ?? ''] ?? ''), $m)) {
-            $capVal = (float) $toDigits($m[1]);
-            if ($capVal >= 10 && $capVal <= 200) {
-                $capacity = $capVal;
-            }
-        }
+        $capacity = $this->extractCapacityFromRow($row, $colMap, $title, $toDigits);
 
         $equipLabel = Tariff::EQUIPMENT_LABELS[$equipmentType] ?? 'جرثقیل';
         if (! str_contains($title, $equipLabel)) {
@@ -408,6 +371,65 @@ class TariffController extends Controller
             'category' => $equipmentType === 'labor' ? 2 : 1,
             'equipment_type' => $equipmentType,
         ];
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     * @param  array<string, mixed>  $colMap
+     */
+    private function extractRateFromRow(array $row, array $colMap, callable $toDigits): int
+    {
+        $rate = 0;
+        if ($colMap['rate'] && isset($row[$colMap['rate']])) {
+            $num = $toDigits($row[$colMap['rate']]);
+            if (is_numeric($num)) {
+                $rate = (int) round((float) $num);
+            }
+        }
+
+        if ($rate <= 0 && $colMap['rate_with_vat'] && isset($row[$colMap['rate_with_vat']])) {
+            $num = $toDigits($row[$colMap['rate_with_vat']]);
+            if (is_numeric($num)) {
+                $currentTaxPct = (float) TaxSetting::currentPercentage();
+                $divisor = $currentTaxPct > 0 ? (1 + ($currentTaxPct / 100)) : 1.0;
+                $rate = (int) round(((float) $num) / $divisor);
+            }
+        }
+
+        if ($rate <= 0) {
+            foreach ($row as $val) {
+                $num = $toDigits($val);
+                if (is_numeric($num) && (float) $num >= 100_000) {
+                    $rate = (int) round((float) $num);
+                    break;
+                }
+            }
+        }
+
+        return $rate;
+    }
+
+    /**
+     * @param  array<string, string>  $row
+     * @param  array<string, mixed>  $colMap
+     */
+    private function extractCapacityFromRow(array $row, array $colMap, string $title, callable $toDigits): float
+    {
+        if ($colMap['capacity'] && isset($row[$colMap['capacity']])) {
+            $capNum = $toDigits($row[$colMap['capacity']]);
+            if (is_numeric($capNum) && (float) $capNum >= 1 && (float) $capNum <= 200) {
+                return (float) $capNum;
+            }
+        }
+
+        if (preg_match('/(\d{2,3})\s*تن/u', $title.' '.($row[$colMap['unit'] ?? ''] ?? ''), $m)) {
+            $capVal = (float) $toDigits($m[1]);
+            if ($capVal >= 10 && $capVal <= 200) {
+                return $capVal;
+            }
+        }
+
+        return 65.0;
     }
 
     private function validated(Request $request, ?int $ignoreId = null): array

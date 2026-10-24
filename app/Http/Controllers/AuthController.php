@@ -118,7 +118,7 @@ class AuthController extends Controller
             $request->session()->regenerateToken();
         }
 
-        if ($request->query('reason') === 'idle') {
+        if ($request->input('reason') === 'idle' || $request->query('reason') === 'idle') {
             return redirect()
                 ->route('login')
                 ->with('warning', 'به دلیل ۳۰ دقیقه عدم فعالیت، به صورت خودکار از سامانه خارج شدید. لطفاً مجدداً وارد شوید.');

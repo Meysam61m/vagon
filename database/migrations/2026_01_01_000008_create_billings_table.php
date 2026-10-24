@@ -32,6 +32,7 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['billing_date', 'status']);
+            $table->index(['status', 'billing_date']);
             $table->index('owner_id');
         });
     }

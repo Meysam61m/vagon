@@ -28,18 +28,26 @@ class DashboardController extends Controller
 
         [$from, $to] = $this->resolveDateRange($request);
 
+        $billingAggregates = Billing::query()
+            ->whereBetween('billing_date', [$from, $to])
+            ->where('status', Billing::STATUS_ISSUED)
+            ->selectRaw('COUNT(*) as total_billings, COALESCE(SUM(total_amount), 0) as total_amount')
+            ->first();
+
+        $pendingWagonsCount = Wagon::where('is_settled', false)->count();
+        $editedWagonsTotal = Wagon::ownerEdited()->count();
+        $editedWagonsInRange = Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count();
+
         $kpis = [
             'total_requests' => CargoRequest::whereBetween('request_date', [$from, $to])->count(),
-            'total_billings' => Billing::whereBetween('billing_date', [$from, $to])
-                ->where('status', Billing::STATUS_ISSUED)->count(),
-            'total_amount' => Billing::whereBetween('billing_date', [$from, $to])
-                ->where('status', Billing::STATUS_ISSUED)->sum('total_amount'),
-            'pending_wagons' => Wagon::where('is_settled', false)->count(),
+            'total_billings' => (int) ($billingAggregates->total_billings ?? 0),
+            'total_amount' => (int) ($billingAggregates->total_amount ?? 0),
+            'pending_wagons' => $pendingWagonsCount,
             'loaded_wagons' => Wagon::whereNotNull('loaded_weight')->where('is_settled', false)->count(),
             'active_owners' => Owner::active()->count(),
             'active_representatives' => Representative::active()->count(),
-            'edited_wagons' => Wagon::ownerEdited()->count(),
-            'edited_wagons_in_range' => Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count(),
+            'edited_wagons' => $editedWagonsTotal,
+            'edited_wagons_in_range' => $editedWagonsInRange,
         ];
 
         $loadingChart = $this->dailyLoading($from, $to);
@@ -65,11 +73,11 @@ class DashboardController extends Controller
         $wagonStats = [
             'loaded' => Wagon::whereNotNull('loaded_weight')->count(),
             'settled' => Wagon::where('is_settled', true)->count(),
-            'pending' => Wagon::where('is_settled', false)->count(),
-            'edited' => Wagon::ownerEdited()->count(),
+            'pending' => $pendingWagonsCount,
+            'edited' => $editedWagonsTotal,
             'number_edited' => Wagon::numberEdited()->count(),
             'owner_edited' => Wagon::onlyOwnerChanged()->count(),
-            'edited_in_range' => Wagon::ownerEdited()->whereBetween('owner_changed_at', [$from, $to])->count(),
+            'edited_in_range' => $editedWagonsInRange,
             'total_edit_logs' => WagonOwnerLog::count(),
         ];
 

@@ -706,7 +706,7 @@
 
         // مدیریت خروج خودکار پس از ۳۰ دقیقه عدم فعالیت (Idle Timeout) و تمدید نشست فقط در صورت فعالیت کاربر
         const keepAliveUrl = @json(url('/session/keep-alive'));
-        const idleLogoutUrl = @json(url('/logout?reason=idle'));
+        const logoutActionUrl = @json(route('logout'));
         const isAuthenticated = @json(auth()->check());
         const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // ۳۰ دقیقه عدم فعالیت
         const HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000; // ۴ دقیقه
@@ -717,6 +717,34 @@
 
         function markUserActivity() {
             lastUserActivityAt = Date.now();
+        }
+
+        function triggerIdleLogout() {
+            if (isLoggingOutIdle) return;
+            isLoggingOutIdle = true;
+
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            const token = meta ? meta.getAttribute('content') : '';
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = logoutActionUrl;
+            form.style.display = 'none';
+
+            const tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = '_token';
+            tokenInput.value = token || '';
+            form.appendChild(tokenInput);
+
+            const reasonInput = document.createElement('input');
+            reasonInput.type = 'hidden';
+            reasonInput.name = 'reason';
+            reasonInput.value = 'idle';
+            form.appendChild(reasonInput);
+
+            document.body.appendChild(form);
+            form.submit();
         }
 
         ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'change'].forEach(function (evtName) {
@@ -740,9 +768,8 @@
                 .then(function (data) {
                     if (!data) return;
 
-                    if (isAuthenticated && data.authenticated === false && !isLoggingOutIdle) {
-                        isLoggingOutIdle = true;
-                        window.location.href = idleLogoutUrl;
+                    if (isAuthenticated && data.authenticated === false) {
+                        triggerIdleLogout();
                         return;
                     }
 
@@ -768,10 +795,7 @@
 
                 // اگر ۳۰ دقیقه هیچ فعالیتی (موس/کیبورد/اسکرول/کلیک) انجام نشده باشد، خروج خودکار انجام شود
                 if (idleElapsed >= IDLE_TIMEOUT_MS) {
-                    if (!isLoggingOutIdle) {
-                        isLoggingOutIdle = true;
-                        window.location.href = idleLogoutUrl;
-                    }
+                    triggerIdleLogout();
                     return;
                 }
 
@@ -783,9 +807,8 @@
 
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState === 'visible') {
-                    if ((Date.now() - lastUserActivityAt) >= IDLE_TIMEOUT_MS && !isLoggingOutIdle) {
-                        isLoggingOutIdle = true;
-                        window.location.href = idleLogoutUrl;
+                    if ((Date.now() - lastUserActivityAt) >= IDLE_TIMEOUT_MS) {
+                        triggerIdleLogout();
                     }
                 }
             });

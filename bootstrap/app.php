@@ -42,12 +42,6 @@ return Application::configure(basePath: dirname(__DIR__))
             fn () => auth()->user()?->isAdmin() ? route('dashboard') : route('cargo.index')
         );
 
-        // خروج از سامانه حتی در صورت منقضی شدن توکن CSRF نباید خطای 419 بدهد
-        $middleware->validateCsrfTokens(except: [
-            'logout',
-            '/logout',
-        ]);
-
         /*
          * کاربران غیرفعال حتی با سشن معتبر هم بلافاصله بیرون انداخته می‌شوند.
          * هدرهای امنیتی هم روی همه پاسخ‌های وب اعمال می‌شوند.
@@ -67,14 +61,26 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $e, \Illuminate\Http\Request $request) {
             if ($response->getStatusCode() === 419 || $e instanceof \Illuminate\Session\TokenMismatchException) {
-                if ($request->hasSession()) {
-                    $request->session()->regenerateToken();
+                if ($request->is('logout') || $request->routeIs('logout')) {
+                    if (\Illuminate\Support\Facades\Auth::check()) {
+                        \Illuminate\Support\Facades\Auth::guard('web')->logout();
+                    }
+                    if ($request->hasSession()) {
+                        $request->session()->invalidate();
+                        $request->session()->regenerateToken();
+                    }
+
+                    $isIdle = $request->query('reason') === 'idle' || $request->input('reason') === 'idle';
+                    $redirect = redirect()->route('login');
+                    $redirect = $isIdle
+                        ? $redirect->with('warning', 'به دلیل ۳۰ دقیقه عدم فعالیت، به صورت خودکار از سامانه خارج شدید. لطفاً مجدداً وارد شوید.')
+                        : $redirect->with('info', 'نشست کاری شما پایان یافته بود و از سامانه خارج شدید.');
+
+                    return SecurityHeaders::apply($redirect);
                 }
 
-                if ($request->is('logout') || $request->routeIs('logout')) {
-                    return SecurityHeaders::apply(
-                        redirect()->route('login')->with('info', 'نشست کاری شما پایان یافته بود و از سامانه خارج شدید.')
-                    );
+                if ($request->hasSession()) {
+                    $request->session()->regenerateToken();
                 }
 
                 if ($request->is('login') || $request->routeIs('login.submit')) {

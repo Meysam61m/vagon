@@ -29,7 +29,14 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate([
+        $rawEmail = trim((string) $request->input('email', ''));
+        $normalizedEmail = function_exists('mb_strtolower')
+            ? mb_strtolower($rawEmail, 'UTF-8')
+            : strtolower($rawEmail);
+
+        $request->merge(['email' => $normalizedEmail]);
+
+        $validatedData = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'confirmed', Password::min(10)->letters()->numbers()],
@@ -43,13 +50,9 @@ class UserController extends Controller
             'role' => 'نقش',
         ]);
 
-        $data['is_active'] = true;
+        $validatedData['is_active'] = true;
 
-        // ایمیل همیشه با حروف کوچک ذخیره می‌شود تا دو حساب با ایمیل یکسان
-        // ولی حروف بزرگ/کوچک متفاوت ساخته نشود.
-        $data['email'] = mb_strtolower(trim($data['email']));
-
-        User::create($data);
+        User::create($validatedData);
 
         return redirect()->route('users.index')->with('success', 'کاربر جدید با موفقیت افزوده شد.');
     }
@@ -61,7 +64,14 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
-        $data = $request->validate([
+        $rawEmail = trim((string) $request->input('email', ''));
+        $normalizedEmail = function_exists('mb_strtolower')
+            ? mb_strtolower($rawEmail, 'UTF-8')
+            : strtolower($rawEmail);
+
+        $request->merge(['email' => $normalizedEmail]);
+
+        $validatedData = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'confirmed', Password::min(10)->letters()->numbers()],
@@ -75,17 +85,15 @@ class UserController extends Controller
             'role' => 'نقش',
         ]);
 
-        if ($user->id === auth()->id() && $data['role'] !== $user->role) {
+        if ($user->id === auth()->id() && $validatedData['role'] !== $user->role) {
             return back()->with('warning', 'نقش حساب خودتان را نمی‌توانید تغییر دهید.');
         }
 
-        if (blank($data['password'] ?? null)) {
-            unset($data['password']);
+        if (blank($validatedData['password'] ?? null)) {
+            unset($validatedData['password']);
         }
 
-        $data['email'] = mb_strtolower(trim($data['email']));
-
-        $user->update($data);
+        $user->update($validatedData);
 
         return redirect()->route('users.index')->with('success', 'اطلاعات کاربر بروزرسانی شد.');
     }

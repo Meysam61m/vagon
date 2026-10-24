@@ -297,4 +297,21 @@ class ValidationTest extends TestCase
 
         $this->assertSame(0, CargoRequest::count());
     }
+
+    public function test_cargo_request_can_be_created_without_owner_when_representative_is_provided(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('cargo.store'), [
+                'owner_id' => null,
+                'representative_id' => $this->representative->id,
+                'request_date_shamsi' => '1404/07/25',
+                'wagons' => [['number' => '987654', 'description' => 'ورق فولادی']],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $cargo = CargoRequest::firstOrFail();
+        $this->assertNull($cargo->owner_id);
+        $this->assertSame($this->representative->id, $cargo->representative_id);
+    }
 }

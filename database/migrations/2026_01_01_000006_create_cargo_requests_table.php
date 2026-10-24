@@ -21,6 +21,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['request_date', 'status']);
+            $table->index(['status', 'request_date']);
             $table->index('owner_id');
         });
     }

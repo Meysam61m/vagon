@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Owner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class OwnerController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Owner::class);
+
         $owners = Owner::query()
             ->search($request->string('search')->toString())
             ->when($request->filled('status'), fn ($q) => $q->where('is_active', $request->string('status')->toString() === 'active'))
@@ -22,13 +25,17 @@ class OwnerController extends Controller
 
     public function create()
     {
-        $representatives = \App\Models\Representative::active()->orderBy('name')->get();
+        Gate::authorize('create', Owner::class);
+
+        $representatives = \App\Models\Representative::active()->orderBy('name')->get(['id', 'name', 'national_id']);
 
         return view('owners.create', compact('representatives'));
     }
 
     public function store(Request $request)
     {
+        Gate::authorize('create', Owner::class);
+
         $validatedData = $this->validated($request);
         $repIds = array_values(array_filter(array_map('intval', (array) ($validatedData['representative_ids'] ?? []))));
         unset($validatedData['representative_ids']);
@@ -97,7 +104,9 @@ class OwnerController extends Controller
 
     public function edit(Owner $owner)
     {
-        $representatives = \App\Models\Representative::active()->orderBy('name')->get();
+        Gate::authorize('update', $owner);
+
+        $representatives = \App\Models\Representative::active()->orderBy('name')->get(['id', 'name', 'national_id']);
         $owner->load('representatives');
 
         return view('owners.edit', compact('owner', 'representatives'));
@@ -105,6 +114,8 @@ class OwnerController extends Controller
 
     public function update(Request $request, Owner $owner)
     {
+        Gate::authorize('update', $owner);
+
         $validatedData = $this->validated($request, $owner->id);
         $hasRepsField = $request->has('representative_ids') || $request->boolean('sync_representatives');
         $repIds = array_values(array_filter(array_map('intval', (array) ($validatedData['representative_ids'] ?? []))));
@@ -123,6 +134,8 @@ class OwnerController extends Controller
 
     public function toggleActive(Owner $owner)
     {
+        Gate::authorize('update', $owner);
+
         $owner->update(['is_active' => ! $owner->is_active]);
 
         return back()->with('success', $owner->is_active ? 'صاحب کالا فعال شد.' : 'صاحب کالا غیرفعال شد.');
@@ -130,6 +143,8 @@ class OwnerController extends Controller
 
     public function destroy(Owner $owner)
     {
+        Gate::authorize('delete', $owner);
+
         $hasWagonLinks = \App\Models\Wagon::where('owner_id', $owner->id)
             ->orWhere('previous_owner_id', $owner->id)
             ->exists()
@@ -149,6 +164,7 @@ class OwnerController extends Controller
     /** تاریخچه بارگیری و صورتحساب‌های یک صاحب کالا */
     public function history(Owner $owner)
     {
+        Gate::authorize('view', $owner);
         $cargoRequests = $owner->cargoRequests()
             ->with('wagons', 'representative')
             ->latest('request_date')
