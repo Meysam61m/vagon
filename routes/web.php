@@ -14,17 +14,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [AuthController::class, 'home'])->name('home');
 
-// ---------- احراز هویت ----------
-Route::middleware('guest')->group(function () {
-    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])
-        ->middleware('throttle:5,1')
-        ->name('login.submit');
-});
-
-Route::post('/logout', [AuthController::class, 'logout'])
-    ->middleware('auth')
-    ->name('logout');
+// ---------- احراز هویت و مدیریت نشست ----------
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
+Route::match(['get', 'post'], '/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/session/keep-alive', [AuthController::class, 'keepAlive'])->name('session.keep-alive');
 
 // ---------- بخش داخلی سیستم ----------
 Route::middleware('auth')->group(function () {

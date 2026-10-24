@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'سامانه مدیریت بارگیری واگن') — شرکت انبارهای عمومی و خدمات گمرکی ایران</title>
     <link rel="icon" type="image/png" href="{{ asset('images/logo.png') }}">
 
@@ -702,6 +703,50 @@
                     if (wagonCountInput) wagonCountInput.value = '1';
                     if (resultBox) resultBox.classList.add('d-none');
                 });
+            }
+        });
+
+        // تمدید خودکار نشست کاری (Session Keep-Alive) و به‌روزرسانی توکن‌های CSRF در فرم‌های باز
+        const keepAliveUrl = @json(url('/session/keep-alive'));
+        let lastKeepAliveAt = Date.now();
+
+        function refreshSessionHeartbeat() {
+            lastKeepAliveAt = Date.now();
+            fetch(keepAliveUrl, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                cache: 'no-store'
+            })
+                .then(function (res) {
+                    return res.ok ? res.json() : null;
+                })
+                .then(function (data) {
+                    if (data && data.token) {
+                        const meta = document.querySelector('meta[name="csrf-token"]');
+                        if (meta) {
+                            meta.setAttribute('content', data.token);
+                        }
+                        document.querySelectorAll('input[name="_token"]').forEach(function (input) {
+                            input.value = data.token;
+                        });
+                    }
+                })
+                .catch(function () {
+                    // نادیده گرفتن خطاهای موقت شبکه
+                });
+        }
+
+        // ارسال پینگ تمدید نشست هر ۴ دقیقه یک‌بار
+        setInterval(refreshSessionHeartbeat, 4 * 60 * 1000);
+
+        // اگر تب مرورگر برای مدتی در پس‌زمینه بوده و کاربر دوباره به آن برگردد، بلافاصله توکن را تازه کن
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && (Date.now() - lastKeepAliveAt) > 60 * 1000) {
+                refreshSessionHeartbeat();
             }
         });
     });

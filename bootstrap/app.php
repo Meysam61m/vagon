@@ -42,6 +42,12 @@ return Application::configure(basePath: dirname(__DIR__))
             fn () => auth()->user()?->isAdmin() ? route('dashboard') : route('cargo.index')
         );
 
+        // خروج از سامانه حتی در صورت منقضی شدن توکن CSRF نباید خطای 419 بدهد
+        $middleware->validateCsrfTokens(except: [
+            'logout',
+            '/logout',
+        ]);
+
         /*
          * کاربران غیرفعال حتی با سشن معتبر هم بلافاصله بیرون انداخته می‌شوند.
          * هدرهای امنیتی هم روی همه پاسخ‌های وب اعمال می‌شوند.
@@ -56,10 +62,36 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions) {
         /*
-         * صفحه‌های خطا (404، 419، 500 و ...) از میدل‌ور وب عبور نمی‌کنند؛
-         * برای همین هدرهای امنیتی را روی پاسخ آن‌ها هم اعمال می‌کنیم.
+         * مدیریت هوشمند انقضای سشن / توکن CSRF (خطای 419) بدون نمایش صفحه خطای سفید
+         * و اعمال هدرهای امنیتی روی تمام پاسخ‌ها
          */
-        $exceptions->respond(
-            fn (\Symfony\Component\HttpFoundation\Response $response) => SecurityHeaders::apply($response)
-        );
+        $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, \Throwable $e, \Illuminate\Http\Request $request) {
+            if ($response->getStatusCode() === 419 || $e instanceof \Illuminate\Session\TokenMismatchException) {
+                if ($request->hasSession()) {
+                    $request->session()->regenerateToken();
+                }
+
+                if ($request->is('logout') || $request->routeIs('logout')) {
+                    return SecurityHeaders::apply(
+                        redirect()->route('login')->with('info', 'نشست کاری شما پایان یافته بود و از سامانه خارج شدید.')
+                    );
+                }
+
+                if ($request->is('login') || $request->routeIs('login.submit')) {
+                    return SecurityHeaders::apply(
+                        redirect()->route('login')
+                            ->withInput($request->only('email', 'remember'))
+                            ->with('warning', 'صفحه ورود برای مدت طولانی باز مانده بود و نشست تازه شد. لطفاً رمز عبور را وارد کرده و مجدداً دکمه ورود را بزنید.')
+                    );
+                }
+
+                return SecurityHeaders::apply(
+                    redirect()->back(fallback: route('login'))
+                        ->withInput($request->except('password', 'password_confirmation', '_token'))
+                        ->with('warning', 'نشست کاری شما به دلیل عدم فعالیت طولانی‌مدت تازه شد. لطفاً مجدداً تلاش کنید.')
+                );
+            }
+
+            return SecurityHeaders::apply($response);
+        });
     })->create();

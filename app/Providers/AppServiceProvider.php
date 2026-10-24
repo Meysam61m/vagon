@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\ReportController;
@@ -24,7 +25,20 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        //
+        // اطمینان از تنظیمات پایدار سشن حتی در صورت وجود فایل .env قدیمی
+        if ((int) config('session.lifetime', 120) < 480) {
+            config(['session.lifetime' => 720]);
+        }
+
+        $cookieName = (string) config('session.cookie', '');
+        if ($cookieName === '' || $cookieName === '_session' || $cookieName === 'laravel_session') {
+            config(['session.cookie' => 'wagon_system_session']);
+        }
+
+        $sessionsDir = storage_path('framework/sessions');
+        if (! is_dir($sessionsDir)) {
+            @mkdir($sessionsDir, 0775, true);
+        }
     }
 
     public function boot(): void
@@ -81,6 +95,7 @@ class AppServiceProvider extends ServiceProvider
                 || ! str_contains($content, 'tariffs.destroy')
                 || ! str_contains($content, 'cargo.quick-bill')
                 || ! str_contains($content, 'cargo.print')
+                || ! str_contains($content, 'session.keep-alive')
                 || ! str_contains($content, 'AuthController')
             ) {
                 @unlink($routeCache);
@@ -165,6 +180,14 @@ class AppServiceProvider extends ServiceProvider
                 $registered = true;
             }
 
+            if (! Route::has('session.keep-alive')) {
+                Route::middleware(['web'])->group(function () {
+                    Route::get('/session/keep-alive', [AuthController::class, 'keepAlive'])
+                        ->name('session.keep-alive');
+                });
+                $registered = true;
+            }
+
             if ($registered) {
                 $routes = app('router')->getRoutes();
                 $routes->refreshNameLookups();
@@ -176,7 +199,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v37';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v38';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -192,7 +215,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v37');
+                @file_put_contents($versionMarker, 'v38');
             }
         }
     }
