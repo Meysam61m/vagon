@@ -119,7 +119,7 @@
             <table class="table table-bordered bg-white setad-table mb-0">
                 <thead>
                 <tr class="setad-banner">
-                    <th colspan="14">
+                    <th colspan="13">
                         <div class="d-flex justify-content-between align-items-center px-2">
                             <div class="d-flex align-items-center gap-2 text-start">
                                 <img src="{{ asset('images/logo.png') }}" alt="لوگو" style="height: 44px; width: auto;">
@@ -142,7 +142,6 @@
                     <th>شماره واگن</th>
                     <th>شرح کالا</th>
                     <th>عنوان تعرفه استفاده شده</th>
-                    <th>مبلغ تعرفه</th>
                     <th>نام صاحب کالا</th>
                     <th>مبلغ با احتساب مالیات بر ارزش افزوده</th>
                     <th>مبلغ کل قابل دریافت از مشتری</th>
@@ -161,7 +160,6 @@
                         <td class="fw-bold font-monospace">{{ $row['wagon_number'] }}</td>
                         <td>{{ $row['cargo_description'] ?? $row['tariff_name'] }}</td>
                         <td>{{ $row['used_tariff_title'] ?? '—' }}</td>
-                        <td class="money fw-bold">{{ number_format(round($row['tariff_rate'] ?? $row['booklet_rate'] ?? 0)) }}</td>
                         <td>{{ $row['owner_name'] }}</td>
                         <td class="money fw-bold">{{ number_format(round($row['total_with_vat'])) }}</td>
                         <td class="money fw-bold">{{ number_format(round($row['customer_payable'])) }}</td>
@@ -176,7 +174,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="14" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }} واگن بارگیری‌شده یا صورتحساب فعالی ثبت نشده است.
                         </td>
                     </tr>
@@ -186,7 +184,6 @@
                     <tfoot>
                     <tr class="setad-total-row">
                         <td colspan="4">جمع کل ({{ number_format($totals['count']) }} واگن)</td>
-                        <td class="money">{{ number_format(round($totals['tariff_rate'] ?? $totals['booklet_rate'] ?? 0)) }}</td>
                         <td>—</td>
                         <td class="money">{{ number_format(round($totals['total_with_vat'])) }}</td>
                         <td class="money">{{ number_format(round($totals['customer_payable'])) }}</td>

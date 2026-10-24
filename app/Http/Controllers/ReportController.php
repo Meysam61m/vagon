@@ -910,13 +910,16 @@ class ReportController extends Controller
         // تناژ عملیاتی برای همه واگن‌ها
         $operationalTonnage = $loadedWeight;
 
-        // مبلغ کل قابل دریافت از مشتری (تناژ عملیاتی × نرخ هر تن) برای همه واگن‌ها
-        $customerPayable = $operationalTonnage * $perTonRate;
+        // هزینه پایه تناژی (تناژ عملیاتی × نرخ هر تن)
+        $basePayable = $operationalTonnage * $perTonRate;
 
         // مبلغ با احتساب مالیات بر ارزش افزوده
-        $baseRounded = round($customerPayable);
+        $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
         $totalWithVat = (int) ($item->total_amount ?: ($baseRounded + $taxRounded));
+
+        // مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
+        $customerPayable = (float) $totalWithVat;
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? ($wagon?->tariff?->equipmentLabel() ?? 'جرثقیل');
@@ -976,11 +979,14 @@ class ReportController extends Controller
 
         $bookletRate = (float) ($tariff?->rate ?: 0);
         $perTonRate = $bookletRate / $capacity;
-        $customerPayable = $operationalTonnage * $perTonRate;
+        $basePayable = $operationalTonnage * $perTonRate;
 
-        $baseRounded = round($customerPayable);
+        $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
         $totalWithVat = (int) ($baseRounded + $taxRounded);
+
+        // مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
+        $customerPayable = (float) $totalWithVat;
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';

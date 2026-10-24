@@ -177,16 +177,15 @@ class ExcelExport
             'C' => 'شماره واگن',
             'D' => 'شرح کالا',
             'E' => 'عنوان تعرفه استفاده شده',
-            'F' => 'مبلغ تعرفه',
-            'G' => 'نام صاحب کالا',
-            'H' => 'مبلغ با احتساب مالیات بر ارزش افزوده',
-            'I' => 'مبلغ کل قابل دریافت از مشتری',
-            'J' => 'توضیحات/ شماره وسیله حمل',
-            'K' => 'مبلغ تعرفه در کتابچه',
-            'L' => 'تناژ (عملیاتی)',
-            'M' => 'محاسبه بر اساس کتابچه تعرفه',
-            'N' => 'نحوه محاسبه',
-            'O' => 'توضیحات',
+            'F' => 'نام صاحب کالا',
+            'G' => 'مبلغ با احتساب مالیات بر ارزش افزوده',
+            'H' => 'مبلغ کل قابل دریافت از مشتری',
+            'I' => 'توضیحات/ شماره وسیله حمل',
+            'J' => 'مبلغ تعرفه در کتابچه',
+            'K' => 'تناژ (عملیاتی)',
+            'L' => 'محاسبه بر اساس کتابچه تعرفه',
+            'M' => 'نحوه محاسبه',
+            'N' => 'توضیحات',
         ];
 
         $widths = [
@@ -195,16 +194,15 @@ class ExcelExport
             3 => 14.5,    // C: شماره واگن
             4 => 16.5,    // D: شرح کالا
             5 => 32,      // E: عنوان تعرفه استفاده شده
-            6 => 20,      // F: مبلغ تعرفه
-            7 => 24,      // G: نام صاحب کالا
-            8 => 20,      // H: مبلغ با احتساب مالیات بر ارزش افزوده
-            9 => 23,      // I: مبلغ کل قابل دریافت از مشتری
-            10 => 29.5,   // J: توضیحات/ شماره وسیله حمل
-            11 => 22,     // K: مبلغ تعرفه در کتابچه
-            12 => 18.75,  // L: تناژ (عملیاتی)
-            13 => 24,     // M: محاسبه بر اساس کتابچه تعرفه
-            14 => 22,     // N: نحوه محاسبه
-            15 => 28,     // O: توضیحات
+            6 => 24,      // F: نام صاحب کالا
+            7 => 20,      // G: مبلغ با احتساب مالیات بر ارزش افزوده
+            8 => 23,      // H: مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
+            9 => 29.5,    // I: توضیحات/ شماره وسیله حمل
+            10 => 22,     // J: مبلغ تعرفه در کتابچه
+            11 => 18.75,  // K: تناژ (عملیاتی)
+            12 => 24,     // L: محاسبه بر اساس کتابچه تعرفه
+            13 => 22,     // M: نحوه محاسبه
+            14 => 28,     // N: توضیحات
         ];
 
         $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -219,7 +217,7 @@ class ExcelExport
 
         $xml .= '</cols><sheetData>';
 
-        // ردیف ۱: بنر عنوان (B1:O1 ادغام‌شده)
+        // ردیف ۱: بنر عنوان (B1:N1 ادغام‌شده)
         $xml .= '<row r="1" ht="26.25" customHeight="1">';
         foreach (array_keys($headers) as $colLetter) {
             if ($colLetter === 'B') {
@@ -230,7 +228,7 @@ class ExcelExport
         }
         $xml .= '</row>';
 
-        // ردیف ۲: سرستون‌ها (B2:O2)
+        // ردیف ۲: سرستون‌ها (B2:N2)
         $xml .= '<row r="2" ht="19.5" customHeight="1">';
         foreach ($headers as $colLetter => $label) {
             $xml .= '<c r="'.$colLetter.'2" s="2" t="inlineStr"><is><t>'.self::xmlEscape($label).'</t></is></c>';
@@ -239,12 +237,11 @@ class ExcelExport
 
         // ردیف‌های داده (از ردیف ۳ به بعد)
         $rowNum = 3;
-        $sumTariffRate = 0.0;
+        $sumG = 0;
         $sumH = 0;
-        $sumI = 0.0;
+        $sumJ = 0.0;
         $sumK = 0.0;
         $sumL = 0.0;
-        $sumM = 0.0;
 
         foreach ($itemsData as $row) {
             $xml .= '<row r="'.$rowNum.'" ht="19.5" customHeight="1">';
@@ -268,57 +265,51 @@ class ExcelExport
             $usedTariffTitle = (string) ($row['used_tariff_title'] ?? $row['tariff_name'] ?? '');
             $xml .= '<c r="E'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape($usedTariffTitle).'</t></is></c>';
 
+            // F: نام صاحب کالا
+            $xml .= '<c r="F'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['owner_name'] ?? '')).'</t></is></c>';
+
             $bookletRate = (float) ($row['booklet_rate'] ?? 0);
-            $tariffRateVal = (float) ($row['tariff_rate'] ?? $bookletRate);
-
-            // F: مبلغ تعرفه
-            $xml .= '<c r="F'.$rowNum.'" s="4"><v>'.round($tariffRateVal).'</v></c>';
-
-            // G: نام صاحب کالا
-            $xml .= '<c r="G'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['owner_name'] ?? '')).'</t></is></c>';
-
-            $hVal = (int) round((float) ($row['total_with_vat'] ?? 0));
-            $iVal = (float) ($row['customer_payable'] ?? 0);
+            $gVal = (int) round((float) ($row['total_with_vat'] ?? 0));
+            $hVal = (int) round((float) ($row['customer_payable'] ?? $gVal));
             $tonnageVal = (float) ($row['operational_tonnage'] ?? 0);
             $perTon = (float) ($row['per_ton_rate'] ?? 0);
             $cap = (float) ($row['capacity'] ?? 65);
             $capStr = floor($cap) == $cap ? (string) ((int) $cap) : (string) $cap;
             $vatDivisor = (float) ($row['vat_divisor'] ?? 1.1);
 
-            $sumTariffRate += $tariffRateVal;
+            $sumG += $gVal;
             $sumH += $hVal;
-            $sumI += $iVal;
-            $sumK += $bookletRate;
-            $sumL += $tonnageVal;
-            $sumM += $perTon;
+            $sumJ += $bookletRate;
+            $sumK += $tonnageVal;
+            $sumL += $perTon;
 
-            // H: مبلغ با احتساب مالیات بر ارزش افزوده
-            $xml .= '<c r="H'.$rowNum.'" s="4"><f>ROUND(I'.$rowNum.'*'.$vatDivisor.',0)</f><v>'.$hVal.'</v></c>';
+            // G: مبلغ با احتساب مالیات بر ارزش افزوده
+            $xml .= '<c r="G'.$rowNum.'" s="4"><f>ROUND((K'.$rowNum.'*L'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$gVal.'</v></c>';
 
-            // I: مبلغ کل قابل دریافت از مشتری (L * M) برای تمام واگن‌ها
-            $xml .= '<c r="I'.$rowNum.'" s="4"><f>L'.$rowNum.'*M'.$rowNum.'</f><v>'.$iVal.'</v></c>';
+            // H: مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
+            $xml .= '<c r="H'.$rowNum.'" s="4"><f>ROUND((K'.$rowNum.'*L'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$hVal.'</v></c>';
 
-            // J: توضیحات/ شماره وسیله حمل
-            $xml .= '<c r="J'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['equipment_label'] ?? '')).'</t></is></c>';
+            // I: توضیحات/ شماره وسیله حمل
+            $xml .= '<c r="I'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['equipment_label'] ?? '')).'</t></is></c>';
 
-            // K: مبلغ تعرفه در کتابچه (ستون سبز رنگ #92D050)
-            $xml .= '<c r="K'.$rowNum.'" s="5"><v>'.round($bookletRate).'</v></c>';
+            // J: مبلغ تعرفه در کتابچه (ستون سبز رنگ #92D050)
+            $xml .= '<c r="J'.$rowNum.'" s="5"><v>'.round($bookletRate).'</v></c>';
 
-            // L: تناژ (عملیاتی) برای تمام واگن‌ها
-            $xml .= '<c r="L'.$rowNum.'" s="4"><v>'.$tonnageVal.'</v></c>';
+            // K: تناژ (عملیاتی) برای تمام واگن‌ها
+            $xml .= '<c r="K'.$rowNum.'" s="4"><v>'.$tonnageVal.'</v></c>';
 
-            // M: محاسبه بر اساس کتابچه تعرفه (K / ظرفیت) برای تمام واگن‌ها
-            $xml .= '<c r="M'.$rowNum.'" s="4"><f>K'.$rowNum.'/'.$capStr.'</f><v>'.$perTon.'</v></c>';
+            // L: محاسبه بر اساس کتابچه تعرفه (J / ظرفیت) برای تمام واگن‌ها
+            $xml .= '<c r="L'.$rowNum.'" s="4"><f>J'.$rowNum.'/'.$capStr.'</f><v>'.$perTon.'</v></c>';
 
-            // N: نحوه محاسبه
-            $xml .= '<c r="N'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['calc_method'] ?? 'طبق قرارداد')).'</t></is></c>';
+            // M: نحوه محاسبه
+            $xml .= '<c r="M'.$rowNum.'" s="3" t="inlineStr"><is><t>'.self::xmlEscape((string) ($row['calc_method'] ?? 'طبق قرارداد')).'</t></is></c>';
 
-            // O: توضیحات
+            // N: توضیحات
             $notes = trim((string) ($row['notes'] ?? ''));
             if ($notes !== '') {
-                $xml .= '<c r="O'.$rowNum.'" s="6" t="inlineStr"><is><t>'.self::xmlEscape($notes).'</t></is></c>';
+                $xml .= '<c r="N'.$rowNum.'" s="6" t="inlineStr"><is><t>'.self::xmlEscape($notes).'</t></is></c>';
             } else {
-                $xml .= '<c r="O'.$rowNum.'" s="3"/>';
+                $xml .= '<c r="N'.$rowNum.'" s="3"/>';
             }
 
             $xml .= '</row>';
@@ -333,16 +324,15 @@ class ExcelExport
                 .'<c r="C'.$rowNum.'" s="2"/>'
                 .'<c r="D'.$rowNum.'" s="2"/>'
                 .'<c r="E'.$rowNum.'" s="2" t="inlineStr"><is><t>'.($lastDataRow - 2).' واگن</t></is></c>'
-                .'<c r="F'.$rowNum.'" s="4"><f>SUM(F3:F'.$lastDataRow.')</f><v>'.round($sumTariffRate).'</v></c>'
-                .'<c r="G'.$rowNum.'" s="2"/>'
+                .'<c r="F'.$rowNum.'" s="2"/>'
+                .'<c r="G'.$rowNum.'" s="4"><f>SUM(G3:G'.$lastDataRow.')</f><v>'.$sumG.'</v></c>'
                 .'<c r="H'.$rowNum.'" s="4"><f>SUM(H3:H'.$lastDataRow.')</f><v>'.$sumH.'</v></c>'
-                .'<c r="I'.$rowNum.'" s="4"><f>SUM(I3:I'.$lastDataRow.')</f><v>'.round($sumI).'</v></c>'
-                .'<c r="J'.$rowNum.'" s="2"/>'
-                .'<c r="K'.$rowNum.'" s="5"><f>SUM(K3:K'.$lastDataRow.')</f><v>'.round($sumK).'</v></c>'
-                .'<c r="L'.$rowNum.'" s="4"><f>SUM(L3:L'.$lastDataRow.')</f><v>'.round($sumL, 2).'</v></c>'
-                .'<c r="M'.$rowNum.'" s="4"><f>SUM(M3:M'.$lastDataRow.')</f><v>'.round($sumM).'</v></c>'
+                .'<c r="I'.$rowNum.'" s="2"/>'
+                .'<c r="J'.$rowNum.'" s="5"><f>SUM(J3:J'.$lastDataRow.')</f><v>'.round($sumJ).'</v></c>'
+                .'<c r="K'.$rowNum.'" s="4"><f>SUM(K3:K'.$lastDataRow.')</f><v>'.round($sumK, 2).'</v></c>'
+                .'<c r="L'.$rowNum.'" s="4"><f>SUM(L3:L'.$lastDataRow.')</f><v>'.round($sumL).'</v></c>'
+                .'<c r="M'.$rowNum.'" s="2"/>'
                 .'<c r="N'.$rowNum.'" s="2"/>'
-                .'<c r="O'.$rowNum.'" s="2"/>'
                 .'</row>';
             $rowNum++;
         }
@@ -354,7 +344,7 @@ class ExcelExport
 
         $xml .= '<row r="'.$sigRow1.'" ht="21" customHeight="1">'
             .'<c r="D'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء طرف قرار داد / پیمانکار</t></is></c>'
-            .'<c r="N'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء مدیر شعبه</t></is></c>'
+            .'<c r="M'.$sigRow1.'" s="7" t="inlineStr"><is><t>امضاء مدیر شعبه</t></is></c>'
             .'</row>';
 
         $xml .= '<row r="'.$sigRow2.'" ht="21" customHeight="1">'
@@ -362,11 +352,11 @@ class ExcelExport
             .'</row>';
 
         $xml .= '<row r="'.$sigRow3.'" ht="21" customHeight="1">'
-            .'<c r="N'.$sigRow3.'" s="7" t="inlineStr"><is><t>امضاء رئیس عملیات</t></is></c>'
+            .'<c r="M'.$sigRow3.'" s="7" t="inlineStr"><is><t>امضاء رئیس عملیات</t></is></c>'
             .'</row>';
 
         $xml .= '</sheetData>'
-            .'<mergeCells count="1"><mergeCell ref="B1:O1"/></mergeCells>'
+            .'<mergeCells count="1"><mergeCell ref="B1:N1"/></mergeCells>'
             .'</worksheet>';
 
         return $xml;
