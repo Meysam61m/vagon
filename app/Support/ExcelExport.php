@@ -283,8 +283,8 @@ class ExcelExport
             $sumK += $tonnageVal;
             $sumL += $perTon;
 
-            // G: مبلغ با احتساب مالیات بر ارزش افزوده
-            $xml .= '<c r="G'.$rowNum.'" s="4"><f>ROUND((K'.$rowNum.'*L'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$gVal.'</v></c>';
+            // G: مبلغ با احتساب مالیات بر ارزش افزوده (= مبلغ تعرفه در کتابچه با احتساب مالیات)
+            $xml .= '<c r="G'.$rowNum.'" s="4"><f>ROUND(J'.$rowNum.'*'.$vatDivisor.',0)</f><v>'.$gVal.'</v></c>';
 
             // H: مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
             $xml .= '<c r="H'.$rowNum.'" s="4"><f>ROUND((K'.$rowNum.'*L'.$rowNum.')*'.$vatDivisor.',0)</f><v>'.$hVal.'</v></c>';

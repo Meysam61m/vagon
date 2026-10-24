@@ -910,16 +910,16 @@ class ReportController extends Controller
         // تناژ عملیاتی برای همه واگن‌ها
         $operationalTonnage = $loadedWeight;
 
-        // هزینه پایه تناژی (تناژ عملیاتی × نرخ هر تن)
-        $basePayable = $operationalTonnage * $perTonRate;
+        // مبلغ با احتساب مالیات بر ارزش افزوده = مبلغ تعرفه در کتابچه با احتساب مالیات
+        $bookletBaseRounded = round($bookletRate);
+        $bookletTaxRounded = round($bookletBaseRounded * ($taxPct / 100));
+        $totalWithVat = (int) ($bookletBaseRounded + $bookletTaxRounded);
 
-        // مبلغ با احتساب مالیات بر ارزش افزوده
+        // هزینه پایه تناژی (تناژ عملیاتی × نرخ هر تن) و مبلغ کل قابل دریافت از مشتری با احتساب مالیات
+        $basePayable = $operationalTonnage * $perTonRate;
         $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
-        $totalWithVat = (int) ($item->total_amount ?: ($baseRounded + $taxRounded));
-
-        // مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
-        $customerPayable = (float) $totalWithVat;
+        $customerPayable = (float) ($item->total_amount ?: ($baseRounded + $taxRounded));
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? ($wagon?->tariff?->equipmentLabel() ?? 'جرثقیل');
@@ -979,14 +979,17 @@ class ReportController extends Controller
 
         $bookletRate = (float) ($tariff?->rate ?: 0);
         $perTonRate = $bookletRate / $capacity;
-        $basePayable = $operationalTonnage * $perTonRate;
 
+        // مبلغ با احتساب مالیات بر ارزش افزوده = مبلغ تعرفه در کتابچه با احتساب مالیات
+        $bookletBaseRounded = round($bookletRate);
+        $bookletTaxRounded = round($bookletBaseRounded * ($taxPct / 100));
+        $totalWithVat = (int) ($bookletBaseRounded + $bookletTaxRounded);
+
+        // هزینه پایه تناژی و مبلغ کل قابل دریافت از مشتری با احتساب مالیات بر ارزش افزوده
+        $basePayable = $operationalTonnage * $perTonRate;
         $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
-        $totalWithVat = (int) ($baseRounded + $taxRounded);
-
-        // مبلغ کل قابل دریافت از مشتری (با احتساب مالیات بر ارزش افزوده)
-        $customerPayable = (float) $totalWithVat;
+        $customerPayable = (float) ($baseRounded + $taxRounded);
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
         $equipmentLabel = $tariff?->equipmentLabel() ?? 'جرثقیل';
