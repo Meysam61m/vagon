@@ -6,6 +6,9 @@
 
     <form method="POST" action="{{ route('representatives.store') }}" class="card p-4">
         @csrf
+        @if(request('redirect_to'))
+            <input type="hidden" name="redirect_to" value="{{ request('redirect_to') }}">
+        @endif
         <div class="row g-3">
             <div class="col-md-5">
                 <label class="form-label" for="name">نام</label>
@@ -51,7 +54,7 @@
         </div>
         <div class="mt-4 d-flex gap-2">
             <button class="btn btn-primary" type="submit">ذخیره</button>
-            <a href="{{ route('representatives.index') }}" class="btn btn-secondary">انصراف</a>
+            <a href="{{ request('redirect_to') === 'cargo.create' ? route('cargo.create') : route('representatives.index') }}" class="btn btn-secondary">انصراف</a>
         </div>
     </form>
 @endsection

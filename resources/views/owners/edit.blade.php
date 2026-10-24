@@ -42,6 +42,34 @@
                 <label class="form-label" for="description">توضیحات</label>
                 <textarea name="description" id="description" class="form-control" rows="2">{{ old('description', $owner->description) }}</textarea>
             </div>
+            @if(isset($representatives) && $representatives->isNotEmpty())
+                @php
+                    $selectedReps = old('representative_ids', $owner->representatives->pluck('id')->all());
+                @endphp
+                <div class="col-12">
+                    <input type="hidden" name="sync_representatives" value="1">
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <label class="form-label mb-0">نمایندگان مرتبط با این صاحب کالا</label>
+                        <input type="text"
+                               class="form-control form-control-sm"
+                               style="max-width: 280px;"
+                               data-owner-checkbox-search="#owner-edit-reps-list"
+                               placeholder="جستجوی نام نماینده…">
+                    </div>
+                    <div class="row g-2" id="owner-edit-reps-list">
+                        @foreach($representatives as $rep)
+                            <div class="col-md-4" data-owner-checkbox-item>
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" name="representative_ids[]"
+                                           value="{{ $rep->id }}" id="rep_edit_{{ $rep->id }}"
+                                           @checked(in_array($rep->id, $selectedReps))>
+                                    <label class="form-check-label" for="rep_edit_{{ $rep->id }}">{{ $rep->name }}</label>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </div>
         <div class="mt-4 d-flex gap-2">
             <button class="btn btn-primary" type="submit">بروزرسانی</button>

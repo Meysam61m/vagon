@@ -176,6 +176,14 @@
                     <a class="nav-link @if(request()->routeIs('calculator.*')) active @endif"
                        href="{{ \Illuminate\Support\Facades\Route::has('calculator.index') ? route('calculator.index') : url('/calculator') }}">محاسبه‌گر تعرفه</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link @if(request()->routeIs('owners.*')) active @endif"
+                       href="{{ route('owners.index') }}">صاحبان کالا</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @if(request()->routeIs('representatives.*')) active @endif"
+                       href="{{ route('representatives.index') }}">نمایندگان</a>
+                </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle @if(request()->routeIs('reports.*')) active @endif"
                        href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">گزارش‌ها</a>

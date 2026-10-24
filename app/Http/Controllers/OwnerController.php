@@ -21,26 +21,58 @@ class OwnerController extends Controller
 
     public function create()
     {
-        return view('owners.create');
+        $representatives = \App\Models\Representative::active()->orderBy('name')->get();
+
+        return view('owners.create', compact('representatives'));
     }
 
     public function store(Request $request)
     {
         $data = $this->validated($request);
+        $repIds = array_values(array_filter(array_map('intval', (array) ($data['representative_ids'] ?? []))));
+        unset($data['representative_ids']);
 
-        Owner::create($data);
+        $owner = Owner::create($data);
+
+        if (! empty($repIds)) {
+            $owner->representatives()->syncWithoutDetaching($repIds);
+        }
+
+        if ($request->input('redirect_to') === 'cargo.create') {
+            $redirect = redirect()->route('cargo.create')
+                ->with('selected_owner_id', $owner->id)
+                ->with('success', "صاحب کالای جدید «{$owner->name}» ثبت شد و در فرم انتخاب گردید.");
+
+            if (count($repIds) === 1) {
+                $redirect->with('selected_representative_id', $repIds[0]);
+            }
+
+            return $redirect;
+        }
 
         return redirect()->route('owners.index')->with('success', 'صاحب کالای جدید افزوده شد.');
     }
 
     public function edit(Owner $owner)
     {
-        return view('owners.edit', compact('owner'));
+        $representatives = \App\Models\Representative::active()->orderBy('name')->get();
+        $owner->load('representatives');
+
+        return view('owners.edit', compact('owner', 'representatives'));
     }
 
     public function update(Request $request, Owner $owner)
     {
-        $owner->update($this->validated($request, $owner->id));
+        $data = $this->validated($request, $owner->id);
+        $hasRepsField = $request->has('representative_ids') || $request->boolean('sync_representatives');
+        $repIds = array_values(array_filter(array_map('intval', (array) ($data['representative_ids'] ?? []))));
+        unset($data['representative_ids']);
+
+        $owner->update($data);
+
+        if ($hasRepsField) {
+            $owner->representatives()->sync($repIds);
+        }
 
         return redirect()->route('owners.index')->with('success', 'اطلاعات صاحب کالا بروزرسانی شد.');
     }
@@ -106,11 +138,14 @@ class OwnerController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'address' => ['nullable', 'string', 'max:500'],
             'description' => ['nullable', 'string', 'max:2000'],
+            'representative_ids' => ['nullable', 'array'],
+            'representative_ids.*' => ['integer', 'exists:representatives,id'],
         ], [], [
             'name' => 'نام',
             'national_id' => 'کد ملی',
             'economic_code' => 'کد اقتصادی',
             'phone' => 'تلفن',
+            'representative_ids' => 'نمایندگان مرتبط',
         ]);
     }
 }

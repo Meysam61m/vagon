@@ -2,6 +2,11 @@
 @section('title', 'ثبت درخواست بارگیری')
 
 @section('content')
+    @php
+        $selectedOwnerId = old('owner_id', session('selected_owner_id'));
+        $selectedRepId = old('representative_id', session('selected_representative_id'));
+    @endphp
+
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <h4 class="mb-1">ثبت درخواست بارگیری جدید</h4>
@@ -9,7 +14,25 @@
                 در زمان بارگیری ثبت <strong>صاحب کالا اختیاری است (می‌توانید «ناشناس» بگذارید)</strong> و فقط انتخاب <strong>نماینده</strong> الزامی است. نام صاحب کالا هنگام صدور صورتحساب الزامی خواهد بود.
             </div>
         </div>
-        <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">بازگشت به کارتابل</a>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <button type="button"
+                    class="btn btn-outline-primary btn-sm fw-semibold"
+                    data-bs-toggle="modal"
+                    data-bs-target="#quickOwnerModal"
+                    title="میانبر کیبورد: Alt + O">
+                + تعریف صاحب کالا <kbd class="ms-1 small">Alt+O</kbd>
+            </button>
+            <button type="button"
+                    class="btn btn-outline-success btn-sm fw-semibold"
+                    data-bs-toggle="modal"
+                    data-bs-target="#quickRepModal"
+                    title="میانبر کیبورد: Alt + R">
+                + تعریف نماینده <kbd class="ms-1 small">Alt+R</kbd>
+            </button>
+            <a href="{{ route('owners.index') }}" class="btn btn-outline-secondary btn-sm">مدیریت صاحبان کالا</a>
+            <a href="{{ route('representatives.index') }}" class="btn btn-outline-secondary btn-sm">مدیریت نمایندگان</a>
+            <a href="{{ route('cargo.index') }}" class="btn btn-outline-secondary btn-sm">بازگشت به کارتابل</a>
+        </div>
     </div>
 
     <datalist id="common-cargo-descriptions">
@@ -39,17 +62,27 @@
 
         <div class="row g-3">
             <div class="col-md-4">
-                <div class="d-flex justify-content-between align-items-center">
-                    <label class="form-label mb-1" for="owner_id_input">
+                <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                    <label class="form-label mb-0" for="owner_id_input">
                         صاحب کالا
                         <span class="badge bg-warning-subtle text-dark border small fw-normal">اختیاری هنگام بارگیری</span>
                     </label>
-                    <span class="badge bg-info-subtle text-dark border small" id="owner-last-cargo-hint" style="display: none;"></span>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="badge bg-info-subtle text-dark border small" id="owner-last-cargo-hint" style="display: none;"></span>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary py-0 px-2"
+                                style="font-size: 0.78rem;"
+                                data-bs-toggle="modal"
+                                data-bs-target="#quickOwnerModal"
+                                title="تعریف سریع صاحب کالا جدید (Alt+O)">
+                            + صاحب کالا جدید
+                        </button>
+                    </div>
                 </div>
                 <select name="owner_id" id="owner_id_input" class="form-select @error('owner_id') is-invalid @enderror">
                     <option value="">— ناشناس / نامشخص (تعیین در زمان صدور صورتحساب) —</option>
                     @foreach($owners as $owner)
-                        <option value="{{ $owner->id }}" @selected(old('owner_id') == $owner->id)>{{ $owner->name }}</option>
+                        <option value="{{ $owner->id }}" @selected($selectedOwnerId == $owner->id)>{{ $owner->name }}</option>
                     @endforeach
                 </select>
                 @error('owner_id')
@@ -61,16 +94,26 @@
             </div>
 
             <div class="col-md-4">
-                <div class="d-flex justify-content-between align-items-center">
-                    <label class="form-label mb-1" for="representative_id">نماینده <span class="text-danger">*</span></label>
-                    <span class="badge bg-light text-secondary border small" id="rep-auto-hint">همه نمایندگان فعال</span>
+                <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                    <label class="form-label mb-0" for="representative_id">نماینده <span class="text-danger">*</span></label>
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="badge bg-light text-secondary border small" id="rep-auto-hint">همه نمایندگان فعال</span>
+                        <button type="button"
+                                class="btn btn-sm btn-outline-success py-0 px-2"
+                                style="font-size: 0.78rem;"
+                                data-bs-toggle="modal"
+                                data-bs-target="#quickRepModal"
+                                title="تعریف سریع نماینده جدید (Alt+R)">
+                            + نماینده جدید
+                        </button>
+                    </div>
                 </div>
                 <select name="representative_id" id="representative_id" class="form-select @error('representative_id') is-invalid @enderror" required>
                     <option value="">انتخاب نماینده (اجباری)…</option>
                     @foreach($representatives as $rep)
                         <option value="{{ $rep->id }}"
                                 data-owners="{{ $rep->owners->pluck('id')->implode(',') }}"
-                                @selected(old('representative_id') == $rep->id)>
+                                @selected($selectedRepId == $rep->id)>
                             {{ $rep->name }}
                         </option>
                     @endforeach
@@ -172,6 +215,144 @@
             <a href="{{ route('cargo.index') }}" class="btn btn-secondary">انصراف</a>
         </div>
     </form>
+
+    {{-- مودال تعریف سریع صاحب کالا (میانبر Alt+O) --}}
+    <div class="modal fade" id="quickOwnerModal" tabindex="-1" aria-labelledby="quickOwnerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form method="POST" action="{{ route('owners.store') }}" class="modal-content">
+                @csrf
+                <input type="hidden" name="redirect_to" value="cargo.create">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="quickOwnerModalLabel">تعریف سریع صاحب کالا جدید</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="بستن"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="quick_owner_name">نام صاحب کالا <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="quick_owner_name" class="form-control" required placeholder="نام شخص حقیقی یا شرکت">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="quick_owner_national_id">کد ملی / شناسه ملی</label>
+                            <input type="text" name="national_id" id="quick_owner_national_id" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="quick_owner_phone">تلفن</label>
+                            <input type="text" name="phone" id="quick_owner_phone" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="quick_owner_economic_code">کد اقتصادی</label>
+                            <input type="text" name="economic_code" id="quick_owner_economic_code" class="form-control">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="quick_owner_address">آدرس</label>
+                            <input type="text" name="address" id="quick_owner_address" class="form-control">
+                        </div>
+                        @if($representatives->isNotEmpty())
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                    <label class="form-label mb-0">نمایندگان مرتبط با این صاحب کالا (اختیاری)</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           style="max-width: 240px;"
+                                           data-owner-checkbox-search="#quick-owner-reps-list"
+                                           placeholder="جستجوی نام نماینده…">
+                                </div>
+                                <div class="row g-2 border rounded p-2 bg-light" id="quick-owner-reps-list" style="max-height: 180px; overflow-y: auto;">
+                                    @foreach($representatives as $rep)
+                                        <div class="col-md-4" data-owner-checkbox-item>
+                                            <div class="form-check">
+                                                <input type="checkbox"
+                                                       class="form-check-input quick-owner-rep-check"
+                                                       name="representative_ids[]"
+                                                       value="{{ $rep->id }}"
+                                                       id="quick_owner_rep_{{ $rep->id }}">
+                                                <label class="form-check-label small" for="quick_owner_rep_{{ $rep->id }}">{{ $rep->name }}</label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <a href="{{ route('owners.create', ['redirect_to' => 'cargo.create']) }}" class="btn btn-link btn-sm text-decoration-none">
+                        باز کردن فرم کامل تعریف صاحب کالا
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                        <button type="submit" class="btn btn-primary fw-semibold">ذخیره و انتخاب در فرم</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- مودال تعریف سریع نماینده (میانبر Alt+R) --}}
+    <div class="modal fade" id="quickRepModal" tabindex="-1" aria-labelledby="quickRepModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <form method="POST" action="{{ route('representatives.store') }}" class="modal-content">
+                @csrf
+                <input type="hidden" name="redirect_to" value="cargo.create">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="quickRepModalLabel">تعریف سریع نماینده جدید</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="بستن"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label" for="quick_rep_name">نام نماینده <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="quick_rep_name" class="form-control" required placeholder="نام و نام خانوادگی نماینده">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="quick_rep_national_id">کد ملی</label>
+                            <input type="text" name="national_id" id="quick_rep_national_id" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="quick_rep_phone">تلفن</label>
+                            <input type="text" name="phone" id="quick_rep_phone" class="form-control">
+                        </div>
+                        @if($owners->isNotEmpty())
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                    <label class="form-label mb-0">صاحبان کالای مرتبط با این نماینده (اختیاری)</label>
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           style="max-width: 240px;"
+                                           data-owner-checkbox-search="#quick-rep-owners-list"
+                                           placeholder="جستجوی نام صاحب کالا…">
+                                </div>
+                                <div class="row g-2 border rounded p-2 bg-light" id="quick-rep-owners-list" style="max-height: 180px; overflow-y: auto;">
+                                    @foreach($owners as $owner)
+                                        <div class="col-md-4" data-owner-checkbox-item>
+                                            <div class="form-check">
+                                                <input type="checkbox"
+                                                       class="form-check-input quick-rep-owner-check"
+                                                       name="owner_ids[]"
+                                                       value="{{ $owner->id }}"
+                                                       id="quick_rep_owner_{{ $owner->id }}">
+                                                <label class="form-check-label small" for="quick_rep_owner_{{ $owner->id }}">{{ $owner->name }}</label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <a href="{{ route('representatives.create', ['redirect_to' => 'cargo.create']) }}" class="btn btn-link btn-sm text-decoration-none">
+                        باز کردن فرم کامل تعریف نماینده
+                    </a>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                        <button type="submit" class="btn btn-success fw-semibold">ذخیره و انتخاب در فرم</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -623,6 +804,53 @@
                         if (descInp) descInp.value = '';
                         if (lineInp) lineInp.value = '';
                         validateWagonNumbersRealtime();
+                    }
+                }
+            });
+
+            // ۴. مودال‌های تعریف سریع صاحب کالا و نماینده + کلیدهای میانبر (Alt+O و Alt+R)
+            const quickOwnerModalEl = document.getElementById('quickOwnerModal');
+            const quickRepModalEl = document.getElementById('quickRepModal');
+
+            if (quickOwnerModalEl) {
+                quickOwnerModalEl.addEventListener('show.bs.modal', function () {
+                    const currentRepId = repSelect ? repSelect.value : '';
+                    quickOwnerModalEl.querySelectorAll('.quick-owner-rep-check').forEach(function (chk) {
+                        chk.checked = (currentRepId !== '' && String(chk.value) === String(currentRepId));
+                    });
+                });
+                quickOwnerModalEl.addEventListener('shown.bs.modal', function () {
+                    const nameInput = document.getElementById('quick_owner_name');
+                    if (nameInput) nameInput.focus();
+                });
+            }
+
+            if (quickRepModalEl) {
+                quickRepModalEl.addEventListener('show.bs.modal', function () {
+                    const currentOwnerId = ownerSelect ? ownerSelect.value : '';
+                    quickRepModalEl.querySelectorAll('.quick-rep-owner-check').forEach(function (chk) {
+                        chk.checked = (currentOwnerId !== '' && String(chk.value) === String(currentOwnerId));
+                    });
+                });
+                quickRepModalEl.addEventListener('shown.bs.modal', function () {
+                    const nameInput = document.getElementById('quick_rep_name');
+                    if (nameInput) nameInput.focus();
+                });
+            }
+
+            document.addEventListener('keydown', function (e) {
+                if (!e.altKey || e.ctrlKey || e.metaKey) return;
+                const code = e.code || '';
+                const key = (e.key || '').toLowerCase();
+                if (code === 'KeyO' || key === 'o' || key === 'خ') {
+                    e.preventDefault();
+                    if (quickOwnerModalEl && window.bootstrap && window.bootstrap.Modal) {
+                        window.bootstrap.Modal.getOrCreateInstance(quickOwnerModalEl).show();
+                    }
+                } else if (code === 'KeyR' || key === 'r' || key === 'ق') {
+                    e.preventDefault();
+                    if (quickRepModalEl && window.bootstrap && window.bootstrap.Modal) {
+                        window.bootstrap.Modal.getOrCreateInstance(quickRepModalEl).show();
                     }
                 }
             });

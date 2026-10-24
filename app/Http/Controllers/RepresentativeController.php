@@ -33,6 +33,7 @@ class RepresentativeController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
+        $ownerIds = array_values(array_filter(array_map('intval', (array) ($data['owner_ids'] ?? []))));
 
         $representative = Representative::create([
             'name' => $data['name'],
@@ -40,7 +41,19 @@ class RepresentativeController extends Controller
             'phone' => $data['phone'] ?? null,
         ]);
 
-        $representative->owners()->sync($data['owner_ids']);
+        $representative->owners()->sync($ownerIds);
+
+        if ($request->input('redirect_to') === 'cargo.create') {
+            $redirect = redirect()->route('cargo.create')
+                ->with('selected_representative_id', $representative->id)
+                ->with('success', "نماینده جدید «{$representative->name}» ثبت شد و در فرم انتخاب گردید.");
+
+            if (count($ownerIds) === 1) {
+                $redirect->with('selected_owner_id', $ownerIds[0]);
+            }
+
+            return $redirect;
+        }
 
         return redirect()->route('representatives.index')->with('success', 'نماینده جدید افزوده شد.');
     }
@@ -56,6 +69,7 @@ class RepresentativeController extends Controller
     public function update(Request $request, Representative $representative)
     {
         $data = $this->validated($request, $representative->id);
+        $ownerIds = array_values(array_filter(array_map('intval', (array) ($data['owner_ids'] ?? []))));
 
         $representative->update([
             'name' => $data['name'],
@@ -63,7 +77,7 @@ class RepresentativeController extends Controller
             'phone' => $data['phone'] ?? null,
         ]);
 
-        $representative->owners()->sync($data['owner_ids']);
+        $representative->owners()->sync($ownerIds);
 
         return redirect()->route('representatives.index')->with('success', 'اطلاعات نماینده بروزرسانی شد.');
     }
@@ -120,7 +134,7 @@ class RepresentativeController extends Controller
                 Rule::unique('representatives', 'national_id')->ignore($ignoreId),
             ],
             'phone' => ['nullable', 'string', 'max:20'],
-            'owner_ids' => ['required', 'array', 'min:1'],
+            'owner_ids' => ['nullable', 'array'],
             'owner_ids.*' => ['integer', 'exists:owners,id'],
         ], [], [
             'name' => 'نام',

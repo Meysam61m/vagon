@@ -70,28 +70,28 @@ Route::middleware('auth')->group(function () {
         Route::get('/representatives', [ReportController::class, 'representatives'])->name('representatives');
     });
 
+    // صاحبان کالا (قابل دسترس برای اپراتور و ادمین)
+    Route::get('/owners', [OwnerController::class, 'index'])->name('owners.index');
+    Route::get('/owners/create', [OwnerController::class, 'create'])->name('owners.create');
+    Route::post('/owners', [OwnerController::class, 'store'])->name('owners.store');
+    Route::get('/owners/{owner}/edit', [OwnerController::class, 'edit'])->name('owners.edit');
+    Route::put('/owners/{owner}', [OwnerController::class, 'update'])->name('owners.update');
+    Route::patch('/owners/{owner}/toggle', [OwnerController::class, 'toggleActive'])->name('owners.toggle');
+    Route::get('/owners/{owner}/history', [OwnerController::class, 'history'])->name('owners.history');
+    Route::delete('/owners/{owner}', [OwnerController::class, 'destroy'])->name('owners.destroy');
+
+    // نمایندگان (قابل دسترس برای اپراتور و ادمین)
+    Route::get('/representatives', [RepresentativeController::class, 'index'])->name('representatives.index');
+    Route::get('/representatives/create', [RepresentativeController::class, 'create'])->name('representatives.create');
+    Route::post('/representatives', [RepresentativeController::class, 'store'])->name('representatives.store');
+    Route::get('/representatives/{representative}/edit', [RepresentativeController::class, 'edit'])->name('representatives.edit');
+    Route::put('/representatives/{representative}', [RepresentativeController::class, 'update'])->name('representatives.update');
+    Route::patch('/representatives/{representative}/toggle', [RepresentativeController::class, 'toggleActive'])->name('representatives.toggle');
+    Route::get('/representatives/{representative}/history', [RepresentativeController::class, 'history'])->name('representatives.history');
+    Route::delete('/representatives/{representative}', [RepresentativeController::class, 'destroy'])->name('representatives.destroy');
+
     // ---------- مدیریت (فقط ادمین) ----------
     Route::middleware('role:admin')->group(function () {
-        // صاحبان کالا
-        Route::get('/owners', [OwnerController::class, 'index'])->name('owners.index');
-        Route::get('/owners/create', [OwnerController::class, 'create'])->name('owners.create');
-        Route::post('/owners', [OwnerController::class, 'store'])->name('owners.store');
-        Route::get('/owners/{owner}/edit', [OwnerController::class, 'edit'])->name('owners.edit');
-        Route::put('/owners/{owner}', [OwnerController::class, 'update'])->name('owners.update');
-        Route::patch('/owners/{owner}/toggle', [OwnerController::class, 'toggleActive'])->name('owners.toggle');
-        Route::get('/owners/{owner}/history', [OwnerController::class, 'history'])->name('owners.history');
-        Route::delete('/owners/{owner}', [OwnerController::class, 'destroy'])->name('owners.destroy');
-
-        // نمایندگان
-        Route::get('/representatives', [RepresentativeController::class, 'index'])->name('representatives.index');
-        Route::get('/representatives/create', [RepresentativeController::class, 'create'])->name('representatives.create');
-        Route::post('/representatives', [RepresentativeController::class, 'store'])->name('representatives.store');
-        Route::get('/representatives/{representative}/edit', [RepresentativeController::class, 'edit'])->name('representatives.edit');
-        Route::put('/representatives/{representative}', [RepresentativeController::class, 'update'])->name('representatives.update');
-        Route::patch('/representatives/{representative}/toggle', [RepresentativeController::class, 'toggleActive'])->name('representatives.toggle');
-        Route::get('/representatives/{representative}/history', [RepresentativeController::class, 'history'])->name('representatives.history');
-        Route::delete('/representatives/{representative}', [RepresentativeController::class, 'destroy'])->name('representatives.destroy');
-
         // تعرفه‌ها
         Route::get('/tariffs', [TariffController::class, 'index'])->name('tariffs.index');
         Route::get('/tariffs/create', [TariffController::class, 'create'])->name('tariffs.create');
