@@ -816,6 +816,7 @@ class ReportController extends Controller
             'tariff_rate' => 0.0,
             'total_with_vat' => 0,
             'customer_payable' => 0.0,
+            'customer_tax' => 0.0,
             'booklet_rate' => 0.0,
             'operational_tonnage' => 0.0,
             'per_ton_rate' => 0.0,
@@ -830,6 +831,7 @@ class ReportController extends Controller
             $totals['tariff_rate'] += (float) $mapped['tariff_rate'];
             $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
             $totals['customer_payable'] += (float) $mapped['customer_payable'];
+            $totals['customer_tax'] += (float) $mapped['customer_tax'];
             $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
             $totals['operational_tonnage'] += (float) $mapped['operational_tonnage'];
             $totals['per_ton_rate'] += (float) $mapped['per_ton_rate'];
@@ -847,6 +849,7 @@ class ReportController extends Controller
             $totals['tariff_rate'] += (float) $mapped['tariff_rate'];
             $totals['total_with_vat'] += (int) round($mapped['total_with_vat']);
             $totals['customer_payable'] += (float) $mapped['customer_payable'];
+            $totals['customer_tax'] += (float) $mapped['customer_tax'];
             $totals['booklet_rate'] += (float) $mapped['booklet_rate'];
             $totals['operational_tonnage'] += (float) $mapped['operational_tonnage'];
             $totals['per_ton_rate'] += (float) $mapped['per_ton_rate'];
@@ -918,10 +921,11 @@ class ReportController extends Controller
         $bookletTaxRounded = round($bookletBaseRounded * ($taxPct / 100));
         $totalWithVat = (int) ($bookletBaseRounded + $bookletTaxRounded);
 
-        // هزینه پایه تناژی (تناژ عملیاتی × نرخ هر تن) و مبلغ کل قابل دریافت از مشتری با احتساب مالیات
+        // هزینه پایه تناژی (تناژ عملیاتی × نرخ هر تن)، مالیات دریافتی و مبلغ کل قابل دریافت از مشتری با احتساب مالیات
         $basePayable = $operationalTonnage * $perTonRate;
         $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
+        $customerTax = (float) ($item->tax_amount ?: $taxRounded);
         $customerPayable = (float) ($item->total_amount ?: ($baseRounded + $taxRounded));
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
@@ -948,6 +952,7 @@ class ReportController extends Controller
             'owner_name' => $wagon?->ownerName() ?? $billing?->ownerName() ?? '—',
             'total_with_vat' => $totalWithVat,
             'customer_payable' => $customerPayable,
+            'customer_tax' => $customerTax,
             'equipment_label' => $equipmentLabel,
             'booklet_rate' => $bookletRate,
             'vat_divisor' => $vatDivisor,
@@ -991,10 +996,11 @@ class ReportController extends Controller
         $bookletTaxRounded = round($bookletBaseRounded * ($taxPct / 100));
         $totalWithVat = (int) ($bookletBaseRounded + $bookletTaxRounded);
 
-        // هزینه پایه تناژی و مبلغ کل قابل دریافت از مشتری با احتساب مالیات بر ارزش افزوده
+        // هزینه پایه تناژی، مالیات دریافتی و مبلغ کل قابل دریافت از مشتری با احتساب مالیات بر ارزش افزوده
         $basePayable = $operationalTonnage * $perTonRate;
         $baseRounded = round($basePayable);
         $taxRounded = round($baseRounded * ($taxPct / 100));
+        $customerTax = (float) $taxRounded;
         $customerPayable = (float) ($baseRounded + $taxRounded);
 
         $isTonnage = ($capacity - $operationalTonnage) >= 0.01;
@@ -1015,6 +1021,7 @@ class ReportController extends Controller
             'owner_name' => $wagon->ownerName() ?? '—',
             'total_with_vat' => $totalWithVat,
             'customer_payable' => $customerPayable,
+            'customer_tax' => $customerTax,
             'equipment_label' => $equipmentLabel,
             'booklet_rate' => $bookletRate,
             'vat_divisor' => $vatDivisor,

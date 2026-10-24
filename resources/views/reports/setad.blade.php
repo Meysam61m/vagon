@@ -119,7 +119,7 @@
             <table class="table table-bordered bg-white setad-table mb-0">
                 <thead>
                 <tr class="setad-banner">
-                    <th colspan="13">
+                    <th colspan="14">
                         <div class="d-flex justify-content-between align-items-center px-2">
                             <div class="d-flex align-items-center gap-2 text-start">
                                 <img src="{{ asset('images/logo.png') }}" alt="لوگو" style="height: 44px; width: auto;">
@@ -145,6 +145,7 @@
                     <th>نام صاحب کالا</th>
                     <th>مبلغ با احتساب مالیات بر ارزش افزوده</th>
                     <th>مبلغ کل قابل دریافت از مشتری</th>
+                    <th>مالیات دریافتی از مشتری</th>
                     <th>توضیحات/ شماره وسیله حمل</th>
                     <th>مبلغ تعرفه در کتابچه</th>
                     <th>تناژ (عملیاتی)</th>
@@ -163,6 +164,7 @@
                         <td>{{ $row['owner_name'] }}</td>
                         <td class="money fw-bold">{{ number_format(round($row['total_with_vat'])) }}</td>
                         <td class="money fw-bold">{{ number_format(round($row['customer_payable'])) }}</td>
+                        <td class="money fw-bold">{{ number_format(round($row['customer_tax'] ?? 0)) }}</td>
                         <td>{{ $row['equipment_label'] }}</td>
                         <td class="money setad-green-col">{{ number_format(round($row['booklet_rate'])) }}</td>
                         <td class="fw-bold">
@@ -174,7 +176,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="13" class="text-center text-muted py-4">
+                        <td colspan="14" class="text-center text-muted py-4">
                             در بازه زمانی {{ $fromShamsi }} لغایت {{ $toShamsi }} واگن بارگیری‌شده یا صورتحساب فعالی ثبت نشده است.
                         </td>
                     </tr>
@@ -187,6 +189,7 @@
                         <td>—</td>
                         <td class="money">{{ number_format(round($totals['total_with_vat'])) }}</td>
                         <td class="money">{{ number_format(round($totals['customer_payable'])) }}</td>
+                        <td class="money">{{ number_format(round($totals['customer_tax'] ?? 0)) }}</td>
                         <td>—</td>
                         <td class="money setad-green-col">{{ number_format(round($totals['booklet_rate'])) }}</td>
                         <td>
