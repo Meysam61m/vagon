@@ -18,18 +18,18 @@ class TaxController extends Controller
 
     public function update(Request $request)
     {
-        $data = $request->validate([
+        $validatedTax = $request->validate([
             'percentage' => ['required', 'numeric', 'min:0', 'max:100'],
         ], [], [
             'percentage' => 'درصد مالیات',
         ]);
 
-        DB::transaction(function () use ($data) {
+        DB::transaction(function () use ($validatedTax) {
             // رکورد قبلی غیرجاری می‌شود و رکورد جدید ثبت می‌شود تا تاریخچه حفظ شود
             TaxSetting::where('is_current', true)->lockForUpdate()->update(['is_current' => false]);
 
             TaxSetting::create([
-                'percentage' => $data['percentage'],
+                'percentage' => $validatedTax['percentage'],
                 'is_current' => true,
                 'updated_by' => auth()->id(),
             ]);

@@ -13,6 +13,7 @@ use App\Support\JalaliDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Morilog\Jalali\Jalalian;
 
 class DashboardController extends Controller
@@ -22,7 +23,7 @@ class DashboardController extends Controller
 
     public function index(Request $request)
     {
-        if (! auth()->user()?->isAdmin()) {
+        if (! Gate::allows('view-dashboard')) {
             return redirect()->route('cargo.index');
         }
 
@@ -57,12 +58,12 @@ class DashboardController extends Controller
             ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
             ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
             ->join('owners', function ($join) {
-                $join->on('owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'));
+                $join->whereRaw('owners.id = COALESCE(wagons.owner_id, billings.owner_id)');
             })
             ->whereBetween('billings.billing_date', [$from, $to])
             ->where('billings.status', Billing::STATUS_ISSUED)
             ->whereNull('billings.deleted_at')
-            ->select('owners.name', DB::raw('SUM(billing_items.total_amount) as total'))
+            ->selectRaw('owners.name, SUM(billing_items.total_amount) as total')
             ->groupBy('owners.id', 'owners.name')
             ->orderByDesc('total')
             ->limit(8)
@@ -105,7 +106,7 @@ class DashboardController extends Controller
                 ])
                 ->orderByDesc('owner_changed_at')
                 ->orderByDesc('id')
-                ->get();
+                ->lazy(500);
 
             $rows = [];
             foreach ($allEdited as $idx => $wagon) {
@@ -201,14 +202,15 @@ class DashboardController extends Controller
      */
     private function dailyLoading(Carbon $from, Carbon $to): array
     {
-        return $this->dailySeries(
-            $from,
-            $to,
-            fn (Carbon $start, Carbon $end) => DB::table('wagons')
-                ->whereBetween('loaded_on', [$start->toDateString(), $end->toDateString()])
-                ->sum('loaded_weight'),
-            fn (float $value) => round($value, 1)
-        );
+        [$start, $end] = $this->clampChartRange($from, $to);
+
+        $grouped = DB::table('wagons')
+            ->whereBetween('loaded_on', [$start->toDateString(), $end->toDateString()])
+            ->selectRaw('loaded_on as day_key, COALESCE(SUM(loaded_weight), 0) as total_value')
+            ->groupBy('loaded_on')
+            ->pluck('total_value', 'day_key');
+
+        return $this->formatDailySeries($start, $end, $grouped, fn (float $value) => round($value, 1));
     }
 
     /**
@@ -216,35 +218,48 @@ class DashboardController extends Controller
      */
     private function dailyRevenue(Carbon $from, Carbon $to): array
     {
-        return $this->dailySeries(
-            $from,
-            $to,
-            fn (Carbon $start, Carbon $end) => Billing::whereBetween('billing_date', [$start, $end])
-                ->where('status', Billing::STATUS_ISSUED)
-                ->sum('total_amount'),
-            fn (float $value) => $value
-        );
+        [$start, $end] = $this->clampChartRange($from, $to);
+
+        $grouped = Billing::query()
+            ->whereBetween('billing_date', [$start->toDateString(), $end->toDateString()])
+            ->where('status', Billing::STATUS_ISSUED)
+            ->selectRaw('billing_date as day_key, COALESCE(SUM(total_amount), 0) as total_value')
+            ->groupBy('billing_date')
+            ->pluck('total_value', 'day_key');
+
+        return $this->formatDailySeries($start, $end, $grouped, fn (float $value) => $value);
     }
 
     /**
-     * ساخت سری روزانه با یک کوئری تجمیعی برای هر بازه (نه یک کوئری برای هر روز).
-     *
-     * @return array{labels: array<int, string>, values: array<int, float>}
+     * @return array{0: Carbon, 1: Carbon}
      */
-    private function dailySeries(Carbon $from, Carbon $to, callable $sum, callable $cast): array
+    private function clampChartRange(Carbon $from, Carbon $to): array
     {
         $end = $to->copy()->endOfDay();
+        $start = $from->copy()->startOfDay();
 
-        if ($from->diffInDays($end) > self::MAX_CHART_DAYS) {
-            $from = $end->copy()->subDays(self::MAX_CHART_DAYS)->startOfDay();
+        if ($start->diffInDays($end) > self::MAX_CHART_DAYS) {
+            $start = $end->copy()->subDays(self::MAX_CHART_DAYS)->startOfDay();
         }
 
+        return [$start, $end];
+    }
+
+    /**
+     * ساخت سری روزانه از نتیجه یک کوئری تجمیعی GROUP BY.
+     *
+     * @param  \Illuminate\Support\Collection<string, mixed>  $grouped
+     * @return array{labels: array<int, string>, values: array<int, float>}
+     */
+    private function formatDailySeries(Carbon $start, Carbon $end, $grouped, callable $cast): array
+    {
         $labels = [];
         $values = [];
 
-        for ($day = $from->copy(); $day->lessThanOrEqualTo($end); $day->addDay()) {
+        for ($day = $start->copy(); $day->lessThanOrEqualTo($end); $day->addDay()) {
+            $dateStr = $day->toDateString();
             $labels[] = JalaliDate::fromCarbon($day);
-            $values[] = $cast((float) $sum($day->copy()->startOfDay(), $day->copy()->endOfDay()));
+            $values[] = $cast((float) ($grouped->get($dateStr) ?? 0));
         }
 
         return compact('labels', 'values');

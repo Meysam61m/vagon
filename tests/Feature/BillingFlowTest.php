@@ -168,4 +168,58 @@ class BillingFlowTest extends TestCase
         $this->assertSame(0, Billing::count());
         $this->assertFalse($wagon->fresh()->is_settled);
     }
+
+    public function test_billing_settlement_records_receipt_and_allows_four_part_print_when_all_request_wagons_settled(): void
+    {
+        $this->actingAs($this->admin);
+
+        $cargo = CargoRequest::create([
+            'request_number' => 'CR-000009-0001',
+            'owner_id' => $this->owner->id,
+            'representative_id' => $this->representative->id,
+            'operator_id' => $this->admin->id,
+            'request_date' => '2025-10-17',
+            'request_date_shamsi' => '1404/07/25',
+            'status' => CargoRequest::STATUS_LOADED,
+        ]);
+
+        $wagon = Wagon::create([
+            'cargo_request_id' => $cargo->id,
+            'owner_id' => $this->owner->id,
+            'wagon_number' => '887766',
+            'cargo_description' => 'سود پرک',
+            'line_number' => '1',
+            'tariff_id' => $this->tariff->id,
+            'loaded_weight' => 30,
+            'loaded_on' => '2025-10-17',
+            'is_settled' => false,
+        ]);
+
+        $this->post(route('billing.store'), [
+            'owner_id' => $this->owner->id,
+            'representative_id' => $this->representative->id,
+            'billing_date_shamsi' => '1404/07/26',
+            'wagons' => [
+                ['id' => $wagon->id, 'tariff_id' => $this->tariff->id, 'weight' => 30],
+            ],
+        ])->assertRedirect();
+
+        $billing = Billing::firstOrFail();
+
+        $this->post(route('billing.settle', $billing), [
+            'receipt_number' => 'RCP-987654',
+            'receipt_date_shamsi' => '1404/07/26',
+            'bank_name' => 'بانک ملی',
+            'receipt_amount' => $billing->total_amount,
+        ])->assertRedirect();
+
+        $billing->refresh();
+        $this->assertTrue($billing->isSettled());
+        $this->assertSame('RCP-987654', $billing->receipt_number);
+
+        $this->get(route('cargo.print', $cargo))
+            ->assertOk()
+            ->assertSee('887766')
+            ->assertSee('RCP-987654');
+    }
 }

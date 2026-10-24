@@ -18,7 +18,9 @@ Route::get('/', [AuthController::class, 'home'])->name('home');
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-Route::get('/session/keep-alive', [AuthController::class, 'keepAlive'])->name('session.keep-alive');
+Route::get('/session/keep-alive', [AuthController::class, 'keepAlive'])
+    ->middleware('throttle:60,1')
+    ->name('session.keep-alive');
 
 // ---------- بخش داخلی سیستم ----------
 Route::middleware('auth')->group(function () {
@@ -91,7 +93,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/tariffs', [TariffController::class, 'index'])->name('tariffs.index');
         Route::get('/tariffs/create', [TariffController::class, 'create'])->name('tariffs.create');
         Route::post('/tariffs', [TariffController::class, 'store'])->name('tariffs.store');
-        Route::post('/tariffs/import', [TariffController::class, 'importExcel'])->name('tariffs.import');
+        Route::post('/tariffs/import', [TariffController::class, 'importExcel'])
+            ->middleware('throttle:10,1')
+            ->name('tariffs.import');
         Route::get('/tariffs/{tariff}/edit', [TariffController::class, 'edit'])->name('tariffs.edit');
         Route::put('/tariffs/{tariff}', [TariffController::class, 'update'])->name('tariffs.update');
         Route::patch('/tariffs/{tariff}/toggle', [TariffController::class, 'toggleActive'])->name('tariffs.toggle');

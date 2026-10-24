@@ -119,9 +119,9 @@ class JalaliDate
         return Jalalian::fromCarbon(Carbon::instance($date))->format(self::DISPLAY_FORMAT);
     }
 
-    public static function today(): string
+    public static function today(string $format = self::DISPLAY_FORMAT): string
     {
-        return self::fromCarbon(now());
+        return Jalalian::fromCarbon(now())->format($format);
     }
 
     /** نمایش تاریخ میلادی ذخیره‌شده به شمسی (برای گزارش‌های قدیمی) */
@@ -133,7 +133,9 @@ class JalaliDate
 
         try {
             return self::fromCarbon(Carbon::parse($gregorianDate)) ?? '-';
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            report($e);
+
             return (string) $gregorianDate;
         }
     }

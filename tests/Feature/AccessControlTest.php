@@ -87,4 +87,16 @@ class AccessControlTest extends TestCase
 
         $this->assertTrue($admin->fresh()->is_active);
     }
+
+    public function test_idle_session_is_logged_out_after_30_minutes_of_inactivity(): void
+    {
+        $operator = $this->makeUser(User::ROLE_OPERATOR);
+
+        $this->actingAs($operator)
+            ->withSession(['wagon_last_activity_at' => time() - (31 * 60)])
+            ->get(route('cargo.index'))
+            ->assertRedirect(route('login', ['reason' => 'idle']));
+
+        $this->assertGuest();
+    }
 }

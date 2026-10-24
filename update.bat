@@ -60,6 +60,7 @@ if not exist "bootstrap\cache" mkdir "bootstrap\cache" >nul 2>&1
 echo [1/4] Clearing compiled Blade views and old sessions...
 del /f /q "storage\framework\views\*.php" >nul 2>&1
 del /f /q "storage\framework\views\.wagon_views_*" >nul 2>&1
+del /f /q "storage\framework\.wagon_*" >nul 2>&1
 del /f /q "storage\framework\sessions\*" >nul 2>&1
 del /f /q "bootstrap\cache\routes-*.php" >nul 2>&1
 del /f /q "bootstrap\cache\config.php" >nul 2>&1

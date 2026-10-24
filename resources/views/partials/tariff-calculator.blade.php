@@ -1,5 +1,5 @@
 @php
-    $calcTaxPct = isset($taxPercentage) ? (float) $taxPercentage : (float) \App\Models\TaxSetting::currentPercentage();
+    $calcTaxPct = (float) ($taxPercentage ?? 10);
     $calcTariffs = ($tariffs ?? collect())->where('is_active', true)->values();
 @endphp
 

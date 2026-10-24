@@ -195,7 +195,7 @@ $extensions = [
     'tokenizer' => true,
     'ctype' => true,
     'json' => true,
-    'dom' => false,         // برای تولید PDF (بدون آن بقیه برنامه کار می‌کند)
+    'zip' => false,         // اختیاری: برای بارگذاری فایل اکسل تعرفه‌ها
     'fileinfo' => false,
     'session' => true,
     'filter' => true,
@@ -222,7 +222,7 @@ check(
     $missing ? 'نصب نیست: '.implode('، ', $missing) : 'همه لازم‌ها موجود است',
     $missingRequired
         ? 'در php.ini یا cPanel → PHP Extensions این افزونه‌ها را فعال کنید: '.implode('، ', $missingRequired)
-        : 'بدون افزونه dom، PDF تولید نمی‌شود ولی بقیه صفحات کار می‌کنند.'
+        : 'افزونه‌های اختیاری صرفاً برای بارگذاری فایل اکسل تعرفه‌ها و اجرای تست‌ها کاربرد دارند.'
 );
 
 // ---------- vendor ----------

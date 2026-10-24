@@ -7,20 +7,30 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\CargoController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TariffController;
+use App\Models\Billing;
+use App\Models\CargoRequest;
 use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Tariff;
+use App\Models\TaxSetting;
+use App\Models\User;
+use App\Models\Wagon;
+use App\Policies\BillingPolicy;
+use App\Policies\CargoRequestPolicy;
 use App\Policies\OwnerPolicy;
 use App\Policies\RepresentativePolicy;
+use App\Policies\WagonPolicy;
 use Database\Seeders\TariffSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Morilog\Jalali\Jalalian;
 
@@ -48,7 +58,7 @@ class AppServiceProvider extends ServiceProvider
         }
     }
 
-    public function boot(): void
+    public function boot(Router $router): void
     {
         // پشت پروکسی/CDN: تشخیص درست HTTPS و IP کاربر
         $trustedProxies = trim((string) config('app.trusted_proxies', ''));
@@ -77,14 +87,24 @@ class AppServiceProvider extends ServiceProvider
             return "<?php echo e($expression ? \\Morilog\\Jalali\\Jalalian::fromCarbon(\\Illuminate\\Support\\Carbon::instance($expression))->format('Y/m/d H:i') : '-'); ?>";
         });
 
-        // ثبت Policyهای مدل‌های دامنه (با حفظ کامل دسترسی اپراتور به تعریف و مدیریت صاحب کالا و نماینده)
+        // ثبت Policyهای مدل‌های دامنه (با حفظ کامل دسترسی اپراتور به گزارش‌ها، بارگیری، صورتحساب، صاحب کالا و نماینده)
         Gate::policy(Owner::class, OwnerPolicy::class);
         Gate::policy(Representative::class, RepresentativePolicy::class);
+        Gate::policy(CargoRequest::class, CargoRequestPolicy::class);
+        Gate::policy(Wagon::class, WagonPolicy::class);
+        Gate::policy(Billing::class, BillingPolicy::class);
+        Gate::define('view-dashboard', fn (User $user): bool => (bool) $user->is_active && $user->isAdmin());
+
+        View::composer('partials.tariff-calculator', function ($view) {
+            if (! array_key_exists('taxPercentage', $view->getData())) {
+                $view->with('taxPercentage', TaxSetting::currentPercentage());
+            }
+        });
 
         // اطمینان از اینکه نمونه‌سازی کلاس تاریخ شمسی در زمان اجرا با autoload کامپوزر انجام می‌شود
         class_exists(Jalalian::class);
 
-        $this->ensureWagonOwnerRoutesRegistered();
+        $this->ensureWagonOwnerRoutesRegistered($router);
         $this->ensureWagonOwnerSchema();
     }
 
@@ -92,7 +112,7 @@ class AppServiceProvider extends ServiceProvider
      * اگر کش مسیرها (route:cache) از نسخه قبلی باقی مانده باشد یا فایل routes/web.php
      * هنوز ری‌لود نشده باشد، مسیرهای ویرایش واگن را ثبت و جدول نام مسیرها را تازه می‌کند.
      */
-    private function ensureWagonOwnerRoutesRegistered(): void
+    private function ensureWagonOwnerRoutesRegistered(Router $router): void
     {
         $routeCache = base_path('bootstrap/cache/routes-v7.php');
         if (is_file($routeCache)) {
@@ -114,10 +134,10 @@ class AppServiceProvider extends ServiceProvider
             }
         }
 
-        $this->app->booted(function () {
+        $this->app->booted(function () use ($router) {
             $registered = false;
 
-            $routeCollection = app('router')->getRoutes();
+            $routeCollection = $router->getRoutes();
             foreach ($routeCollection->getRoutes() as $routeObj) {
                 $name = (string) $routeObj->getName();
                 if (str_starts_with($name, 'owners.') || str_starts_with($name, 'representatives.')) {
@@ -182,6 +202,7 @@ class AppServiceProvider extends ServiceProvider
             if (! Route::has('tariffs.import') || ! Route::has('tariffs.destroy')) {
                 Route::middleware(['web', 'auth', 'role:admin'])->group(function () {
                     Route::post('/tariffs/import', [TariffController::class, 'importExcel'])
+                        ->middleware('throttle:10,1')
                         ->name('tariffs.import');
                     Route::delete('/tariffs/{tariff}', [TariffController::class, 'destroy'])
                         ->name('tariffs.destroy');
@@ -192,7 +213,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if (! Route::has('session.keep-alive')) {
-                Route::middleware(['web'])->group(function () {
+                Route::middleware(['web', 'throttle:60,1'])->group(function () {
                     Route::get('/session/keep-alive', [AuthController::class, 'keepAlive'])
                         ->name('session.keep-alive');
                 });
@@ -200,7 +221,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($registered) {
-                $routes = app('router')->getRoutes();
+                $routes = $router->getRoutes();
                 $routes->refreshNameLookups();
                 $routes->refreshActionLookups();
             }
@@ -210,7 +231,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v41';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v42';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -226,7 +247,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v41');
+                @file_put_contents($versionMarker, 'v42');
             }
         }
     }
@@ -237,11 +258,16 @@ class AppServiceProvider extends ServiceProvider
      */
     private function ensureWagonOwnerSchema(): void
     {
-        if (self::$schemaVerified) {
+        if (self::$schemaVerified || $this->app->runningUnitTests()) {
             return;
         }
 
         self::$schemaVerified = true;
+
+        $schemaMarker = storage_path('framework/.wagon_schema_v42');
+        if (is_file($schemaMarker)) {
+            return;
+        }
 
         try {
             if (! Schema::hasTable('wagons')) {
@@ -373,6 +399,8 @@ class AppServiceProvider extends ServiceProvider
                 }
                 @file_put_contents($seededMarker, '1');
             }
+
+            @file_put_contents($schemaMarker, 'v42');
         } catch (\Throwable $e) {
             report($e);
         }

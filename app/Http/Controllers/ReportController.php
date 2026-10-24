@@ -144,7 +144,7 @@ class ReportController extends Controller
             ->orderBy('wagons.id');
 
         if ($this->wantsExcel($request)) {
-            $allWagons = (clone $baseQuery)->get();
+            $allWagons = (clone $baseQuery)->lazy(500);
             $rows = [];
 
             foreach ($allWagons as $idx => $wagon) {
@@ -238,7 +238,7 @@ class ReportController extends Controller
             ->first();
 
         if ($this->wantsExcel($request)) {
-            $allRequests = $baseQuery->get();
+            $allRequests = (clone $baseQuery)->lazy(500);
             $rows = [];
 
             foreach ($allRequests as $idx => $req) {
@@ -336,7 +336,7 @@ class ReportController extends Controller
                 ->with(['owner', 'representative', 'operator', 'items.wagon'])
                 ->orderBy('billing_date')
                 ->orderBy('id')
-                ->get();
+                ->lazy(500);
 
             $rows = [];
             foreach ($allBillings as $idx => $billing) {
@@ -416,13 +416,9 @@ class ReportController extends Controller
         ]);
     }
 
-    /** گزارش عملکرد اپراتورها (ویژه مدیر سیستم) */
+    /** گزارش عملکرد اپراتورها */
     public function operators(Request $request)
     {
-        if (! auth()->user()?->isAdmin()) {
-            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
-        }
-
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $stats = DB::table('billings')
@@ -465,13 +461,9 @@ class ReportController extends Controller
         return view('reports.operators', compact('stats', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش مالی روزانه (ویژه مدیر سیستم) */
+    /** گزارش مالی روزانه */
     public function financial(Request $request)
     {
-        if (! auth()->user()?->isAdmin()) {
-            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
-        }
-
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $daily = DB::table('billings')
@@ -569,7 +561,7 @@ class ReportController extends Controller
             ->first();
 
         if ($this->wantsExcel($request)) {
-            $allItems = $baseQuery->get();
+            $allItems = (clone $baseQuery)->lazy(500);
             $rows = [];
 
             foreach ($allItems as $idx => $item) {
@@ -639,20 +631,16 @@ class ReportController extends Controller
         return view('reports.wagon-detail', compact('items', 'totals', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش عملکرد صاحبان کالا (ویژه مدیر سیستم) */
+    /** گزارش عملکرد صاحبان کالا */
     public function owners(Request $request)
     {
-        if (! auth()->user()?->isAdmin()) {
-            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
-        }
-
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $stats = DB::table('billing_items')
             ->join('billings', 'billings.id', '=', 'billing_items.billing_id')
             ->leftJoin('wagons', 'wagons.id', '=', 'billing_items.wagon_id')
             ->join('owners', function ($join) {
-                $join->on('owners.id', '=', DB::raw('COALESCE(wagons.owner_id, billings.owner_id)'));
+                $join->whereRaw('owners.id = COALESCE(wagons.owner_id, billings.owner_id)');
             })
             ->whereBetween('billings.billing_date', [$from, $to])
             ->where('billings.status', Billing::STATUS_ISSUED)
@@ -705,13 +693,9 @@ class ReportController extends Controller
         return view('reports.owners', compact('stats', 'fromShamsi', 'toShamsi'));
     }
 
-    /** گزارش عملکرد نمایندگان: تعداد درخواست و مبلغ صورتحساب (ویژه مدیر سیستم) */
+    /** گزارش عملکرد نمایندگان: تعداد درخواست و مبلغ صورتحساب */
     public function representatives(Request $request)
     {
-        if (! auth()->user()?->isAdmin()) {
-            return redirect()->route('reports.setad')->with('warning', 'دسترسی به این گزارش ویژه مدیر سیستم است.');
-        }
-
         [$from, $to, $fromShamsi, $toShamsi] = $this->dateRange($request);
 
         $requestCount = CargoRequest::query()

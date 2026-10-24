@@ -3,23 +3,30 @@
 namespace App\Http\Controllers;
 
 use App\Models\Billing;
-use App\Models\BillingItem;
 use App\Models\CargoRequest;
 use App\Models\Owner;
 use App\Models\Representative;
 use App\Models\Tariff;
 use App\Models\TaxSetting;
 use App\Models\Wagon;
+use App\Services\BillingCalculationService;
 use App\Support\DocumentNumber;
 use App\Support\JalaliDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class BillingController extends Controller
 {
+    public function __construct(
+        private readonly BillingCalculationService $billingCalculator
+    ) {}
+
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', Billing::class);
+
         $billings = Billing::with([
             'owner',
             'representative',
@@ -62,7 +69,9 @@ class BillingController extends Controller
 
     public function create(Request $request)
     {
-        $owners = Owner::active()->orderBy('name')->get();
+        Gate::authorize('create', Billing::class);
+
+        $owners = Owner::active()->orderBy('name')->get(['id', 'name', 'national_id']);
         $ownerId = $request->integer('owner_id') ?: null;
         $selectedCargoRequestId = $request->integer('cargo_request_id') ?: null;
         $defaultRepresentativeId = $request->integer('representative_id') ?: null;
@@ -125,7 +134,7 @@ class BillingController extends Controller
             $representatives = Representative::active()
                 ->whereHas('owners', fn ($q) => $q->where('owners.id', $ownerId))
                 ->orderBy('name')
-                ->get();
+                ->get(['id', 'name', 'national_id']);
 
             if (! $defaultRepresentativeId) {
                 $validRepIds = $representatives->pluck('id')->all();
@@ -152,7 +161,7 @@ class BillingController extends Controller
             'selectedCargoRequestId' => $selectedCargoRequestId,
             'defaultRepresentativeId' => $defaultRepresentativeId,
             'wagons' => $wagons,
-            'tariffs' => Tariff::active()->orderBy('title')->get(),
+            'tariffs' => Tariff::active()->orderBy('title')->get(['id', 'code', 'title', 'unit', 'rate', 'capacity', 'category', 'equipment_type', 'is_active']),
             'taxPercentage' => TaxSetting::currentPercentage(),
             'representatives' => $representatives,
             'allRepresentatives' => Representative::active()->orderBy('name')->get(['id', 'name']),
@@ -162,7 +171,9 @@ class BillingController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate([
+        Gate::authorize('create', Billing::class);
+
+        $validatedBilling = $request->validate([
             'owner_id' => ['required', 'integer', 'exists:owners,id'],
             'representative_id' => ['required', 'integer', 'exists:representatives,id'],
             'billing_date_shamsi' => ['required', 'string'],
@@ -182,8 +193,8 @@ class BillingController extends Controller
         ]);
 
         $linked = DB::table('owner_representative')
-            ->where('owner_id', $data['owner_id'])
-            ->where('representative_id', $data['representative_id'])
+            ->where('owner_id', $validatedBilling['owner_id'])
+            ->where('representative_id', $validatedBilling['representative_id'])
             ->exists();
 
         if (! $linked) {
@@ -192,16 +203,16 @@ class BillingController extends Controller
             ]);
         }
 
-        $billingDate = JalaliDate::parse($data['billing_date_shamsi'], 'billing_date_shamsi');
-        $billingDateShamsi = JalaliDate::normalize($data['billing_date_shamsi']);
+        $billingDate = JalaliDate::parse($validatedBilling['billing_date_shamsi'], 'billing_date_shamsi');
+        $billingDateShamsi = JalaliDate::normalize($validatedBilling['billing_date_shamsi']);
 
-        $billing = DocumentNumber::withRetry(function () use ($data, $billingDate, $billingDateShamsi) {
+        $billing = DocumentNumber::withRetry(function () use ($validatedBilling, $billingDate, $billingDateShamsi) {
             $taxPercentage = TaxSetting::currentPercentage();
-            $owner = Owner::findOrFail($data['owner_id']);
-            $representativeId = $data['representative_id'] ?? null;
+            $owner = Owner::findOrFail($validatedBilling['owner_id']);
+            $representativeId = $validatedBilling['representative_id'] ?? null;
             $representative = $representativeId ? Representative::find($representativeId) : null;
 
-            $rows = collect($data['wagons']);
+            $rows = collect($validatedBilling['wagons']);
             $ids = $rows->pluck('id')->all();
 
             // قفل ردیف‌های واگن تا دو درخواست هم‌زمان نتوانند یک واگن را دوبار فاکتور کنند
@@ -275,30 +286,17 @@ class BillingController extends Controller
                 }
 
                 $weight = (float) $row['weight'];
+                $itemPayload = $this->billingCalculator->buildBillingItemPayload(
+                    $wagon,
+                    $tariff,
+                    $weight,
+                    $taxPercentage,
+                    'wagons'
+                );
 
-                if ($weight > (float) $tariff->capacity) {
-                    throw ValidationException::withMessages([
-                        'wagons' => "وزن واگن {$wagon->wagon_number} از ظرفیت تعرفه ({$tariff->capacity} تن) بیشتر است.",
-                    ]);
-                }
-
-                $baseCost = BillingItem::calculateBaseCost($weight, (float) $tariff->capacity, (float) $tariff->rate);
-                $itemTax = BillingItem::calculateTax($baseCost, $taxPercentage);
-
-                $baseAmount += $baseCost;
-                $taxAmount += $itemTax;
-
-                $items[] = [
-                    'wagon_id' => $wagon->id,
-                    'tariff_id' => $tariff->id,
-                    'tariff_title' => $tariff->title,
-                    'tariff_rate' => $tariff->rate,
-                    'tariff_capacity' => $tariff->capacity,
-                    'loaded_weight' => $weight,
-                    'base_cost' => $baseCost,
-                    'tax_amount' => $itemTax,
-                    'total_amount' => $baseCost + $itemTax,
-                ];
+                $baseAmount += $itemPayload['base_cost'];
+                $taxAmount += $itemPayload['tax_amount'];
+                $items[] = $itemPayload;
             }
 
             $billing = Billing::create([
@@ -315,7 +313,7 @@ class BillingController extends Controller
                 'tax_amount' => $taxAmount,
                 'total_amount' => $baseAmount + $taxAmount,
                 'status' => Billing::STATUS_ISSUED,
-                'notes' => $data['notes'] ?? null,
+                'notes' => $validatedBilling['notes'] ?? null,
             ]);
 
             foreach ($items as $item) {
@@ -380,7 +378,9 @@ class BillingController extends Controller
                 ->with('error', 'این صورتحساب لغو شده است و امکان ثبت فیش واریزی برای آن وجود ندارد.');
         }
 
-        $data = $request->validate([
+        Gate::authorize('settle', $billing);
+
+        $validatedSettlement = $request->validate([
             'receipt_number' => ['required', 'string', 'max:100'],
             'receipt_date_shamsi' => ['required', 'string', 'max:20'],
             'bank_name' => ['nullable', 'string', 'max:100'],
@@ -395,15 +395,15 @@ class BillingController extends Controller
             'receipt_amount' => 'مبلغ فیش واریزی',
         ]);
 
-        JalaliDate::parse($data['receipt_date_shamsi'], 'receipt_date_shamsi');
-        $receiptDateShamsi = JalaliDate::normalize($data['receipt_date_shamsi']);
+        JalaliDate::parse($validatedSettlement['receipt_date_shamsi'], 'receipt_date_shamsi');
+        $receiptDateShamsi = JalaliDate::normalize($validatedSettlement['receipt_date_shamsi']);
 
         $billing->update([
-            'receipt_number' => trim($data['receipt_number']),
+            'receipt_number' => trim($validatedSettlement['receipt_number']),
             'receipt_date_shamsi' => $receiptDateShamsi,
-            'bank_name' => ! empty($data['bank_name']) ? trim($data['bank_name']) : null,
-            'receipt_amount' => isset($data['receipt_amount']) && $data['receipt_amount'] !== ''
-                ? (int) round((float) $data['receipt_amount'])
+            'bank_name' => ! empty($validatedSettlement['bank_name']) ? trim($validatedSettlement['bank_name']) : null,
+            'receipt_amount' => isset($validatedSettlement['receipt_amount']) && $validatedSettlement['receipt_amount'] !== ''
+                ? (int) round((float) $validatedSettlement['receipt_amount'])
                 : (int) $billing->total_amount,
             'settled_at' => $billing->settled_at ?? now(),
         ]);
@@ -441,6 +441,8 @@ class BillingController extends Controller
 
     public function show(Billing $billing)
     {
+        Gate::authorize('view', $billing);
+
         $billing->load([
             'items.wagon.owner',
             'items.wagon.previousOwner',
@@ -463,6 +465,8 @@ class BillingController extends Controller
                 ->route('billing.show', $billing)
                 ->with('error', 'امکان چاپ برگه تسویه برای صورتحساب لغوشده وجود ندارد.');
         }
+
+        Gate::authorize('print', $billing);
 
         if (! $billing->isSettled()) {
             return redirect()
@@ -519,6 +523,8 @@ class BillingController extends Controller
         if ($billing->isCancelled()) {
             return back()->with('warning', 'این صورتحساب قبلاً لغو شده است.');
         }
+
+        Gate::authorize('cancel', $billing);
 
         DB::transaction(function () use ($billing) {
             $billing->load('items.wagon');

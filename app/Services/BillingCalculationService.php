@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\BillingItem;
 use App\Models\Tariff;
+use App\Models\Wagon;
+use Illuminate\Validation\ValidationException;
 
 final class BillingCalculationService
 {
@@ -63,6 +65,50 @@ final class BillingCalculationService
             'total_amount' => $totalAmount,
             'vat_divisor' => $vatDivisor,
             'is_tonnage' => ($capacity - $operationalTonnage) >= 0.01,
+        ];
+    }
+
+    /**
+     * اعتبارسنجی تناژ واگن در برابر ظرفیت تعرفه و ساخت ساختار آیتم صورتحساب
+     *
+     * @return array{
+     *     wagon_id: int,
+     *     tariff_id: int,
+     *     tariff_title: string,
+     *     tariff_rate: int|float,
+     *     tariff_capacity: int|float,
+     *     loaded_weight: float,
+     *     base_cost: int,
+     *     tax_amount: int,
+     *     total_amount: int
+     * }
+     */
+    public function buildBillingItemPayload(
+        Wagon $wagon,
+        Tariff $tariff,
+        float $weight,
+        float $taxPercentage,
+        string $errorKey = 'wagons'
+    ): array {
+        if ($weight > (float) $tariff->capacity) {
+            throw ValidationException::withMessages([
+                $errorKey => "وزن بارگیری واگن {$wagon->wagon_number} ({$weight} تن) نمی‌تواند بیشتر از ظرفیت تعرفه ({$tariff->capacity} تن) باشد.",
+            ]);
+        }
+
+        $baseCost = BillingItem::calculateBaseCost($weight, (float) $tariff->capacity, (float) $tariff->rate);
+        $itemTax = BillingItem::calculateTax($baseCost, $taxPercentage);
+
+        return [
+            'wagon_id' => $wagon->id,
+            'tariff_id' => $tariff->id,
+            'tariff_title' => $tariff->title,
+            'tariff_rate' => $tariff->rate,
+            'tariff_capacity' => $tariff->capacity,
+            'loaded_weight' => $weight,
+            'base_cost' => $baseCost,
+            'tax_amount' => $itemTax,
+            'total_amount' => $baseCost + $itemTax,
         ];
     }
 }

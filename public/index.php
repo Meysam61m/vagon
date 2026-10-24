@@ -231,7 +231,9 @@ $wagonDbName = (string) $wagonEnvValue('DB_DATABASE', 'wagon_system');
 $wagonDebug = filter_var($wagonEnvValue('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOLEAN)
     || strtolower((string) $wagonEnvValue('APP_ENV', 'production')) === 'local';
 
-if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
+$wagonDbVerifiedMarker = $wagonBase.'/storage/framework/.wagon_db_verified_v1';
+
+if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true) && ! is_file($wagonDbVerifiedMarker)) {
     if (! extension_loaded('pdo_mysql')) {
         $wagonFatal('افزونه pdo_mysql روی PHP فعال نیست', [
             'دیتابیس برنامه MySQL/MariaDB است و PHP به افزونه <code>pdo_mysql</code> نیاز دارد.',
@@ -316,17 +318,18 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
         $wagonMessage = $wagonLastMessage;
 
         if ($wagonCode === 1049 || strpos($wagonMessage, 'Unknown database') !== false) {
-            $wagonFatal('دیتابیس «'.$wagonDbName.'» وجود ندارد', [
-                'اتصال به MySQL برقرار شد ولی دیتابیس <code>'.$wagonSafeName.'</code> ساخته نشده است.',
-                'در phpMyAdmin یا MySQL دستور زیر را اجرا کنید:',
-                '<code>CREATE DATABASE `'.$wagonSafeName.'` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;</code>',
+            $wagonFatal($wagonDebug ? 'دیتابیس «'.$wagonDbName.'» وجود ندارد' : 'دیتابیس برنامه وجود ندارد', [
+                $wagonDebug
+                    ? 'اتصال به MySQL برقرار شد ولی دیتابیس <code>'.$wagonSafeName.'</code> ساخته نشده است.'
+                    : 'اتصال به MySQL برقرار شد ولی دیتابیس برنامه هنوز ساخته نشده است.',
+                'در phpMyAdmin یا MySQL دیتابیس برنامه را با انکودینگ <code>utf8mb4_unicode_ci</code> ایجاد کنید.',
                 'یا فایل <code>database/create_database.sql</code> را در phpMyAdmin اجرا کنید.',
                 'سپس <code>php artisan migrate --seed</code> را اجرا کنید.',
             ]);
         }
 
         if ($wagonCode === 1044) {
-            $wagonFatal('کاربر MySQL به دیتابیس «'.$wagonDbName.'» دسترسی ندارد', [
+            $wagonFatal($wagonDebug ? 'کاربر MySQL به دیتابیس «'.$wagonDbName.'» دسترسی ندارد' : 'کاربر MySQL به دیتابیس برنامه دسترسی ندارد', [
                 $wagonDebug
                     ? 'کاربر <code>'.$wagonSafeUser.'</code> به MySQL وصل شد، اما اجازه استفاده از دیتابیس <code>'.$wagonSafeName.'</code> را ندارد.'
                     : 'کاربر MySQL به دیتابیس برنامه دسترسی ندارد.',
@@ -361,8 +364,6 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
                 $wagonHints[] = 'فایل <code>bootstrap/cache/config.php</code> وجود دارد و مقادیر قدیمی کش شده‌اند؛ یک بار <code>php artisan config:clear</code> را اجرا کنید (یا این فایل را حذف کنید).';
             }
 
-            $wagonHints[] = 'برای تست دقیق همین اتصال، فایل <code>diagnose.php</code> را باز کنید.';
-
             $wagonFatal('نام کاربری یا رمز MySQL درست نیست (Access denied)', $wagonHints);
         }
 
@@ -376,7 +377,6 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
             $wagonHints[] = 'مقدار <code>DB_HOST</code> و <code>DB_PORT</code> را بررسی کنید (پیش‌فرض: <code>127.0.0.1:3306</code>).';
 
             $wagonFatal('اتصال به سرور MySQL برقرار نشد', array_merge($wagonHints, [
-                'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
                 'مطمئن شوید سرویس MySQL/MariaDB روی سرور در حال اجراست.',
                 'در بعضی هاست‌ها به‌جای <code>localhost</code> باید از <code>127.0.0.1</code> استفاده شود (یا برعکس).',
                 'اگر MySQL روی سوکت یونیکس است، مقدار <code>DB_SOCKET</code> را تنظیم کنید.',
@@ -393,7 +393,6 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
         }
 
         $wagonHints[] = 'مقادیر DB_* را در فایل <code>.env</code> بررسی کنید.';
-        $wagonHints[] = 'برای تست سریع اتصال، فایل <code>diagnose.php</code> را در مرورگر باز کنید (نیاز به DIAGNOSE_KEY دارد).';
 
         $wagonFatal('خطا در اتصال به دیتابیس MySQL', $wagonHints);
     }
@@ -419,12 +418,17 @@ if (in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
 
     if ($wagonTableCount === 0) {
         $wagonFatal('اتصال به MySQL برقرار شد، اما دیتابیس خالی است', [
-            'دیتابیس <code>'.$wagonSafeName.'</code> ساخته شده اما هیچ جدولی ندارد.',
+            $wagonDebug
+                ? 'دیتابیس <code>'.$wagonSafeName.'</code> ساخته شده اما هیچ جدولی ندارد.'
+                : 'دیتابیس برنامه ساخته شده اما هیچ جدولی ندارد.',
             'دستور <code>php artisan migrate --seed</code> را در پوشه پروژه اجرا کنید.',
             'اگر از cPanel اجرا می‌کنید، در بخش «Terminal» یا از طریق SSH این دستور را بزنید.',
         ]);
     }
-} else {
+
+    @file_put_contents($wagonDbVerifiedMarker, '1');
+    $wagonPdo = null;
+} elseif (! in_array($wagonDbDriver, ['mysql', 'mariadb'], true)) {
     // حالت جایگزین SQLite (برای تست‌های خودکار و اجرای سبک بدون سرور دیتابیس)
     $wagonDbPath = $wagonBase.'/database/database.sqlite';
     $wagonSqliteName = $wagonEnvValue('DB_DATABASE', null);
