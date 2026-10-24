@@ -25,10 +25,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        // اطمینان از تنظیمات پایدار سشن حتی در صورت وجود فایل .env قدیمی
-        if ((int) config('session.lifetime', 120) < 480) {
-            config(['session.lifetime' => 720]);
-        }
+        // اعمال اجباری خروج با بستن مرورگر و زمان خروج خودکار ۳۰ دقیقه عدم فعالیت
+        // (حتی اگر فایل .env قبلی روی سرور مقادیر قدیمی مثل 480 را داشته باشد)
+        config([
+            'session.lifetime' => 30,
+            'session.expire_on_close' => true,
+        ]);
 
         $cookieName = (string) config('session.cookie', '');
         if ($cookieName === '' || $cookieName === '_session' || $cookieName === 'laravel_session') {
@@ -199,7 +201,7 @@ class AppServiceProvider extends ServiceProvider
         // (به‌ویژه روی ویندوز که اختلاف ساعت آرشیو ZIP ممکن است تاریخ فایل Blade را قدیمی‌تر از کش نشان دهد)
         $compiledViewsDir = storage_path('framework/views');
         if (is_dir($compiledViewsDir)) {
-            $versionMarker = $compiledViewsDir.'/.wagon_views_v38';
+            $versionMarker = $compiledViewsDir.'/.wagon_views_v39';
             $forceExpireAll = ! is_file($versionMarker);
 
             foreach (glob($compiledViewsDir.'/*.php') ?: [] as $compiledFile) {
@@ -215,7 +217,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if ($forceExpireAll) {
-                @file_put_contents($versionMarker, 'v38');
+                @file_put_contents($versionMarker, 'v39');
             }
         }
     }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -57,13 +58,16 @@ class AuthController extends Controller
             Auth::guard('web')->logout();
         }
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        // عدم استفاده از کوکی دائمی remember تا با بستن مرورگر لاگین مجدد اجباری باشد
+        if (! Auth::attempt($credentials, false)) {
             RateLimiter::hit($throttleKey, 60);
 
             return back()
                 ->withErrors(['email' => 'ایمیل یا رمز عبور اشتباه است.'])
                 ->onlyInput('email');
         }
+
+        Cookie::queue(Cookie::forget(Auth::guard('web')->getRecallerName()));
 
         if (! Auth::user()->is_active) {
             Auth::guard('web')->logout();
@@ -75,6 +79,7 @@ class AuthController extends Controller
 
         RateLimiter::clear($throttleKey);
         $request->session()->regenerate();
+        $request->session()->put('wagon_last_activity_at', time());
 
         $user = Auth::user();
         $defaultHome = $user->isAdmin() ? route('dashboard') : route('cargo.index');
@@ -102,6 +107,8 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
+        Cookie::queue(Cookie::forget(Auth::guard('web')->getRecallerName()));
+
         if (Auth::check()) {
             Auth::guard('web')->logout();
         }
@@ -109,6 +116,12 @@ class AuthController extends Controller
         if ($request->hasSession()) {
             $request->session()->invalidate();
             $request->session()->regenerateToken();
+        }
+
+        if ($request->query('reason') === 'idle') {
+            return redirect()
+                ->route('login')
+                ->with('warning', 'به دلیل ۳۰ دقیقه عدم فعالیت، به صورت خودکار از سامانه خارج شدید. لطفاً مجدداً وارد شوید.');
         }
 
         return redirect()->route('login')->with('info', 'شما با موفقیت از سامانه خارج شدید.');

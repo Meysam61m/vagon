@@ -706,9 +706,24 @@
             }
         });
 
-        // تمدید خودکار نشست کاری (Session Keep-Alive) و به‌روزرسانی توکن‌های CSRF در فرم‌های باز
+        // مدیریت خروج خودکار پس از ۳۰ دقیقه عدم فعالیت (Idle Timeout) و تمدید نشست فقط در صورت فعالیت کاربر
         const keepAliveUrl = @json(url('/session/keep-alive'));
+        const idleLogoutUrl = @json(url('/logout?reason=idle'));
+        const isAuthenticated = @json(auth()->check());
+        const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // ۳۰ دقیقه عدم فعالیت
+        const HEARTBEAT_INTERVAL_MS = 4 * 60 * 1000; // ۴ دقیقه
+
+        let lastUserActivityAt = Date.now();
         let lastKeepAliveAt = Date.now();
+        let isLoggingOutIdle = false;
+
+        function markUserActivity() {
+            lastUserActivityAt = Date.now();
+        }
+
+        ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'change'].forEach(function (evtName) {
+            window.addEventListener(evtName, markUserActivity, { passive: true });
+        });
 
         function refreshSessionHeartbeat() {
             lastKeepAliveAt = Date.now();
@@ -725,7 +740,15 @@
                     return res.ok ? res.json() : null;
                 })
                 .then(function (data) {
-                    if (data && data.token) {
+                    if (!data) return;
+
+                    if (isAuthenticated && data.authenticated === false && !isLoggingOutIdle) {
+                        isLoggingOutIdle = true;
+                        window.location.href = idleLogoutUrl;
+                        return;
+                    }
+
+                    if (data.token) {
                         const meta = document.querySelector('meta[name="csrf-token"]');
                         if (meta) {
                             meta.setAttribute('content', data.token);
@@ -740,15 +763,38 @@
                 });
         }
 
-        // ارسال پینگ تمدید نشست هر ۴ دقیقه یک‌بار
-        setInterval(refreshSessionHeartbeat, 4 * 60 * 1000);
+        if (isAuthenticated) {
+            setInterval(function () {
+                const now = Date.now();
+                const idleElapsed = now - lastUserActivityAt;
 
-        // اگر تب مرورگر برای مدتی در پس‌زمینه بوده و کاربر دوباره به آن برگردد، بلافاصله توکن را تازه کن
-        document.addEventListener('visibilitychange', function () {
-            if (document.visibilityState === 'visible' && (Date.now() - lastKeepAliveAt) > 60 * 1000) {
-                refreshSessionHeartbeat();
-            }
-        });
+                // اگر ۳۰ دقیقه هیچ فعالیتی (موس/کیبورد/اسکرول/کلیک) انجام نشده باشد، خروج خودکار انجام شود
+                if (idleElapsed >= IDLE_TIMEOUT_MS) {
+                    if (!isLoggingOutIdle) {
+                        isLoggingOutIdle = true;
+                        window.location.href = idleLogoutUrl;
+                    }
+                    return;
+                }
+
+                // فقط در صورتی که کاربر طی ۴ دقیقه اخیر در صفحه فعال بوده، نشست او را در سرور تمدید کن
+                if (idleElapsed < HEARTBEAT_INTERVAL_MS && (now - lastKeepAliveAt) >= HEARTBEAT_INTERVAL_MS) {
+                    refreshSessionHeartbeat();
+                }
+            }, 15 * 1000);
+
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    if ((Date.now() - lastUserActivityAt) >= IDLE_TIMEOUT_MS && !isLoggingOutIdle) {
+                        isLoggingOutIdle = true;
+                        window.location.href = idleLogoutUrl;
+                    }
+                }
+            });
+        } else {
+            // در صفحه ورود (Guest) توکن CSRF را تازه نگه دار تا فرم لاگین پس از توقف طولانی خطای 419 ندهد
+            setInterval(refreshSessionHeartbeat, 10 * 60 * 1000);
+        }
     });
 </script>
 @stack('scripts')

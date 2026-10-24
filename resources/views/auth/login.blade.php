@@ -52,10 +52,6 @@
                 <label class="form-label" for="password">رمز عبور</label>
                 <input type="password" name="password" id="password" class="form-control" required autocomplete="current-password">
             </div>
-            <div class="form-check mb-3">
-                <input type="checkbox" name="remember" value="1" class="form-check-input" id="remember" checked>
-                <label class="form-check-label" for="remember">مرا به خاطر بسپار (حفظ نشست در طول شیفت کاری)</label>
-            </div>
             <button class="btn btn-primary w-100" type="submit">ورود</button>
         </form>
     </div>
