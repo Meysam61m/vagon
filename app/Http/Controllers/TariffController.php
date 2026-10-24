@@ -331,7 +331,9 @@ class TariffController extends Controller
         if ($rate <= 0 && $colMap['rate_with_vat'] && isset($row[$colMap['rate_with_vat']])) {
             $num = $toDigits($row[$colMap['rate_with_vat']]);
             if (is_numeric($num)) {
-                $rate = (int) round(((float) $num) / 1.1);
+                $currentTaxPct = (float) TaxSetting::currentPercentage();
+                $divisor = $currentTaxPct > 0 ? (1 + ($currentTaxPct / 100)) : 1.0;
+                $rate = (int) round(((float) $num) / $divisor);
             }
         }
 

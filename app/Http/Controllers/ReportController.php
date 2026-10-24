@@ -823,7 +823,7 @@ class ReportController extends Controller
 
         $rowIndex = 1;
         foreach ($allItems as $item) {
-            $mapped = $this->mapSetadRow($item, $rowIndex++);
+            $mapped = $this->mapSetadRow($item, $rowIndex++, $defaultTaxPct);
             $rows[] = $mapped;
 
             $totals['count']++;
@@ -878,14 +878,17 @@ class ReportController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function mapSetadRow(BillingItem $item, int $index): array
+    private function mapSetadRow(BillingItem $item, int $index, float $defaultTaxPct = 10.0): array
     {
         $wagon = $item->wagon;
         $billing = $item->billing;
         $tariff = $item->tariff;
 
-        $taxPct = (float) ($billing?->tax_percentage ?? 10);
-        $vatDivisor = $taxPct > 0 ? round(1 + ($taxPct / 100), 4) : 1.1;
+        $taxPct = (float) ($billing?->tax_percentage ?? $defaultTaxPct);
+        $vatDivisor = $taxPct >= 0 ? round(1 + ($taxPct / 100), 6) : 1.0;
+        if ($vatDivisor <= 0) {
+            $vatDivisor = 1.0;
+        }
 
         $capacity = (float) ($item->tariff_capacity ?: ($tariff?->capacity ?: 65));
         if ($capacity <= 0) {
@@ -965,7 +968,10 @@ class ReportController extends Controller
     private function mapUnbilledWagonSetadRow(Wagon $wagon, int $index, float $taxPct): array
     {
         $tariff = $wagon->tariff;
-        $vatDivisor = $taxPct > 0 ? round(1 + ($taxPct / 100), 4) : 1.1;
+        $vatDivisor = $taxPct >= 0 ? round(1 + ($taxPct / 100), 6) : 1.0;
+        if ($vatDivisor <= 0) {
+            $vatDivisor = 1.0;
+        }
 
         $capacity = (float) ($tariff?->capacity ?: 65);
         if ($capacity <= 0) {
